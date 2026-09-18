@@ -1,0 +1,13 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+healthys:
+  storage:
+    endpoint: http://localhost:9000
+    region: us-east-1
+    bucket: healthys-test
+    access-key: test
+    secret-key: test-secret
+    path-style-access: true

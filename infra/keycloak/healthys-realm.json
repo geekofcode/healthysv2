@@ -1,0 +1,45 @@
+{
+  "realm": "healthys",
+  "enabled": true,
+  "displayName": "Healthys",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "roles": {
+    "realm": [
+      { "name": "PLATFORM_ADMIN" },
+      { "name": "PATIENT" },
+      { "name": "DOCTOR" },
+      { "name": "NURSE" },
+      { "name": "HOSPITAL_ADMIN" },
+      { "name": "PHARMACY" },
+      { "name": "LABORATORY" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "healthys-api",
+      "name": "Healthys API",
+      "enabled": true,
+      "bearerOnly": true,
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "healthys-web",
+      "name": "Healthys Web",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": [
+        "http://localhost:5173/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173"
+      ]
+    }
+  ]
+}
