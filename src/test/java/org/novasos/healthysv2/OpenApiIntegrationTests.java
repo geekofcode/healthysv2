@@ -16,7 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.novasos.healthysv2.shared.web.CorrelationIdFilter;
 
 @ActiveProfiles("test")
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, TestSecurityConfiguration.class})
 @SpringBootTest
 @AutoConfigureMockMvc
 class OpenApiIntegrationTests {
