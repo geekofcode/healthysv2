@@ -1,66 +1,62 @@
 # Healthys infrastructure
 
+PostgreSQL, Keycloak and MinIO are external services in every environment,
+including local development. This repository does not start Docker containers
+for them.
+
 ## Local development
 
-1. Copy the local environment template:
+1. Create the local environment file:
 
    ```bash
    cp .env.example .env
    ```
 
-2. Change the local passwords in `.env`.
-3. Start PostgreSQL, Keycloak and MinIO:
-
-   ```bash
-   docker compose up -d
-   docker compose ps
-   ```
-
-4. Start the API:
+2. Replace every `replace-me` value and configure the real MinIO endpoint.
+   Confirm the Keycloak realm name in `KEYCLOAK_ISSUER_URI`.
+3. Start the API:
 
    ```bash
    ./mvnw spring-boot:run
    ```
 
-The default local endpoints are:
+Spring Boot imports `.env` through `spring.config.import`. Operating-system
+environment variables take precedence over values in that file. The file is
+ignored by Git and must never contain credentials intended for source control.
 
-- PostgreSQL: `localhost:5432`, database `healthys`
-- Keycloak: `http://localhost:8081`, realm `healthys`
-- MinIO API: `http://localhost:9000`
-- MinIO console: `http://localhost:9001`
+## Required variables
 
-The PostgreSQL initialization script creates isolated `healthys` and
-`keycloak` databases and roles. Flyway applies `V1` through `V7` to the
-Healthys database when the API starts. Keycloak imports the local realm on its
-first start. MinIO creates the application bucket automatically.
+| Service | Variables |
+| --- | --- |
+| PostgreSQL | `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` |
+| Keycloak | `KEYCLOAK_ISSUER_URI` |
+| MinIO/S3 | `STORAGE_ENDPOINT`, `STORAGE_BUCKET`, `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY` |
+| Optional tuning | `STORAGE_REGION`, `STORAGE_PATH_STYLE_ACCESS`, `DB_POOL_MAX_SIZE`, `DB_POOL_MIN_IDLE`, `DB_CONNECTION_TIMEOUT_MS` |
+| Migrations | `FLYWAY_ENABLED` |
+
+The PostgreSQL URL must use JDBC syntax:
+`jdbc:postgresql://82.112.253.226:5432/healthys`, not an `http://` URL.
+Add the SSL parameters required by the server, for example
+`?sslmode=require`, only when TLS is configured there.
+
+The Keycloak issuer is a realm URL, such as
+`https://keycloak.wouri.tv/realms/healthys`, not only the server base URL.
+The realm and clients must already exist on the remote Keycloak instance.
+
+The MinIO bucket and access policy must already exist on the remote instance.
+Use `STORAGE_PATH_STYLE_ACCESS=true` for a standard MinIO deployment.
 
 ## Staging and production
 
-Do not start `compose.yml` on staging or production. Run the application with
-`SPRING_PROFILES_ACTIVE=staging` or `prod` and inject these secrets through
-the deployment platform:
+Run with `SPRING_PROFILES_ACTIVE=staging` or `prod` and inject the same
+variables using the deployment platform's secret manager. Do not deploy a
+`.env` file containing production secrets.
 
-- `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`
-- `KEYCLOAK_ISSUER_URI`
-- `STORAGE_ENDPOINT`, `STORAGE_REGION`, `STORAGE_BUCKET`
-- `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`
-- `STORAGE_PATH_STYLE_ACCESS`
+Flyway applies the SQL migrations when the API starts. On a shared remote
+database, use a dedicated development database or restricted account whenever
+possible. If migrations are executed separately by the deployment pipeline,
+set `FLYWAY_ENABLED=false` for the application. Never edit an already applied
+migration; add a new versioned migration instead.
 
-The remote PostgreSQL JDBC URL has the form
-`jdbc:postgresql://82.112.253.226:5432/healthys`. The `http://` prefix must
-not be used for PostgreSQL. The expected Keycloak issuer has the form
-`https://keycloak.wouri.tv/realms/<realm>`; confirm the deployed realm name
-before configuring it.
-
-Flyway remains enabled in staging and production, so the same versioned
-migrations are applied exactly once. Never edit a migration that has already
-run remotely; add a new migration instead.
-
-## Reset local infrastructure
-
-This deletes local PostgreSQL and MinIO data:
-
-```bash
-docker compose down --volumes
-docker compose up -d
-```
+The Actuator health endpoint remains available at `/actuator/health`.
+Database connectivity is included automatically in the application health.
