@@ -44,15 +44,15 @@ class MapStructConventionsTests {
     record SampleDto(String name) {
     }
 
-    static class SampleEntity {
+    public static class SampleEntity {
 
         private String name;
 
-        String getName() {
+        public String getName() {
             return name;
         }
 
-        void setName(String name) {
+        public void setName(String name) {
             this.name = name;
         }
     }
