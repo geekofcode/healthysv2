@@ -92,3 +92,32 @@ authenticated Keycloak subject is used as auditor when it is a UUID.
 The specification is available at `/v3/api-docs` and Swagger UI at
 `/swagger-ui.html`. Secured endpoints use the global `bearerAuth` JWT
 scheme.
+
+
+## Security and Keycloak
+
+The API is an OAuth 2.0 Resource Server for the `healthys` realm. It validates
+both `iss` and the `healthys-api` audience. Keycloak realm roles and client
+roles from `resource_access.healthys-api.roles` are converted to Spring
+authorities prefixed with `ROLE_`.
+
+Public routes are limited to health probes, OpenAPI/Swagger, and
+`/api/v1/public/**`. Every other route requires a valid bearer token;
+`/api/v1/admin/**` additionally requires `PLATFORM_ADMIN`. Method-level
+rules use `@PreAuthorize`.
+
+The realm blueprint is in `keycloak/healthys-realm.json`. Web and mobile are
+public OpenID Connect clients using Authorization Code with PKCE; neither
+client contains a secret. Before importing it remotely, replace the development
+redirect URIs and web origins with the actual staging or production URLs.
+
+Required security variables are:
+
+- `KEYCLOAK_ISSUER_URI`, including `/realms/healthys`;
+- `KEYCLOAK_AUDIENCE=healthys-api`;
+- `KEYCLOAK_API_CLIENT_ID=healthys-api`;
+- `CORS_ALLOWED_ORIGINS`, as a comma-separated allowlist;
+- `CORS_MAX_AGE_SECONDS`.
+
+Never configure `CORS_ALLOWED_ORIGINS=*` when credentialed requests are
+enabled.
