@@ -59,3 +59,21 @@ jobs:
 
       - name: Build application
         run: npm run build
+
+  containers:
+    name: Docker Compose build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Prepare non-secret build environment
+        run: cp .env.example .env
+
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+
+      - name: Build frontend and backend images
+        run: docker compose build
