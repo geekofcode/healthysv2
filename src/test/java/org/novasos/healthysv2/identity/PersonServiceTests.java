@@ -51,7 +51,7 @@ class PersonServiceTests {
 
         assertThatThrownBy(() -> service.create(request))
                 .isInstanceOf(ConflictException.class)
-                .hasMessage("The person number already exists");
+                .hasMessage("error.person.number.exists");
 
         verify(repository, never()).save(any());
     }
@@ -65,7 +65,7 @@ class PersonServiceTests {
 
         assertThatThrownBy(() -> service.create(request))
                 .isInstanceOf(ConflictException.class)
-                .hasMessage("The Keycloak user is already linked to a person");
+                .hasMessage("error.person.keycloak.exists");
     }
 
     @Test

@@ -15,12 +15,14 @@ import org.springframework.security.oauth2.jwt.*;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @ActiveProfiles("test")
 @SpringBootTest(properties={"spring.security.oauth2.resourceserver.jwt.issuer-uri=https://keycloak.example/realms/healthys","spring.security.oauth2.resourceserver.jwt.audiences=healthys-api","healthys.security.api-client-id=healthys-api","healthys.security.cors.allowed-origins=http://localhost:5173"})
 @AutoConfigureMockMvc @Import({TestcontainersConfiguration.class,OrganizationApiIntegrationTests.JwtFixtures.class}) @Transactional
 class OrganizationApiIntegrationTests {
     @Autowired MockMvc mockMvc;
+    @Autowired ObjectMapper objectMapper;
 
     @Test void adminCreatesAndReadsAnOrganization() throws Exception {
         String location=mockMvc.perform(post("/api/v1/organizations").header(HttpHeaders.AUTHORIZATION,"Bearer admin").contentType(MediaType.APPLICATION_JSON).content("""
@@ -48,8 +50,8 @@ class OrganizationApiIntegrationTests {
                 .andExpect(status().isNotFound()).andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("introuvable")));
     }
 
-    private UUID create(String number) throws Exception {String body=mockMvc.perform(post("/api/v1/organizations").header(HttpHeaders.AUTHORIZATION,"Bearer admin").contentType(MediaType.APPLICATION_JSON).content("{\"number\":\""+number+"\",\"name\":\"Test\"}" )).andReturn().getResponse().getContentAsString();return UUID.fromString(body.replaceAll(".*\\\"id\\\":\\\"([^\\\"]+).*","$1"));}
-    private UUID addDepartment(UUID org,String code) throws Exception {String body=mockMvc.perform(post("/api/v1/organizations/{id}/departments",org).header(HttpHeaders.AUTHORIZATION,"Bearer admin").contentType(MediaType.APPLICATION_JSON).content("{\"code\":\""+code+"\",\"name\":\"Department\"}" )).andReturn().getResponse().getContentAsString();return UUID.fromString(body.replaceAll(".*\\\"id\\\":\\\"([^\\\"]+).*","$1"));}
+    private UUID create(String number) throws Exception {String body=mockMvc.perform(post("/api/v1/organizations").header(HttpHeaders.AUTHORIZATION,"Bearer admin").contentType(MediaType.APPLICATION_JSON).content("{\"number\":\""+number+"\",\"name\":\"Test\"}" )).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();return UUID.fromString(objectMapper.readTree(body).get("id").asText());}
+    private UUID addDepartment(UUID org,String code) throws Exception {String body=mockMvc.perform(post("/api/v1/organizations/{id}/departments",org).header(HttpHeaders.AUTHORIZATION,"Bearer admin").contentType(MediaType.APPLICATION_JSON).content("{\"code\":\""+code+"\",\"name\":\"Department\"}" )).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();return UUID.fromString(objectMapper.readTree(body).get("id").asText());}
 
     @TestConfiguration(proxyBeanMethods=false) static class JwtFixtures {
         @Bean JwtDecoder jwtDecoder(){return token->jwt(token,token.equals("admin")?List.of("PLATFORM_ADMIN"):List.of("HOSPITAL_AGENT"));}
