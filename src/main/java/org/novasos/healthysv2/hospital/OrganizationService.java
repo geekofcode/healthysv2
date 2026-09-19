@@ -42,7 +42,8 @@ class OrganizationService {
     DepartmentResponse addDepartment(UUID organizationId, DepartmentRequest request) {
         Organization org = organization(organizationId);
         if (departments.existsByOrganizationIdAndCode(organizationId, request.code())) conflict("DEPARTMENT_CODE_ALREADY_EXISTS", "error.department.code.exists");
-        return department(org.addDepartment(request.code(), request.name(), request.description(), request.status()));
+        return department(departments.saveAndFlush(
+                org.addDepartment(request.code(), request.name(), request.description(), request.status())));
     }
     DepartmentResponse updateDepartment(UUID organizationId, UUID id, DepartmentUpdateRequest request) {
         Department item = departmentEntity(organizationId, id); item.update(request.name(), request.description(), request.status()); return department(item);
@@ -52,7 +53,8 @@ class OrganizationService {
     ServiceResponse addService(UUID organizationId, UUID departmentId, ServiceRequest request) {
         Department parent = departmentEntity(organizationId, departmentId);
         if (services.existsByDepartmentIdAndCode(departmentId, request.code())) conflict("SERVICE_CODE_ALREADY_EXISTS", "error.service.code.exists");
-        return service(parent.addService(request.code(), request.name(), request.description(), request.status()));
+        return service(services.saveAndFlush(
+                parent.addService(request.code(), request.name(), request.description(), request.status())));
     }
     ServiceResponse updateService(UUID organizationId, UUID departmentId, UUID id, ServiceUpdateRequest request) {
         departmentEntity(organizationId, departmentId);
@@ -68,7 +70,8 @@ class OrganizationService {
         Organization org = organization(organizationId);
         if (rooms.existsByOrganizationIdAndRoomNumber(organizationId, request.roomNumber())) conflict("ROOM_NUMBER_ALREADY_EXISTS", "error.room.number.exists");
         Department department = request.departmentId() == null ? null : departmentEntity(organizationId, request.departmentId());
-        return room(org.addRoom(department, request.roomNumber(), request.type(), request.status()));
+        return room(rooms.saveAndFlush(
+                org.addRoom(department, request.roomNumber(), request.type(), request.status())));
     }
     RoomResponse updateRoom(UUID organizationId, UUID id, RoomUpdateRequest request) {
         Room item = roomEntity(organizationId, id);
@@ -80,7 +83,8 @@ class OrganizationService {
     BedResponse addBed(UUID organizationId, UUID roomId, BedRequest request) {
         Room parent = roomEntity(organizationId, roomId);
         if (beds.existsByRoomIdAndBedNumber(roomId, request.bedNumber())) conflict("BED_NUMBER_ALREADY_EXISTS", "error.bed.number.exists");
-        return bed(parent.addBed(request.bedNumber(), request.status()));
+        return bed(beds.saveAndFlush(
+                parent.addBed(request.bedNumber(), request.status())));
     }
     BedResponse updateBed(UUID organizationId, UUID roomId, UUID id, BedUpdateRequest request) {
         roomEntity(organizationId, roomId);
