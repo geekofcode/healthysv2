@@ -12,6 +12,10 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.context.MessageSource;
+import org.springframework.context.support.ResourceBundleMessageSource;
+import org.springframework.context.i18n.LocaleContextHolder;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -27,6 +31,16 @@ public class GlobalExceptionHandler {
 
     private static final Logger LOGGER =
             LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private final MessageSource messages;
+
+    @Autowired
+    public GlobalExceptionHandler(MessageSource messages) { this.messages = messages; }
+    public GlobalExceptionHandler() {
+        ResourceBundleMessageSource source = new ResourceBundleMessageSource();
+        source.setBasename("messages");
+        source.setDefaultEncoding("UTF-8");
+        this.messages = source;
+    }
 
     @ExceptionHandler(ApiException.class)
     ResponseEntity<ErrorResponse> handleApiException(
@@ -35,7 +49,7 @@ public class GlobalExceptionHandler {
         return response(
                 exception.status(),
                 exception.code(),
-                exception.getMessage(),
+                message(exception.messageKey(), exception.messageArguments()),
                 request,
                 List.of());
     }
@@ -56,7 +70,7 @@ public class GlobalExceptionHandler {
         return response(
                 HttpStatus.BAD_REQUEST,
                 "VALIDATION_FAILED",
-                "Request validation failed",
+                message("error.validation", null),
                 request,
                 violations);
     }
@@ -76,7 +90,7 @@ public class GlobalExceptionHandler {
         return response(
                 HttpStatus.BAD_REQUEST,
                 "VALIDATION_FAILED",
-                "Request validation failed",
+                message("error.validation", null),
                 request,
                 violations);
     }
@@ -92,7 +106,7 @@ public class GlobalExceptionHandler {
         return response(
                 HttpStatus.BAD_REQUEST,
                 "MALFORMED_REQUEST",
-                "The request cannot be parsed",
+                message("error.malformed", null),
                 request,
                 List.of());
     }
@@ -108,7 +122,7 @@ public class GlobalExceptionHandler {
         return response(
                 HttpStatus.CONFLICT,
                 "DATA_INTEGRITY_VIOLATION",
-                "The operation conflicts with existing data",
+                message("error.data-integrity", null),
                 request,
                 List.of());
     }
@@ -120,7 +134,7 @@ public class GlobalExceptionHandler {
         return response(
                 HttpStatus.FORBIDDEN,
                 "ACCESS_DENIED",
-                "You are not allowed to perform this operation",
+                message("error.access-denied", null),
                 request,
                 List.of());
     }
@@ -136,7 +150,7 @@ public class GlobalExceptionHandler {
         return response(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "INTERNAL_ERROR",
-                "An unexpected error occurred",
+                message("error.internal", null),
                 request,
                 List.of());
     }
@@ -161,5 +175,9 @@ public class GlobalExceptionHandler {
     private String correlationId(HttpServletRequest request) {
         Object value = request.getAttribute(CorrelationIdFilter.REQUEST_ATTRIBUTE);
         return value == null ? null : value.toString();
+    }
+
+    private String message(String key, Object[] arguments) {
+        return messages.getMessage(key, arguments, key, LocaleContextHolder.getLocale());
     }
 }

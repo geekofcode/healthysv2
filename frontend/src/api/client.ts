@@ -1,4 +1,5 @@
 import {validAccessToken} from '../auth/keycloak';
+import i18n from '../i18n';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
@@ -25,6 +26,7 @@ export async function apiRequest<T>(
   const headers = new Headers(init.headers);
   headers.set('Authorization', `Bearer ${token}`);
   headers.set('Accept', 'application/json');
+  headers.set('Accept-Language', i18n.resolvedLanguage ?? 'en');
 
   if (init.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
@@ -37,7 +39,7 @@ export async function apiRequest<T>(
 
   if (response.status === 401) {
     window.dispatchEvent(new Event('healthys:unauthorized'));
-    throw new ApiError(401, 'UNAUTHORIZED', 'Votre session a expiré.');
+    throw new ApiError(401, 'UNAUTHORIZED', i18n.t('errors.sessionExpired'));
   }
 
   if (!response.ok) {
@@ -47,8 +49,8 @@ export async function apiRequest<T>(
       payload.code ?? 'HTTP_ERROR',
       payload.message
         ?? (response.status === 403
-          ? 'Vous ne disposez pas des droits nécessaires.'
-          : 'La requête a échoué.'),
+          ? i18n.t('errors.forbidden')
+          : i18n.t('errors.requestFailed')),
     );
   }
 

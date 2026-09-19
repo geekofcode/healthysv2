@@ -7,6 +7,7 @@ import {AuthProvider} from './auth/AuthContext';
 import {queryClient} from './queryClient';
 import {router} from './router';
 import './styles.css';
+import './i18n';
 
 const root = document.getElementById('root');
 if (!root) {

@@ -1,11 +1,12 @@
+import {useTranslation} from 'react-i18next';
+
 export function DashboardPage() {
+  const {t} = useTranslation();
   return (
     <section>
-      <p className="eyebrow">Tableau de bord</p>
-      <h1>Votre espace HEALTH'YS</h1>
-      <p>
-        Le socle web est connecté à Keycloak et à l'API Spring Boot.
-      </p>
+      <p className="eyebrow">{t('dashboard.eyebrow')}</p>
+      <h1>{t('dashboard.title')}</h1>
+      <p>{t('dashboard.description')}</p>
     </section>
   );
 }

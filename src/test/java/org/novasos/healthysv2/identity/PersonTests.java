@@ -80,7 +80,7 @@ class PersonTests {
         assertThatThrownBy(() ->
                 person.addAddress(UUID.randomUUID(), "WORK", true))
                 .isInstanceOf(BusinessRuleException.class)
-                .hasMessage("A person can only have one primary address");
+                .hasMessage("error.person.primary-address.exists");
     }
 
     @Test
@@ -94,7 +94,7 @@ class PersonTests {
                 true,
                 false))
                 .isInstanceOf(BusinessRuleException.class)
-                .hasMessage("A person can only have one primary contact per type");
+                .hasMessage("error.person.primary-contact.exists");
     }
 
     @Test

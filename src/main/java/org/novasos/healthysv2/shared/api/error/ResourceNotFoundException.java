@@ -8,6 +8,8 @@ public final class ResourceNotFoundException extends ApiException {
         super(
                 HttpStatus.NOT_FOUND,
                 "RESOURCE_NOT_FOUND",
-                "%s '%s' was not found".formatted(resource, identifier));
+                "error.resource.not-found",
+                resource,
+                identifier);
     }
 }
