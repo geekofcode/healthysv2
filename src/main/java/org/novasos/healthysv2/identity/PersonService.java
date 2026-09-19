@@ -65,14 +65,14 @@ class PersonService {
         if (repository.existsByPersonNumber(request.personNumber())) {
             throw new ConflictException(
                     "PERSON_NUMBER_ALREADY_EXISTS",
-                    "The person number already exists");
+                    "error.person.number.exists");
         }
         if (request.keycloakUserId() != null
                 && repository.existsByKeycloakUserId(
                         request.keycloakUserId())) {
             throw new ConflictException(
                     "KEYCLOAK_USER_ALREADY_LINKED",
-                    "The Keycloak user is already linked to a person");
+                    "error.person.keycloak.exists");
         }
     }
 

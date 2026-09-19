@@ -62,7 +62,7 @@ class PersonController {
         } catch (IllegalArgumentException exception) {
             throw new BusinessRuleException(
                     "INVALID_IDENTITY_SUBJECT",
-                    "The authenticated subject is not a UUID");
+                    "error.identity.subject.invalid");
         }
     }
 }

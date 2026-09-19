@@ -128,7 +128,7 @@ public class Person extends AuditableEntity {
         if (primary && addresses.stream().anyMatch(PersonAddress::isPrimary)) {
             throw new BusinessRuleException(
                     "PRIMARY_ADDRESS_ALREADY_EXISTS",
-                    "A person can only have one primary address");
+                    "error.person.primary-address.exists");
         }
         PersonAddress address =
                 PersonAddress.create(this, addressId, addressType, primary);
@@ -146,7 +146,7 @@ public class Person extends AuditableEntity {
                         && contact.getType().equalsIgnoreCase(type))) {
             throw new BusinessRuleException(
                     "PRIMARY_CONTACT_ALREADY_EXISTS",
-                    "A person can only have one primary contact per type");
+                    "error.person.primary-contact.exists");
         }
         PersonContact contact =
                 PersonContact.create(this, type, value, primary, verified);

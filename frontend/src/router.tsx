@@ -5,6 +5,9 @@ import {MainLayout} from './layout/MainLayout';
 import {DashboardPage} from './pages/DashboardPage';
 import {LoginPage} from './pages/LoginPage';
 import {MePage} from './pages/MePage';
+import {OrganizationsPage} from './pages/OrganizationsPage';
+import {OrganizationFormPage} from './pages/OrganizationFormPage';
+import {OrganizationDetailPage} from './pages/OrganizationDetailPage';
 
 export const router = createBrowserRouter([
   {
@@ -19,6 +22,10 @@ export const router = createBrowserRouter([
         children: [
           {path: '/', element: <DashboardPage />},
           {path: '/me', element: <MePage />},
+          {path: '/organizations', element: <OrganizationsPage />},
+          {path: '/organizations/new', element: <OrganizationFormPage />},
+          {path: '/organizations/:id', element: <OrganizationDetailPage />},
+          {path: '/organizations/:id/edit', element: <OrganizationFormPage />},
         ],
       },
     ],

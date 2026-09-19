@@ -2,15 +2,17 @@ import {useQuery} from '@tanstack/react-query';
 
 import {getMe} from '../api/persons';
 import {ApiErrorMessage} from '../components/ApiErrorMessage';
+import {useTranslation} from 'react-i18next';
 
 export function MePage() {
+  const {t} = useTranslation();
   const query = useQuery({
     queryKey: ['person', 'me'],
     queryFn: getMe,
   });
 
   if (query.isPending) {
-    return <p>Chargement de votre profil…</p>;
+    return <p>{t('profile.loading')}</p>;
   }
 
   if (query.isError) {
@@ -20,23 +22,23 @@ export function MePage() {
   const person = query.data;
   return (
     <section>
-      <p className="eyebrow">Mon profil</p>
+      <p className="eyebrow">{t('profile.eyebrow')}</p>
       <h1>{person.firstName} {person.lastName}</h1>
       <dl className="profile-grid">
         <div>
-          <dt>Numéro HEALTH'YS</dt>
+          <dt>{t('profile.number')}</dt>
           <dd>{person.personNumber}</dd>
         </div>
         <div>
-          <dt>Statut</dt>
+          <dt>{t('profile.status')}</dt>
           <dd>{person.status}</dd>
         </div>
         <div>
-          <dt>Contacts</dt>
+          <dt>{t('profile.contacts')}</dt>
           <dd>{person.contacts.length}</dd>
         </div>
         <div>
-          <dt>Contacts d'urgence</dt>
+          <dt>{t('profile.emergencyContacts')}</dt>
           <dd>{person.emergencyContacts.length}</dd>
         </div>
       </dl>

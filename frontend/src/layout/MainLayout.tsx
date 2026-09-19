@@ -1,22 +1,25 @@
 import {NavLink, Outlet} from 'react-router-dom';
 
 import {useAuth} from '../auth/AuthContext';
+import {useTranslation} from 'react-i18next';
 
 export function MainLayout() {
   const auth = useAuth();
+  const {t} = useTranslation();
 
   return (
     <div className="app-shell">
       <header className="topbar">
         <NavLink className="brand" to="/">HEALTH'YS</NavLink>
-        <nav aria-label="Navigation principale">
-          <NavLink to="/">Accueil</NavLink>
-          <NavLink to="/me">Mon profil</NavLink>
+        <nav aria-label={t('nav.main')}>
+          <NavLink to="/">{t('nav.home')}</NavLink>
+          <NavLink to="/me">{t('nav.profile')}</NavLink>
+          <NavLink to="/organizations">{t('nav.organizations')}</NavLink>
         </nav>
         <div className="session">
           <span>{auth.username}</span>
           <button type="button" onClick={() => void auth.logout()}>
-            Déconnexion
+            {t('auth.logout')}
           </button>
         </div>
       </header>
