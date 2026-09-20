@@ -3,11 +3,13 @@
   "displayName": "HEALTHYS",
   "enabled": true,
   "sslRequired": "external",
-  "registrationAllowed": false,
+  "registrationAllowed": true,
+  "verifyEmail": true,
   "resetPasswordAllowed": true,
   "rememberMe": true,
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
+  "defaultRoles": ["PATIENT"],
   "roles": {
     "realm": [
       {"name": "PATIENT", "description": "Patient HEALTHYS"},
@@ -22,7 +24,7 @@
   },
   "clients": [
     {
-      "clientId": "healthys-api",
+      "clientId": "healthys-backend-apps",
       "name": "HEALTHYS API",
       "enabled": true,
       "protocol": "openid-connect",
@@ -33,7 +35,7 @@
       "serviceAccountsEnabled": false
     },
     {
-      "clientId": "healthys-web",
+      "clientId": "healthys-web-apps",
       "name": "HEALTHYS Web",
       "enabled": true,
       "protocol": "openid-connect",
@@ -64,7 +66,7 @@
           "protocolMapper": "oidc-audience-mapper",
           "consentRequired": false,
           "config": {
-            "included.client.audience": "healthys-api",
+            "included.client.audience": "healthys-backend-apps",
             "id.token.claim": "false",
             "access.token.claim": "true",
             "lightweight.claim": "false",
@@ -74,7 +76,7 @@
       ]
     },
     {
-      "clientId": "healthys-mobile",
+      "clientId": "healthys-mobile-apps",
       "name": "HEALTHYS Mobile",
       "enabled": true,
       "protocol": "openid-connect",
@@ -102,7 +104,7 @@
           "protocolMapper": "oidc-audience-mapper",
           "consentRequired": false,
           "config": {
-            "included.client.audience": "healthys-api",
+            "included.client.audience": "healthys-backend-apps",
             "id.token.claim": "false",
             "access.token.claim": "true",
             "lightweight.claim": "false",

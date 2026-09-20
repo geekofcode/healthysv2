@@ -96,6 +96,7 @@ class SecurityConfiguration {
                 HttpHeaders.AUTHORIZATION,
                 HttpHeaders.CONTENT_TYPE,
                 HttpHeaders.ACCEPT,
+                HttpHeaders.ACCEPT_LANGUAGE,
                 "X-Correlation-ID"));
         configuration.setExposedHeaders(List.of(
                 HttpHeaders.LOCATION,

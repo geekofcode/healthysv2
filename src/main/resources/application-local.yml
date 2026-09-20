@@ -16,11 +16,11 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: ${KEYCLOAK_ISSUER_URI}
-          audiences: ${KEYCLOAK_AUDIENCE:healthys-api}
+          audiences: ${KEYCLOAK_AUDIENCE:healthys-backend-apps}
 
 healthys:
   security:
-    api-client-id: ${KEYCLOAK_API_CLIENT_ID:healthys-api}
+    api-client-id: ${KEYCLOAK_API_CLIENT_ID:healthys-backend-apps}
     cors:
       allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
       max-age-seconds: ${CORS_MAX_AGE_SECONDS:3600}

@@ -8,6 +8,7 @@ import {MePage} from './pages/MePage';
 import {OrganizationsPage} from './pages/OrganizationsPage';
 import {OrganizationFormPage} from './pages/OrganizationFormPage';
 import {OrganizationDetailPage} from './pages/OrganizationDetailPage';
+import {RegistrationCompletePage} from './pages/RegistrationCompletePage';
 
 export const router = createBrowserRouter([
   {
@@ -16,8 +17,9 @@ export const router = createBrowserRouter([
   },
   {
     element: <ProtectedRoute />,
-    children: [
-      {
+        children: [
+          {path: '/registration/complete', element: <RegistrationCompletePage />},
+          {
         element: <MainLayout />,
         children: [
           {path: '/', element: <DashboardPage />},

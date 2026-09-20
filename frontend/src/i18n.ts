@@ -6,6 +6,7 @@ const resources = {
   en: {translation: {
     common: {loading: 'Loading…', save: 'Save', cancel: 'Cancel', edit: 'Edit', create: 'Create', delete: 'Delete', actions: 'Actions', back: 'Back'},
     auth: {sessionInitializing: 'Initializing session…', keycloakInitializing: 'Initializing Keycloak…', securePortal: 'Secure portal', welcome: "Welcome to HEALTH'YS", intro: "Sign in with your HEALTH'YS account to access your health space.", login: 'Sign in', logout: 'Sign out'},
+    registration: {createAccount: 'Create a patient account', creatingProfile: 'Creating your patient profile…'},
     nav: {main: 'Main navigation', home: 'Home', profile: 'My profile', organizations: 'Organizations'},
     dashboard: {eyebrow: 'Dashboard', title: "Your HEALTH'YS space", description: 'The web application is connected to Keycloak and the Spring Boot API.'},
     profile: {eyebrow: 'My profile', loading: 'Loading your profile…', number: "HEALTH'YS number", status: 'Status', contacts: 'Contacts', emergencyContacts: 'Emergency contacts'},
@@ -16,6 +17,7 @@ const resources = {
   fr: {translation: {
     common: {loading: 'Chargement…', save: 'Enregistrer', cancel: 'Annuler', edit: 'Modifier', create: 'Créer', delete: 'Supprimer', actions: 'Actions', back: 'Retour'},
     auth: {sessionInitializing: 'Initialisation de la session…', keycloakInitializing: 'Initialisation de Keycloak…', securePortal: 'Portail sécurisé', welcome: "Bienvenue sur HEALTH'YS", intro: "Connectez-vous avec votre compte HEALTH'YS pour accéder à votre espace santé.", login: 'Se connecter', logout: 'Déconnexion'},
+    registration: {createAccount: 'Créer un compte patient', creatingProfile: 'Création de votre profil patient…'},
     nav: {main: 'Navigation principale', home: 'Accueil', profile: 'Mon profil', organizations: 'Organisations'},
     dashboard: {eyebrow: 'Tableau de bord', title: "Votre espace HEALTH'YS", description: "Le socle web est connecté à Keycloak et à l'API Spring Boot."},
     profile: {eyebrow: 'Mon profil', loading: 'Chargement de votre profil…', number: "Numéro HEALTH'YS", status: 'Statut', contacts: 'Contacts', emergencyContacts: "Contacts d'urgence"},

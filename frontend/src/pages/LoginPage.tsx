@@ -27,6 +27,15 @@ export function LoginPage() {
         >
           {t('auth.login')}
         </button>
+        <button
+          className="button-secondary"
+          type="button"
+          onClick={() => void auth.register(
+            `${window.location.origin}/registration/complete`,
+          )}
+        >
+          {t('registration.createAccount')}
+        </button>
       </section>
     </main>
   );

@@ -25,6 +25,8 @@ button {
   font: inherit;
   font-weight: 700;
 }
+.login-card button {width:100%;margin-top:.75rem}
+.button-secondary {color:#087f5b;background:#dff6ed}
 .button {display:inline-block;padding:.75rem 1rem;border-radius:.65rem;color:white;background:#087f5b;text-decoration:none;font-weight:700}
 .page-heading {display:flex;align-items:center;justify-content:space-between;gap:1rem}
 table {width:100%;border-collapse:collapse;background:white}
