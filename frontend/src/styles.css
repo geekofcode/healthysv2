@@ -38,6 +38,11 @@ input,select {width:100%;padding:.7rem;border:1px solid #aac3ba;border-radius:.5
 .structure-card {padding:1rem;margin:.75rem 0;border:1px solid #d8e7e1;border-radius:.75rem;background:white}
 .inline-form {display:flex;align-items:center;gap:.5rem;margin:1rem 0;padding:.75rem;background:#eaf4f0;border-radius:.75rem}
 .inline-form input,.inline-form select {max-width:14rem}
+.search-form {display:flex;gap:.75rem;margin:1rem 0}.search-form input{max-width:28rem}
+.detail-section {margin-top:2rem;padding-top:1rem;border-top:1px solid #d8e7e1}
+.compact-form {margin:1rem 0;align-items:end}.compact-form strong{grid-column:1/-1}
+.check-field {display:flex!important;grid-template-columns:auto 1fr;align-items:center}.check-field input{width:auto}
+.assignment-select {display:grid;gap:.4rem;max-width:28rem;margin:1rem 0;font-weight:700}
 
 a {
   color: inherit;

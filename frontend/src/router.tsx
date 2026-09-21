@@ -9,6 +9,9 @@ import {OrganizationsPage} from './pages/OrganizationsPage';
 import {OrganizationFormPage} from './pages/OrganizationFormPage';
 import {OrganizationDetailPage} from './pages/OrganizationDetailPage';
 import {RegistrationCompletePage} from './pages/RegistrationCompletePage';
+import {ProfessionalsPage} from './pages/ProfessionalsPage';
+import {ProfessionalFormPage} from './pages/ProfessionalFormPage';
+import {ProfessionalDetailPage} from './pages/ProfessionalDetailPage';
 
 export const router = createBrowserRouter([
   {
@@ -28,6 +31,9 @@ export const router = createBrowserRouter([
           {path: '/organizations/new', element: <OrganizationFormPage />},
           {path: '/organizations/:id', element: <OrganizationDetailPage />},
           {path: '/organizations/:id/edit', element: <OrganizationFormPage />},
+          {path: '/professionals', element: <ProfessionalsPage />},
+          {path: '/professionals/new', element: <ProfessionalFormPage />},
+          {path: '/professionals/:id', element: <ProfessionalDetailPage />},
         ],
       },
     ],
