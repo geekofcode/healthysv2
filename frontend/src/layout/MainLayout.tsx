@@ -16,6 +16,7 @@ export function MainLayout() {
           <NavLink to="/me">{t('nav.profile')}</NavLink>
           <NavLink to="/organizations">{t('nav.organizations')}</NavLink>
           {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','DOCTOR','NURSE','PHARMACIST','LAB_TECHNICIAN')&&<NavLink to="/professionals">{t('nav.professionals')}</NavLink>}
+          {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','DOCTOR','NURSE','PHARMACIST','LAB_TECHNICIAN')&&<NavLink to="/patients">{t('nav.patients')}</NavLink>}
         </nav>
         <div className="session">
           <span>{auth.username}</span>

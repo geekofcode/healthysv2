@@ -1,0 +1,27 @@
+import {apiRequest} from './client';
+import type {Page} from './organizations';
+
+export type PatientSummary={id:string;personId:string;patientNumber:string;bloodGroup?:string;rhesus?:string;status:string};
+export type Identifier={id:string;type:string;value:string;issuer?:string;expirationDate?:string};
+export type Insurance={id:string;insuranceCompanyId:string;policyNumber?:string;memberNumber?:string;startDate?:string;endDate?:string;primary:boolean};
+export type Registration={id:string;organizationId:string;registrationNumber:string;registeredAt:string;status:string};
+export type Allergy={id:string;allergen:string;allergyType?:string;reaction?:string;severity?:string;status?:string};
+export type ChronicDisease={id:string;diagnosisCatalogId?:string;diagnosedAt?:string;status?:string;notes?:string};
+export type MedicalHistory={id:string;condition:string;diagnosedAt?:string;resolvedAt?:string;notes?:string};
+export type Note={id:string;authorPersonId?:string;noteType?:string;content:string;createdAt:string};
+export type Flag={id:string;flagType:string;label:string;severity?:string;active:boolean;createdAt:string};
+export type Patient=PatientSummary&{maritalStatus?:string;occupation?:string;identifiers:Identifier[];insurances:Insurance[];registrations:Registration[];allergies:Allergy[];chronicDiseases:ChronicDisease[];medicalHistories:MedicalHistory[];surgicalHistories:unknown[];familyHistories:unknown[];disabilities:unknown[];notes:Note[];flags:Flag[]};
+export type PatientInput={personId:string;bloodGroup?:string;rhesus?:string;maritalStatus?:string;occupation?:string;status?:string};
+export const patientKeys={all:['patients'] as const,list:(query:string)=>['patients','list',query] as const,detail:(id:string)=>['patients',id] as const};
+export const listPatients=(query='')=>apiRequest<Page<PatientSummary>>(`/patients?size=100&sort=patientNumber,asc&query=${encodeURIComponent(query)}`);
+export const getPatient=(id:string)=>apiRequest<Patient>(`/patients/${id}`);
+export const createPatient=(input:PatientInput)=>apiRequest<Patient>('/patients',{method:'POST',body:JSON.stringify(input)});
+const add=<T>(patient:string,path:string,input:unknown)=>apiRequest<T>(`/patients/${patient}/${path}`,{method:'POST',body:JSON.stringify(input)});
+export const addIdentifier=(p:string,input:Omit<Identifier,'id'>)=>add<Identifier>(p,'identifiers',input);
+export const addInsurance=(p:string,input:Omit<Insurance,'id'>)=>add<Insurance>(p,'insurances',input);
+export const addRegistration=(p:string,input:Omit<Registration,'id'|'registeredAt'>)=>add<Registration>(p,'registrations',input);
+export const addAllergy=(p:string,input:Omit<Allergy,'id'>)=>add<Allergy>(p,'allergies',input);
+export const addChronicDisease=(p:string,input:Omit<ChronicDisease,'id'>)=>add<ChronicDisease>(p,'chronic-diseases',input);
+export const addMedicalHistory=(p:string,input:Omit<MedicalHistory,'id'>)=>add<MedicalHistory>(p,'medical-histories',input);
+export const addNote=(p:string,input:Omit<Note,'id'|'createdAt'>)=>add<Note>(p,'notes',input);
+export const addFlag=(p:string,input:Omit<Flag,'id'|'createdAt'>)=>add<Flag>(p,'flags',input);

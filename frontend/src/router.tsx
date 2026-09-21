@@ -12,6 +12,9 @@ import {RegistrationCompletePage} from './pages/RegistrationCompletePage';
 import {ProfessionalsPage} from './pages/ProfessionalsPage';
 import {ProfessionalFormPage} from './pages/ProfessionalFormPage';
 import {ProfessionalDetailPage} from './pages/ProfessionalDetailPage';
+import {PatientsPage} from './pages/PatientsPage';
+import {PatientFormPage} from './pages/PatientFormPage';
+import {PatientDetailPage} from './pages/PatientDetailPage';
 
 export const router = createBrowserRouter([
   {
@@ -34,6 +37,9 @@ export const router = createBrowserRouter([
           {path: '/professionals', element: <ProfessionalsPage />},
           {path: '/professionals/new', element: <ProfessionalFormPage />},
           {path: '/professionals/:id', element: <ProfessionalDetailPage />},
+          {path: '/patients', element: <PatientsPage />},
+          {path: '/patients/new', element: <PatientFormPage />},
+          {path: '/patients/:id', element: <PatientDetailPage />},
         ],
       },
     ],

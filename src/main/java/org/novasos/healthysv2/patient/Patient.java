@@ -1,41 +1,15 @@
 package org.novasos.healthysv2.patient;
-
-import java.util.Locale;
-import java.util.UUID;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import org.novasos.healthysv2.shared.persistence.AuditableEntity;
-
-@Entity
-@Table(name = "patient", schema = "patient")
+import java.util.*; import jakarta.persistence.*; import org.novasos.healthysv2.shared.persistence.AuditableEntity;
+@Entity @Table(name="patient",schema="patient")
 class Patient extends AuditableEntity {
-    @Id
-    private UUID id;
-    @Column(name = "person_id", nullable = false, unique = true)
-    private UUID personId;
-    @Column(name = "patient_number", nullable = false, unique = true, length = 50)
-    private String patientNumber;
-    @Column(nullable = false, length = 30)
-    private String status;
-
-    protected Patient() {}
-
-    static Patient create(UUID personId) {
-        Patient patient = new Patient();
-        patient.id = UUID.randomUUID();
-        patient.personId = personId;
-        patient.patientNumber = "PAT-" + personId.toString()
-                .replace("-", "")
-                .substring(0, 20)
-                .toUpperCase(Locale.ROOT);
-        patient.status = "ACTIVE";
-        return patient;
-    }
-
-    UUID getId() { return id; }
-    UUID getPersonId() { return personId; }
-    String getPatientNumber() { return patientNumber; }
-    String getStatus() { return status; }
+ @Id private UUID id; @Column(name="person_id",nullable=false,unique=true) private UUID personId; @Column(name="patient_number",nullable=false,unique=true,length=50) private String patientNumber;
+ @Column(name="blood_group",length=10) private String bloodGroup; @Column(length=10) private String rhesus; @Column(name="marital_status",length=30) private String maritalStatus; @Column(length=150) private String occupation; @Column(nullable=false,length=30) private String status;
+ @OneToMany(mappedBy="patient",cascade=CascadeType.ALL,orphanRemoval=true) private List<PatientIdentifier> identifiers=new ArrayList<>(); @OneToMany(mappedBy="patient",cascade=CascadeType.ALL,orphanRemoval=true) private List<PatientInsurance> insurances=new ArrayList<>(); @OneToMany(mappedBy="patient",cascade=CascadeType.ALL,orphanRemoval=true) private List<PatientRegistration> registrations=new ArrayList<>();
+ @OneToMany(mappedBy="patient",cascade=CascadeType.ALL,orphanRemoval=true) private List<Allergy> allergies=new ArrayList<>(); @OneToMany(mappedBy="patient",cascade=CascadeType.ALL,orphanRemoval=true) private List<ChronicDisease> chronicDiseases=new ArrayList<>(); @OneToMany(mappedBy="patient",cascade=CascadeType.ALL,orphanRemoval=true) private List<MedicalHistory> medicalHistories=new ArrayList<>(); @OneToMany(mappedBy="patient",cascade=CascadeType.ALL,orphanRemoval=true) private List<SurgicalHistory> surgicalHistories=new ArrayList<>(); @OneToMany(mappedBy="patient",cascade=CascadeType.ALL,orphanRemoval=true) private List<FamilyHistory> familyHistories=new ArrayList<>(); @OneToMany(mappedBy="patient",cascade=CascadeType.ALL,orphanRemoval=true) private List<Disability> disabilities=new ArrayList<>(); @OneToMany(mappedBy="patient",cascade=CascadeType.ALL,orphanRemoval=true) private List<PatientNote> notes=new ArrayList<>(); @OneToMany(mappedBy="patient",cascade=CascadeType.ALL,orphanRemoval=true) private List<PatientFlag> flags=new ArrayList<>(); @OneToOne(mappedBy="patient",cascade=CascadeType.ALL,orphanRemoval=true) private EmergencyProfile emergencyProfile;
+ protected Patient(){} static Patient create(UUID personId){return create(personId,null,null,null,null,null);} static Patient create(UUID personId,String blood,String rhesus,String marital,String occupation,String status){var p=new Patient();p.id=UUID.randomUUID();p.personId=Objects.requireNonNull(personId);p.patientNumber=PatientNumberGenerator.generate(personId);p.update(blood,rhesus,marital,occupation,status);return p;}
+ void update(String blood,String rhesus,String marital,String occupation,String status){bloodGroup=optional(blood,true);this.rhesus=optional(rhesus,true);maritalStatus=optional(marital,true);this.occupation=optional(occupation,false);this.status=normalize(status,"ACTIVE");}
+ PatientIdentifier addIdentifier(String type,String value,String issuer,UUID country,java.time.LocalDate expiration){var x=PatientIdentifier.create(this,type,value,issuer,country,expiration);identifiers.add(x);return x;} PatientInsurance addInsurance(UUID company,String policy,String member,java.time.LocalDate start,java.time.LocalDate end,boolean primary){if(primary)insurances.forEach(PatientInsurance::makeSecondary);var x=PatientInsurance.create(this,company,policy,member,start,end,primary);insurances.add(x);return x;} PatientRegistration addRegistration(UUID org,String number,java.time.Instant at,String status){var x=PatientRegistration.create(this,org,number,at,status);registrations.add(x);return x;}
+ Allergy addAllergy(String allergen,String type,String reaction,String severity,String status,java.time.Instant at,UUID by){var x=Allergy.create(this,allergen,type,reaction,severity,status,at,by);allergies.add(x);return x;} ChronicDisease addChronicDisease(UUID diagnosis,java.time.LocalDate at,String status,String notes){var x=ChronicDisease.create(this,diagnosis,at,status,notes);chronicDiseases.add(x);return x;} MedicalHistory addMedicalHistory(String condition,java.time.LocalDate diagnosed,java.time.LocalDate resolved,String notes){var x=MedicalHistory.create(this,condition,diagnosed,resolved,notes);medicalHistories.add(x);return x;} SurgicalHistory addSurgicalHistory(String procedure,java.time.LocalDate date,UUID org,String notes){var x=SurgicalHistory.create(this,procedure,date,org,notes);surgicalHistories.add(x);return x;} FamilyHistory addFamilyHistory(String relationship,String condition,String notes){var x=FamilyHistory.create(this,relationship,condition,notes);familyHistories.add(x);return x;} Disability addDisability(String type,String description,java.time.LocalDate start,String status){var x=Disability.create(this,type,description,start,status);disabilities.add(x);return x;} PatientNote addNote(UUID author,String type,String content,java.time.Instant at){var x=PatientNote.create(this,author,type,content,at);notes.add(x);return x;} PatientFlag addFlag(String type,String label,String severity,boolean active,java.time.Instant at){var x=PatientFlag.create(this,type,label,severity,active,at);flags.add(x);return x;} EmergencyProfile setEmergencyProfile(String code,boolean blood,boolean allergies,boolean conditions,boolean medications,boolean contact,boolean active){if(emergencyProfile==null)emergencyProfile=EmergencyProfile.create(this,code,blood,allergies,conditions,medications,contact,active);else emergencyProfile.update(code,blood,allergies,conditions,medications,contact,active);return emergencyProfile;}
+ <T> void remove(List<T> list,T item){list.remove(item);} UUID getId(){return id;} UUID getPersonId(){return personId;} String getPatientNumber(){return patientNumber;} String getBloodGroup(){return bloodGroup;} String getRhesus(){return rhesus;} String getMaritalStatus(){return maritalStatus;} String getOccupation(){return occupation;} String getStatus(){return status;} List<PatientIdentifier> getIdentifiers(){return identifiers;} List<PatientInsurance> getInsurances(){return insurances;} List<PatientRegistration> getRegistrations(){return registrations;} List<Allergy> getAllergies(){return allergies;} List<ChronicDisease> getChronicDiseases(){return chronicDiseases;} List<MedicalHistory> getMedicalHistories(){return medicalHistories;} List<SurgicalHistory> getSurgicalHistories(){return surgicalHistories;} List<FamilyHistory> getFamilyHistories(){return familyHistories;} List<Disability> getDisabilities(){return disabilities;} List<PatientNote> getNotes(){return notes;} List<PatientFlag> getFlags(){return flags;} EmergencyProfile getEmergencyProfile(){return emergencyProfile;}
+ static String required(String v){if(v==null||v.isBlank())throw new IllegalArgumentException("Required value");return v.trim();} static String optional(String v,boolean upper){if(v==null||v.isBlank())return null;return upper?v.trim().toUpperCase():v.trim();} static String normalize(String v,String fallback){return v==null||v.isBlank()?fallback:v.trim().toUpperCase();}
 }

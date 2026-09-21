@@ -5,6 +5,10 @@
   font-synthesis: none;
 }
 
+.tabs {display:flex;gap:.5rem;overflow-x:auto;margin:2rem 0 1rem;border-bottom:1px solid var(--border,#d8dee8)}
+.tabs button {background:transparent;color:inherit;border:0;border-bottom:3px solid transparent;border-radius:0;white-space:nowrap;padding:.8rem 1rem}
+.tabs button.active {border-bottom-color:var(--primary,#176b5b);font-weight:700}
+
 * {
   box-sizing: border-box;
 }
