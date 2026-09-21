@@ -41,7 +41,6 @@ class PatientRepositoryIntegrationTests {
         patient.addFlag("RISK", "Fall risk", "HIGH", true, null);
         patient.setEmergencyProfile("ICE-42", true, true, true, false, true, true);
         Patient saved = repository.saveAndFlush(patient);
-        jdbc.update("select 1");
         assertThat(repository.findByPersonId(personId))
                 .contains(saved);
         Patient reloaded = repository.findById(saved.getId()).orElseThrow();
