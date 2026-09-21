@@ -1,0 +1,16 @@
+package org.novasos.healthysv2.consultation;
+import static org.novasos.healthysv2.consultation.api.ConsultationDtos.*;import java.net.URI;import java.util.*;import jakarta.validation.Valid;import io.swagger.v3.oas.annotations.*;import io.swagger.v3.oas.annotations.tags.Tag;import org.novasos.healthysv2.shared.api.ApiPaths;import org.springframework.http.*;import org.springframework.security.access.prepost.PreAuthorize;import org.springframework.web.bind.annotation.*;
+@RestController @RequestMapping(ApiPaths.V1) @Tag(name="Consultations",description="Complete clinical consultation workflow") @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE')") class ConsultationController{
+ private static final String DECISION="hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR')";private final ConsultationService service;ConsultationController(ConsultationService service){this.service=service;}
+ @PostMapping("/consultations") @PreAuthorize(DECISION) ResponseEntity<ConsultationResponse> start(@Valid @RequestBody StartConsultationRequest request){var out=service.start(request);return ResponseEntity.created(URI.create(ApiPaths.V1+"/consultations/"+out.id())).body(out);}
+ @GetMapping("/consultations/{id}") ConsultationResponse find(@PathVariable UUID id){return service.find(id);}
+ @GetMapping("/consultations/{id}/patient-summary") PatientSummary summary(@PathVariable UUID id){return service.patientSummary(id);}
+ @PostMapping("/consultations/{id}/vital-signs") ResponseEntity<VitalSignResponse> vital(@PathVariable UUID id,@Valid @RequestBody VitalSignRequest request){return ResponseEntity.status(201).body(service.addVitalSign(id,request));}
+ @PostMapping("/consultations/{id}/diagnoses") @PreAuthorize(DECISION) ResponseEntity<DiagnosisResponse> diagnosis(@PathVariable UUID id,@Valid @RequestBody DiagnosisRequest request){return ResponseEntity.status(201).body(service.addDiagnosis(id,request));}
+ @PostMapping("/consultations/{id}/notes") ResponseEntity<NoteResponse> note(@PathVariable UUID id,@Valid @RequestBody NoteRequest request){return ResponseEntity.status(201).body(service.addNote(id,request));}
+ @PostMapping("/consultations/{id}/observations") ResponseEntity<ObservationResponse> observation(@PathVariable UUID id,@Valid @RequestBody ObservationRequest request){return ResponseEntity.status(201).body(service.addObservation(id,request));}
+ @PostMapping("/consultations/{id}/treatments") @PreAuthorize(DECISION) ResponseEntity<TreatmentResponse> treatment(@PathVariable UUID id,@Valid @RequestBody TreatmentRequest request){return ResponseEntity.status(201).body(service.addTreatment(id,request));}
+ @PostMapping("/consultations/{id}/follow-ups") @PreAuthorize(DECISION) ResponseEntity<FollowUpResponse> followUp(@PathVariable UUID id,@Valid @RequestBody FollowUpRequest request){return ResponseEntity.status(201).body(service.addFollowUp(id,request));}
+ @PostMapping("/consultations/{id}/complete") @PreAuthorize(DECISION) ConsultationResponse complete(@PathVariable UUID id){return service.complete(id);}
+ @GetMapping("/diagnosis-catalog") List<DiagnosisCatalogResponse> catalog(@RequestParam(required=false)String query){return service.catalog(query);}
+}
