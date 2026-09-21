@@ -15,6 +15,7 @@ import {ProfessionalDetailPage} from './pages/ProfessionalDetailPage';
 import {PatientsPage} from './pages/PatientsPage';
 import {PatientFormPage} from './pages/PatientFormPage';
 import {PatientDetailPage} from './pages/PatientDetailPage';
+import {AgendaPage} from './pages/AgendaPage';
 
 export const router = createBrowserRouter([
   {
@@ -40,6 +41,7 @@ export const router = createBrowserRouter([
           {path: '/patients', element: <PatientsPage />},
           {path: '/patients/new', element: <PatientFormPage />},
           {path: '/patients/:id', element: <PatientDetailPage />},
+          {path: '/agenda', element: <AgendaPage />},
         ],
       },
     ],
