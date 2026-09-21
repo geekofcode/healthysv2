@@ -1,0 +1,3 @@
+package org.novasos.healthysv2.laboratory;
+import java.util.*;import org.springframework.data.domain.*;import org.springframework.data.jpa.repository.*;import org.springframework.data.repository.query.Param;
+interface LabOrderRepository extends JpaRepository<LabOrder,UUID>{@Query("select o from LabOrder o where (:patient is null or o.patientId=:patient) and (:organization is null or o.laboratoryOrganizationId=:organization) and (:status is null or o.status=:status) order by o.orderedAt desc")Page<LabOrder>search(@Param("patient")UUID patient,@Param("organization")UUID organization,@Param("status")String status,Pageable pageable);}
