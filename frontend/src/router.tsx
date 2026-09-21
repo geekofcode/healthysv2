@@ -16,6 +16,9 @@ import {PatientsPage} from './pages/PatientsPage';
 import {PatientFormPage} from './pages/PatientFormPage';
 import {PatientDetailPage} from './pages/PatientDetailPage';
 import {AgendaPage} from './pages/AgendaPage';
+import {PrescriptionsPage} from './pages/PrescriptionsPage';
+import {PrescriptionDetailPage} from './pages/PrescriptionDetailPage';
+import {MedicationStocksPage} from './pages/MedicationStocksPage';
 
 export const router = createBrowserRouter([
   {
@@ -42,6 +45,9 @@ export const router = createBrowserRouter([
           {path: '/patients/new', element: <PatientFormPage />},
           {path: '/patients/:id', element: <PatientDetailPage />},
           {path: '/agenda', element: <AgendaPage />},
+          {path: '/pharmacy/prescriptions', element: <PrescriptionsPage />},
+          {path: '/pharmacy/prescriptions/:id', element: <PrescriptionDetailPage />},
+          {path: '/pharmacy/stocks', element: <MedicationStocksPage />},
         ],
       },
     ],
