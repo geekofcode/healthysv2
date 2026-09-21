@@ -58,10 +58,11 @@ export function AuthProvider({children}: {children: ReactNode}) {
     };
 
     const handleUnauthorized = () => {
+      // A 401 can also mean that the API rejected a structurally valid token
+      // (for example because its audience is missing). Redirecting immediately
+      // to Keycloak would return the same token and create an endless loop.
+      keycloak.clearToken();
       setAuthenticated(false);
-      void keycloak.login({
-        redirectUri: window.location.href,
-      });
     };
     window.addEventListener('healthys:unauthorized', handleUnauthorized);
 
