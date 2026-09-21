@@ -23,12 +23,13 @@ class PatientController {
     private static final String ADMIN_WRITE = "hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT')";
     private static final String CLINICAL_WRITE = "hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE')";
     private final PatientService service;
+    private final PatientAccessService access;
 
-    PatientController(PatientService service) { this.service = service; }
+    PatientController(PatientService service, PatientAccessService access) { this.service = service; this.access = access; }
 
     @GetMapping @Operation(summary = "Search patients")
     PageResponse<PatientSummary> list(@RequestParam(defaultValue = "") String query, Pageable pageable) { return service.search(query, pageable); }
-    @GetMapping("/{id}") PatientResponse get(@PathVariable UUID id) { return service.find(id); }
+    @GetMapping("/{id}") PatientResponse get(@PathVariable UUID id) { access.requireAccess(id,"MEDICAL_RECORD","READ"); return service.find(id); }
     @PostMapping @PreAuthorize(ADMIN_WRITE)
     ResponseEntity<PatientResponse> create(@Valid @RequestBody PatientRequest request) {
         var result = service.create(request);
