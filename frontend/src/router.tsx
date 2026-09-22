@@ -1,4 +1,5 @@
 import {createBrowserRouter} from 'react-router-dom';
+import {lazy,Suspense} from 'react';
 
 import {ProtectedRoute} from './auth/ProtectedRoute';
 import {MainLayout} from './layout/MainLayout';
@@ -29,6 +30,9 @@ import {PregnancyDetailPage} from './pages/PregnancyDetailPage';
 import {ChildHealthRecordPage} from './pages/ChildHealthRecordPage';
 import {DocumentsPage} from './pages/DocumentsPage';
 import {ChatPage} from './pages/ChatPage';
+import {TeleconsultationsPage} from './pages/TeleconsultationsPage';
+
+const TeleconsultationRoomPage=lazy(()=>import('./pages/TeleconsultationRoomPage').then(module=>({default:module.TeleconsultationRoomPage})));
 
 export const router = createBrowserRouter([
   {
@@ -65,6 +69,8 @@ export const router = createBrowserRouter([
           {path: '/maternal-child/children/:childId', element: <ChildHealthRecordPage />},
           {path: '/documents', element: <DocumentsPage />},
           {path: '/chat', element: <ChatPage />},
+          {path: '/teleconsultations', element: <TeleconsultationsPage />},
+          {path: '/teleconsultations/:id', element: <Suspense fallback={null}><TeleconsultationRoomPage /></Suspense>},
           {path: '/pharmacy/prescriptions', element: <PrescriptionsPage />},
           {path: '/pharmacy/prescriptions/:id', element: <PrescriptionDetailPage />},
           {path: '/pharmacy/stocks', element: <MedicationStocksPage />},
