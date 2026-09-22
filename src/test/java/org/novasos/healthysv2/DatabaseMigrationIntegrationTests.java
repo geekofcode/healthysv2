@@ -43,6 +43,9 @@ class DatabaseMigrationIntegrationTests {
             "consultation.consultation",
             "laboratory.lab_order",
             "pharmacy.prescription",
+            "maternal_child.pregnancy",
+            "maternal_child.child_health_record",
+            "maternal_child.vaccination",
             "communication.message",
             "billing.invoice",
             "audit.audit_log");
@@ -54,7 +57,7 @@ class DatabaseMigrationIntegrationTests {
     TransactionTemplate transactions;
 
     @Test
-    void flywayAppliesAllSevenMigrations() {
+    void flywayAppliesAllMigrations() {
         List<String> versions = jdbc.queryForList(
                 """
                 SELECT version
@@ -64,7 +67,7 @@ class DatabaseMigrationIntegrationTests {
                 """,
                 String.class);
 
-        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7");
+        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8");
     }
 
     @Test
