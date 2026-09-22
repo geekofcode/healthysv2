@@ -19,6 +19,11 @@ import {AgendaPage} from './pages/AgendaPage';
 import {PrescriptionsPage} from './pages/PrescriptionsPage';
 import {PrescriptionDetailPage} from './pages/PrescriptionDetailPage';
 import {MedicationStocksPage} from './pages/MedicationStocksPage';
+import {PatientAccessPage} from './pages/PatientAccessPage';
+import {ConsultationStartPage} from './pages/ConsultationStartPage';
+import {ConsultationPage} from './pages/ConsultationPage';
+import {LaboratoryOrdersPage} from './pages/LaboratoryOrdersPage';
+import {LaboratoryOrderPage} from './pages/LaboratoryOrderPage';
 
 export const router = createBrowserRouter([
   {
@@ -44,7 +49,12 @@ export const router = createBrowserRouter([
           {path: '/patients', element: <PatientsPage />},
           {path: '/patients/new', element: <PatientFormPage />},
           {path: '/patients/:id', element: <PatientDetailPage />},
+          {path: '/patients/:id/access', element: <PatientAccessPage />},
           {path: '/agenda', element: <AgendaPage />},
+          {path: '/consultations/new', element: <ConsultationStartPage />},
+          {path: '/consultations/:id', element: <ConsultationPage />},
+          {path: '/laboratory/orders', element: <LaboratoryOrdersPage />},
+          {path: '/laboratory/orders/:id', element: <LaboratoryOrderPage />},
           {path: '/pharmacy/prescriptions', element: <PrescriptionsPage />},
           {path: '/pharmacy/prescriptions/:id', element: <PrescriptionDetailPage />},
           {path: '/pharmacy/stocks', element: <MedicationStocksPage />},
