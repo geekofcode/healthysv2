@@ -44,9 +44,10 @@ class DatabaseMigrationIntegrationTests {
             "laboratory.lab_order",
             "pharmacy.prescription",
             "maternal_child.pregnancy",
-                "maternal_child.child_health_record",
-                "document.document",
+            "maternal_child.child_health_record",
+            "document.document",
             "maternal_child.vaccination",
+            "communication.conversation",
             "communication.message",
             "billing.invoice",
             "audit.audit_log");
@@ -68,7 +69,7 @@ class DatabaseMigrationIntegrationTests {
                 """,
                 String.class);
 
-        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9");
+        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10");
     }
 
     @Test
