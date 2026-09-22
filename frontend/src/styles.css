@@ -63,6 +63,7 @@ input,select {width:100%;padding:.7rem;border:1px solid #aac3ba;border-radius:.5
 .finish-bar{display:flex;justify-content:flex-end;position:sticky;bottom:1rem;margin-top:2rem;padding:1rem;border:1px solid #d8e7e1;border-radius:.75rem;background:rgb(255 255 255 / 95%)}
 .nested-row{display:flex;align-items:center;gap:.5rem;margin-top:.75rem;padding:.5rem;border-top:1px solid #d8e7e1}.nested-row span{flex:1}.nested-row button{padding:.45rem .7rem}
 .flag{display:inline-block;padding:.15rem .4rem;border-radius:999px;background:#edf2f7;font-size:.75rem}.flag-high,.flag-critical{color:#991b1b;background:#fee2e2}.flag-low{color:#92400e;background:#fef3c7}.form-hint{align-self:center;color:#5c746d}
+.maternal-grid,.vaccination-grid,.growth-chart{display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap:1rem;margin-top:1rem}.maternal-card{display:block;padding:1rem;border:1px solid #e2c9d5;border-radius:.75rem;background:#fff7fb;text-decoration:none}.maternal-card>div{display:flex;justify-content:space-between;gap:1rem}.child-link{display:block;width:100%;margin-top:.5rem;text-align:left;background:#6f3b61}.status-delivered{background:#f3e8ff;color:#6b21a8}.child-health-record{border-left:4px solid #b55d8d}
 
 a {
   color: inherit;
