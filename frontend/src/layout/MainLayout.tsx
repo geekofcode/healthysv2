@@ -20,6 +20,7 @@ export function MainLayout() {
           {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','DOCTOR','NURSE','PATIENT')&&<NavLink to="/agenda">{t('nav.agenda')}</NavLink>}
           {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE')&&<NavLink to="/consultations/new">{t('nav.consultations')}</NavLink>}
           {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE','LAB_TECHNICIAN')&&<NavLink to="/laboratory/orders">{t('nav.laboratory')}</NavLink>}
+          {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE','PATIENT')&&<NavLink to="/maternal-child">{t('nav.maternalChild')}</NavLink>}
           {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE','PHARMACIST')&&<NavLink to="/pharmacy/prescriptions">{t('nav.pharmacy')}</NavLink>}
         </nav>
         <div className="session">
