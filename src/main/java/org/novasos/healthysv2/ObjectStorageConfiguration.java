@@ -16,7 +16,7 @@ import software.amazon.awssdk.services.s3.S3Configuration;
 
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(ObjectStorageConfiguration.StorageProperties.class)
-class ObjectStorageConfiguration {
+public class ObjectStorageConfiguration {
 
     @Bean
     S3Client objectStorageClient(StorageProperties properties) {
@@ -35,7 +35,7 @@ class ObjectStorageConfiguration {
 
     @Validated
     @ConfigurationProperties("healthys.storage")
-    record StorageProperties(
+    public record StorageProperties(
             @NotBlank String endpoint,
             @NotBlank String region,
             @NotBlank String bucket,
