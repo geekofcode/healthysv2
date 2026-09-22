@@ -31,3 +31,8 @@ healthys:
     access-key: ${STORAGE_ACCESS_KEY}
     secret-key: ${STORAGE_SECRET_KEY}
     path-style-access: ${STORAGE_PATH_STYLE_ACCESS:true}
+  livekit:
+    url: ${LIVEKIT_URL}
+    api-key: ${LIVEKIT_API_KEY}
+    api-secret: ${LIVEKIT_API_SECRET}
+    token-ttl-minutes: ${LIVEKIT_TOKEN_TTL_MINUTES:60}
