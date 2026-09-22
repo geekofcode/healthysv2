@@ -7,11 +7,11 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.stereotype.Component;
 
 @Component
-class CurrentUserContext {
+public class CurrentUserContext {
     private final JdbcTemplate jdbc;
     CurrentUserContext(JdbcTemplate jdbc){this.jdbc=jdbc;}
 
-    UserContext current(){
+    public UserContext current(){
         var authentication=SecurityContextHolder.getContext().getAuthentication();
         if(!(authentication instanceof JwtAuthenticationToken jwt))return new UserContext(null,null,Set.of());
         UUID subject=uuid(jwt.getToken().getSubject());
@@ -22,5 +22,5 @@ class CurrentUserContext {
     }
     private UUID claimUuid(JwtAuthenticationToken jwt,String name){Object value=jwt.getToken().getClaim(name);return value==null?null:uuid(value.toString());}
     private UUID uuid(String value){try{return value==null?null:UUID.fromString(value);}catch(IllegalArgumentException ignored){return null;}}
-    record UserContext(UUID personId,UUID organizationId,Set<String> roles){boolean has(String role){return roles.contains(role);}boolean hasAny(String...values){return Arrays.stream(values).anyMatch(roles::contains);}}
+    public record UserContext(UUID personId,UUID organizationId,Set<String> roles){public boolean has(String role){return roles.contains(role);}public boolean hasAny(String...values){return Arrays.stream(values).anyMatch(roles::contains);}}
 }
