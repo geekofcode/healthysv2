@@ -1,0 +1,4 @@
+import {describe,expect,it,vi} from 'vitest';
+vi.mock('./client',()=>({apiRequest:vi.fn()}));vi.mock('../auth/keycloak',()=>({validAccessToken:vi.fn()}));
+import {apiRequest} from './client';import {listDocuments,uploadDocument} from './documents';
+describe('documents API',()=>{it('lists patient documents with stable pagination',()=>{listDocuments('patient 1');expect(apiRequest).toHaveBeenCalledWith('/documents?patientId=patient%201&size=50&sort=uploadedAt,desc')});it('builds a multipart upload without forcing a content type',()=>{const file=new File(['result'],'result.pdf',{type:'application/pdf'});uploadDocument('patient-1','category-1',file);expect(apiRequest).toHaveBeenCalledWith('/documents?patientId=patient-1&categoryId=category-1',expect.objectContaining({method:'POST',body:expect.any(FormData)}))})});
