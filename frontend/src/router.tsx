@@ -27,6 +27,7 @@ import {LaboratoryOrderPage} from './pages/LaboratoryOrderPage';
 import {MaternalChildPage} from './pages/MaternalChildPage';
 import {PregnancyDetailPage} from './pages/PregnancyDetailPage';
 import {ChildHealthRecordPage} from './pages/ChildHealthRecordPage';
+import {DocumentsPage} from './pages/DocumentsPage';
 
 export const router = createBrowserRouter([
   {
@@ -61,6 +62,7 @@ export const router = createBrowserRouter([
           {path: '/maternal-child', element: <MaternalChildPage />},
           {path: '/maternal-child/pregnancies/:id', element: <PregnancyDetailPage />},
           {path: '/maternal-child/children/:childId', element: <ChildHealthRecordPage />},
+          {path: '/documents', element: <DocumentsPage />},
           {path: '/pharmacy/prescriptions', element: <PrescriptionsPage />},
           {path: '/pharmacy/prescriptions/:id', element: <PrescriptionDetailPage />},
           {path: '/pharmacy/stocks', element: <MedicationStocksPage />},

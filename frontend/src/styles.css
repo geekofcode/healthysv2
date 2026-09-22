@@ -197,3 +197,4 @@ a {
     justify-content: space-between;
   }
 }
+.document-grid{display:grid;gap:1rem;margin-top:1.5rem}.document-card{background:var(--surface,#fff);border:1px solid #dfe7e5;border-radius:12px;padding:1rem}.document-card>div:first-child{display:flex;justify-content:space-between;gap:1rem}.document-card p{margin:.65rem 0}.document-upload{margin-top:1.5rem}.inline-actions{display:flex;gap:.75rem;margin-top:1rem}
