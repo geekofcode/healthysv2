@@ -23,6 +23,7 @@
         <mapstruct.version>1.6.3</mapstruct.version>
         <spring-modulith.version>2.1.1</spring-modulith.version>
         <springdoc-openapi.version>3.1.1</springdoc-openapi.version>
+        <livekit-server.version>0.16.0</livekit-server.version>
     </properties>
 
     <dependencies>
@@ -87,6 +88,11 @@
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>s3</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.livekit</groupId>
+            <artifactId>livekit-server</artifactId>
+            <version>${livekit-server.version}</version>
         </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>
