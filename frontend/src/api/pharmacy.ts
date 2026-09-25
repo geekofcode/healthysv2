@@ -7,7 +7,8 @@ export type PrescriptionItem={id:string;medicationCatalogId:string;medicationCod
 export type DispenseItem={id:string;prescriptionItemId:string;quantityDispensed:number;batchNumber:string};
 export type Dispense={id:string;dispenseNumber:string;pharmacyOrganizationId:string;pharmacistId:string;dispensedAt:string;status:string;items:DispenseItem[]};
 export type PrescriptionSummary={id:string;prescriptionNumber:string;patientId:string;organizationId?:string;prescribedAt:string;expiresAt?:string;status:PrescriptionStatus};
-export type Prescription=PrescriptionSummary&{consultationId?:string;prescriberId:string;items:PrescriptionItem[];dispenses:Dispense[]};
+export type PrescriptionRecord=PrescriptionSummary&{consultationId?:string;prescriberId:string;items:PrescriptionItem[]};
+export type Prescription=PrescriptionRecord&{dispenses:Dispense[]};
 export type MedicationStock={id:string;organizationId:string;medicationCatalogId:string;medicationCode:string;medicationName:string;batchNumber:string;quantity:number;expirationDate?:string;expired:boolean};
 export type PrescriptionItemInput={medicationCatalogId:string;dosage:string;frequency:string;route:string;duration:string;quantity:number;instructions?:string};
 export type PrescriptionInput={patientId:string;consultationId?:string;prescriberId:string;organizationId?:string;expiresAt?:string;items:PrescriptionItemInput[]};
@@ -18,9 +19,10 @@ export type PrescriptionFilters={patientId?:string;organizationId?:string;status
 export const pharmacyKeys={prescriptions:(filters:PrescriptionFilters)=>['pharmacy','prescriptions',filters] as const,prescription:(id:string)=>['pharmacy','prescriptions',id] as const,catalog:(query:string)=>['pharmacy','catalog',query] as const,stocks:(organizationId:string,medicationCatalogId:string)=>['pharmacy','stocks',organizationId,medicationCatalogId] as const};
 const queryString=(values:Record<string,string|undefined>)=>{const query=new URLSearchParams();Object.entries(values).forEach(([key,value])=>{if(value?.trim())query.set(key,value.trim())});const suffix=query.toString();return suffix?`?${suffix}`:''};
 export const listPrescriptions=(filters:PrescriptionFilters)=>apiRequest<Page<PrescriptionSummary>>(`/prescriptions${queryString({...filters,size:'50',sort:'prescribedAt,desc'})}`);
-export const getPrescription=(id:string)=>apiRequest<Prescription>(`/prescriptions/${id}`);
-export const createPrescription=(input:PrescriptionInput)=>apiRequest<Prescription>('/prescriptions',{method:'POST',body:JSON.stringify(input)});
-export const cancelPrescription=(id:string)=>apiRequest<Prescription>(`/prescriptions/${id}/cancel`,{method:'POST'});
+export const listDispenses=(id:string)=>apiRequest<Dispense[]>(`/prescriptions/${id}/dispenses`);
+export const getPrescription=async(id:string):Promise<Prescription>=>{const [prescription,dispenses]=await Promise.all([apiRequest<PrescriptionRecord>(`/prescriptions/${id}`),listDispenses(id)]);return {...prescription,dispenses}};
+export const createPrescription=(input:PrescriptionInput)=>apiRequest<PrescriptionRecord>('/prescriptions',{method:'POST',body:JSON.stringify(input)});
+export const cancelPrescription=(id:string)=>apiRequest<PrescriptionRecord>(`/prescriptions/${id}/cancel`,{method:'POST'});
 export const dispensePrescription=(id:string,input:DispenseInput)=>apiRequest<Dispense>(`/prescriptions/${id}/dispenses`,{method:'POST',body:JSON.stringify(input)});
 export const listMedicationCatalog=(query='')=>apiRequest<MedicationCatalog[]>(`/medication-catalog${queryString({query})}`);
 export const listMedicationStocks=(organizationId='',medicationCatalogId='')=>apiRequest<MedicationStock[]>(`/medication-stocks${queryString({organizationId,medicationCatalogId})}`);

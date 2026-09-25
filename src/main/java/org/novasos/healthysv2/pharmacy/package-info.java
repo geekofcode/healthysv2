@@ -1,2 +1,4 @@
-@org.springframework.modulith.ApplicationModule(displayName = "Prescription and pharmacy workflow")
+@org.springframework.modulith.ApplicationModule(
+        displayName = "Pharmacy dispensing and medication stock",
+        allowedDependencies = {"prescription", "shared"})
 package org.novasos.healthysv2.pharmacy;

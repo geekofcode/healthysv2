@@ -25,7 +25,7 @@ class DatabaseMigrationIntegrationTests {
 
     private static final List<String> EXPECTED_SCHEMAS = List.of(
             "shared", "identity", "catalog", "organization", "professional",
-            "patient", "appointment", "registration", "consultation", "document",
+            "patient", "appointment", "registration", "consultation", "prescription", "document",
             "laboratory", "pharmacy", "maternal_child", "communication",
             "teleconsultation", "notification", "billing", "audit");
 
@@ -42,7 +42,7 @@ class DatabaseMigrationIntegrationTests {
             "appointment.appointment",
             "consultation.consultation",
             "laboratory.lab_order",
-            "pharmacy.prescription",
+            "prescription.prescription",
             "maternal_child.pregnancy",
             "maternal_child.child_health_record",
             "document.document",
@@ -71,7 +71,7 @@ class DatabaseMigrationIntegrationTests {
                 """,
                 String.class);
 
-        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12");
+        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13");
     }
 
     @Test
