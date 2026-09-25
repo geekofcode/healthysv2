@@ -2,6 +2,7 @@ import {NavLink, Outlet} from 'react-router-dom';
 
 import {useAuth} from '../auth/AuthContext';
 import {useTranslation} from 'react-i18next';
+import {NotificationBell} from '../components/NotificationBell';
 
 export function MainLayout() {
   const auth = useAuth();
@@ -27,6 +28,7 @@ export function MainLayout() {
           {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE','PHARMACIST')&&<NavLink to="/pharmacy/prescriptions">{t('nav.pharmacy')}</NavLink>}
         </nav>
         <div className="session">
+          <NotificationBell />
           <span>{auth.username}</span>
           <button type="button" onClick={() => void auth.logout()}>
             {t('auth.logout')}
