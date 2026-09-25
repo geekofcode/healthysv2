@@ -31,6 +31,7 @@ import {ChildHealthRecordPage} from './pages/ChildHealthRecordPage';
 import {DocumentsPage} from './pages/DocumentsPage';
 import {ChatPage} from './pages/ChatPage';
 import {TeleconsultationsPage} from './pages/TeleconsultationsPage';
+import {NotificationsPage} from './pages/NotificationsPage';
 
 const TeleconsultationRoomPage=lazy(()=>import('./pages/TeleconsultationRoomPage').then(module=>({default:module.TeleconsultationRoomPage})));
 
@@ -71,6 +72,7 @@ export const router = createBrowserRouter([
           {path: '/chat', element: <ChatPage />},
           {path: '/teleconsultations', element: <TeleconsultationsPage />},
           {path: '/teleconsultations/:id', element: <Suspense fallback={null}><TeleconsultationRoomPage /></Suspense>},
+          {path: '/notifications', element: <NotificationsPage />},
           {path: '/pharmacy/prescriptions', element: <PrescriptionsPage />},
           {path: '/pharmacy/prescriptions/:id', element: <PrescriptionDetailPage />},
           {path: '/pharmacy/stocks', element: <MedicationStocksPage />},
