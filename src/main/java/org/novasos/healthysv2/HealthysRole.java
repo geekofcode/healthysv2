@@ -8,5 +8,7 @@ public enum HealthysRole {
     HOSPITAL_AGENT,
     PHARMACIST,
     LAB_TECHNICIAN,
+    CASHIER,
+    ACCOUNTANT,
     PLATFORM_ADMIN
 }
