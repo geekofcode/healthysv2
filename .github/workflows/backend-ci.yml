@@ -18,7 +18,11 @@ jobs:
   verify:
     name: Java 21 / Maven verify
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+      SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
 
     steps:
       - name: Checkout
@@ -33,6 +37,25 @@ jobs:
 
       - name: Verify application
         run: ./mvnw --batch-mode --no-transfer-progress verify
+
+      - name: Upload Java test and coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-coverage
+          path: |
+            target/surefire-reports/
+            target/site/jacoco/
+          if-no-files-found: warn
+
+      - name: Sonar analysis
+        if: ${{ success() && env.SONAR_TOKEN != '' && env.SONAR_PROJECT_KEY != '' && env.SONAR_ORGANIZATION != '' }}
+        run: >-
+          ./mvnw --batch-mode --no-transfer-progress
+          org.sonarsource.scanner.maven:sonar-maven-plugin:5.0.0.4389:sonar
+          -Dsonar.projectKey="$SONAR_PROJECT_KEY"
+          -Dsonar.organization="$SONAR_ORGANIZATION"
+          -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
 
   frontend:
     name: Node 24 / Vite build
@@ -56,6 +79,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Run frontend tests
+        run: npm test
 
       - name: Build application
         run: npm run build
