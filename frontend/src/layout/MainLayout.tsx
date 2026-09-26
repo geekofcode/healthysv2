@@ -27,6 +27,7 @@ export function MainLayout() {
           {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE','PATIENT')&&<NavLink to="/teleconsultations">{t('nav.teleconsultations')}</NavLink>}
           {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE','PHARMACIST')&&<NavLink to="/pharmacy/prescriptions">{t('nav.pharmacy')}</NavLink>}
           {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','CASHIER','ACCOUNTANT','PATIENT')&&<NavLink to="/billing">{t('nav.billing')}</NavLink>}
+          {auth.hasAnyRole('PLATFORM_ADMIN')&&<NavLink to="/admin">{t('nav.admin')}</NavLink>}
         </nav>
         <div className="session">
           <NotificationBell />

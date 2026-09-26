@@ -54,7 +54,10 @@ class DatabaseMigrationIntegrationTests {
             "billing.invoice",
             "billing.payment",
             "billing.payment_transaction",
-            "audit.audit_log");
+            "audit.audit_log",
+            "audit.data_access_log",
+            "audit.authentication_log",
+            "audit.security_event");
 
     @Autowired
     JdbcTemplate jdbc;
@@ -73,7 +76,7 @@ class DatabaseMigrationIntegrationTests {
                 """,
                 String.class);
 
-        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14");
+        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15");
     }
 
     @Test
