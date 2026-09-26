@@ -78,13 +78,7 @@ class ClinicalJourneyIntegrationTests {
         UUID appointment = id(create("admin", "/api/v1/appointments",
                 "{\"patientId\":\"%s\",\"professionalId\":\"%s\",\"organizationId\":\"%s\",\"type\":\"CONSULTATION\",\"scheduledStart\":\"%s\",\"scheduledEnd\":\"%s\"}".formatted(patient, doctor, organization, start, end)));
 
-        var doctorAccess = mvc.perform(get("/api/v1/patients/{id}", patient)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer doctor")).andReturn().getResponse();
-        if (doctorAccess.getStatus() != 200) {
-            String reason = jdbc.queryForObject("select access_reason from audit.data_access_log where patient_id=? and action='DENIED' order by occurred_at desc limit 1",
-                    String.class, patient);
-            throw new AssertionError("Doctor patient access: HTTP " + doctorAccess.getStatus() + ", reason=" + reason);
-        }
+        read("doctor", "/api/v1/patients/" + patient);
         mvc.perform(get("/api/v1/patients/{id}", patient)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer doctor-other"))
                 .andExpect(status().isForbidden());

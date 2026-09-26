@@ -40,8 +40,8 @@ public class PatientAccessService {
         if (professional==null) return denied("PROFESSIONAL_PROFILE_MISSING");
         if (!exists("select count(*) from professional.professional_assignment where professional_id=? and organization_id=? and status='ACTIVE' and start_date<=current_date and (end_date is null or end_date>=current_date)",professional,user.organizationId())) return denied("PROFESSIONAL_NOT_ASSIGNED");
         if (!registered(patientId,user.organizationId())) return denied("PATIENT_OTHER_ORGANIZATION");
-        if (!exists("select count(*) from patient.care_relationship where patient_id=? and professional_id=? and organization_id=? and status='ACTIVE' and start_date<=now() and (end_date is null or end_date>now())",patientId,professional,user.organizationId())) return denied("CARE_RELATIONSHIP_MISSING");
-        if (!exists("select count(*) from patient.consent where patient_id=? and status='ACTIVE' and revoked_at is null and (expires_at is null or expires_at>now()) and (grantee_person_id=? or grantee_organization_id=?) and (scope=? or scope='FULL_RECORD')",patientId,user.personId(),user.organizationId(),scope)) return denied("CONSENT_MISSING_OR_INACTIVE");
+        if (!exists("select count(*) from patient.care_relationship where patient_id=? and professional_id=? and organization_id=? and status='ACTIVE' and start_date<=clock_timestamp() and (end_date is null or end_date>clock_timestamp())",patientId,professional,user.organizationId())) return denied("CARE_RELATIONSHIP_MISSING");
+        if (!exists("select count(*) from patient.consent where patient_id=? and status='ACTIVE' and revoked_at is null and (expires_at is null or expires_at>clock_timestamp()) and (grantee_person_id=? or grantee_organization_id=?) and (scope=? or scope='FULL_RECORD')",patientId,user.personId(),user.organizationId(),scope)) return denied("CONSENT_MISSING_OR_INACTIVE");
         return allowed("CARE_CONTEXT_AUTHORIZED");
     }
 
