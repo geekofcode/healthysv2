@@ -43,7 +43,7 @@ class PersonService {
         request.emergencyContacts().forEach(
                 item -> addEmergencyContact(person, item));
 
-        return mapper.toResponse(repository.save(person));
+        return mapper.toResponse(repository.saveAndFlush(person));
     }
 
     @Transactional(readOnly = true)

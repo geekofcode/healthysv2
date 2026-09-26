@@ -28,7 +28,7 @@ class JdbcAuditTrail implements AuditTrail {
     public void access(UUID actor,UUID patient,UUID organization,String resourceType,UUID resourceId,
                        String action,String reason,Object context){
         var request=request();
-        jdbc.update("insert into audit.data_access_log(actor_person_id,patient_id,organization_id,resource_type,resource_id,action,access_reason,access_context,ip_address,correlation_id) values (?,?,?,?,?,?,?,?,?::inet,?)",
+        jdbc.update("insert into audit.data_access_log(actor_person_id,patient_id,organization_id,resource_type,resource_id,action,access_reason,access_context,ip_address,correlation_id) values (?,?,?,?,?,?,?,?::jsonb,?::inet,?)",
                 actor,patient,organization,required(resourceType),resourceId,normalize(action),blank(reason),write(context),ip(request),correlation(request));
     }
 
