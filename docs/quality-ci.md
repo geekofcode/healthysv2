@@ -19,7 +19,8 @@ Run locally with Docker available:
 cd frontend && npm ci && npm test && npm run build
 ```
 
-On pushes to `main` and `feat/**`, GitHub Actions runs Maven `verify` (including Testcontainers),
+On pushes to `main` and `feat/**`, pull requests, or manual `workflow_dispatch` runs, GitHub Actions
+runs Maven `verify` (including Testcontainers),
 React tests/build, and a Docker Compose image build. JaCoCo XML and HTML reports and Surefire
 results are uploaded as the `backend-test-coverage` artifact even when a test fails.
 
