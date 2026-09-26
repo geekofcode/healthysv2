@@ -49,10 +49,10 @@ class BillingApiIntegrationTests {
 
     @Test void patientCanReadOnlyOwnInvoice() throws Exception {
         Graph own=graph(); JsonNode invoice=create(own); UUID id=UUID.fromString(invoice.path("id").asText());
-        mvc.perform(get("/api/v1/invoices/{id}",id).header(HttpHeaders.AUTHORIZATION,"Bearer patient:"+own.person))
+        mvc.perform(get("/api/v1/invoices/{id}",id).header(HttpHeaders.AUTHORIZATION,"Bearer patient-"+own.person))
                 .andExpect(status().isOk());
         Graph other=graph();
-        mvc.perform(get("/api/v1/invoices/{id}",id).header(HttpHeaders.AUTHORIZATION,"Bearer patient:"+other.person))
+        mvc.perform(get("/api/v1/invoices/{id}",id).header(HttpHeaders.AUTHORIZATION,"Bearer patient-"+other.person))
                 .andExpect(status().isForbidden());
     }
 
@@ -61,5 +61,5 @@ class BillingApiIntegrationTests {
     private org.springframework.test.web.servlet.ResultActions payment(UUID id,String amount)throws Exception{return mvc.perform(post("/api/v1/invoices/{id}/payments",id).header(HttpHeaders.AUTHORIZATION,"Bearer admin").contentType(MediaType.APPLICATION_JSON).content("{\"amount\":"+amount+",\"currency\":\"CAD\",\"paymentMethod\":\"MOBILE_MONEY\",\"provider\":\"MTN\",\"externalTransactionId\":\""+UUID.randomUUID()+"\"}"));}
     private Graph graph(){UUID person=UUID.randomUUID(),patient=UUID.randomUUID(),organization=UUID.randomUUID();jdbc.update("insert into identity.person(id,person_number,first_name,last_name,status) values (?,?,?,?,?)",person,"PER-"+person,"Bill","Patient","ACTIVE");jdbc.update("insert into patient.patient(id,person_id,patient_number) values (?,?,?)",patient,person,"PAT-"+patient);jdbc.update("insert into organization.organization(id,organization_number,name) values (?,?,?)",organization,"ORG-"+organization,"Billing Clinic");return new Graph(person,patient,organization);}
     record Graph(UUID person,UUID patient,UUID organization){}
-    @TestConfiguration(proxyBeanMethods=false) static class JwtFixtures{@Bean JwtDecoder jwtDecoder(){return token->{boolean patient=token.startsWith("patient:");String subject=patient?token.substring(8):ADMIN.toString();Instant now=Instant.now();return Jwt.withTokenValue(token).header("alg","RS256").subject(subject).issuer("https://keycloak.example/realms/healthys").audience(List.of("healthys-backend-apps")).issuedAt(now).expiresAt(now.plusSeconds(300)).claim("realm_access",Map.of("roles",List.of(patient?"PATIENT":"PLATFORM_ADMIN"))).claim("resource_access",Map.of()).build();};}}
+    @TestConfiguration(proxyBeanMethods=false) static class JwtFixtures{@Bean JwtDecoder jwtDecoder(){return token->{boolean patient=token.startsWith("patient-");String subject=patient?token.substring(8):ADMIN.toString();Instant now=Instant.now();return Jwt.withTokenValue(token).header("alg","RS256").subject(subject).issuer("https://keycloak.example/realms/healthys").audience(List.of("healthys-backend-apps")).issuedAt(now).expiresAt(now.plusSeconds(300)).claim("realm_access",Map.of("roles",List.of(patient?"PATIENT":"PLATFORM_ADMIN"))).claim("resource_access",Map.of()).build();};}}
 }
