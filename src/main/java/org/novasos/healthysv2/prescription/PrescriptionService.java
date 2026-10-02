@@ -28,11 +28,14 @@ class PrescriptionService implements PrescriptionDispensing {
     private final PrescriptionRepository prescriptions;
     private final JdbcTemplate jdbc;
     private final PatientAccessService access;
+    private final org.novasos.healthysv2.patient.PatientSelfAccess selves;
+    private final org.novasos.healthysv2.patient.CurrentUserContext users;
 
-    PrescriptionService(PrescriptionRepository prescriptions, JdbcTemplate jdbc, PatientAccessService access) {
+    PrescriptionService(PrescriptionRepository prescriptions, JdbcTemplate jdbc, PatientAccessService access, org.novasos.healthysv2.patient.PatientSelfAccess selves, org.novasos.healthysv2.patient.CurrentUserContext users) {
         this.prescriptions = prescriptions;
         this.jdbc = jdbc;
         this.access = access;
+        this.selves=selves; this.users=users;
     }
 
     PrescriptionResponse create(CreatePrescriptionRequest request) {
@@ -50,6 +53,7 @@ class PrescriptionService implements PrescriptionDispensing {
     @Transactional(readOnly = true)
     PrescriptionResponse find(UUID id) {
         var prescription = get(id);
+        requirePatientOwn(prescription.getPatientId());
         access.requireAccess(prescription.getPatientId(), "PRESCRIPTIONS", "READ");
         return response(prescription);
     }
@@ -79,6 +83,7 @@ class PrescriptionService implements PrescriptionDispensing {
     @Transactional(readOnly = true)
     public void verifyReadAccess(UUID prescriptionId) {
         var prescription = get(prescriptionId);
+        requirePatientOwn(prescription.getPatientId());
         access.requireAccess(prescription.getPatientId(), "PRESCRIPTIONS", "READ");
     }
 
@@ -130,6 +135,11 @@ class PrescriptionService implements PrescriptionDispensing {
                 throw new ConflictException("MEDICATION_ALREADY_PRESCRIBED", "error.pharmacy.medication-exists");
             }
         });
+    }
+
+    private void requirePatientOwn(UUID patient) {
+        var user=users.current();
+        if(user.has("PATIENT")&&!user.hasAny("PLATFORM_ADMIN","HOSPITAL_ADMIN","DOCTOR","NURSE","PHARMACIST")) selves.requireOwn(patient);
     }
 
     private Prescription forWrite(UUID id) {
