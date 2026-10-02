@@ -42,6 +42,8 @@ class SecurityConfiguration {
             "/v3/api-docs/**",
             "/swagger-ui.html",
             "/swagger-ui/**",
+            "/ws",
+            "/ws/**",
             "/api/v1/public/**"
     };
 
@@ -96,6 +98,7 @@ class SecurityConfiguration {
                 HttpHeaders.AUTHORIZATION,
                 HttpHeaders.CONTENT_TYPE,
                 HttpHeaders.ACCEPT,
+                HttpHeaders.ACCEPT_LANGUAGE,
                 "X-Correlation-ID"));
         configuration.setExposedHeaders(List.of(
                 HttpHeaders.LOCATION,

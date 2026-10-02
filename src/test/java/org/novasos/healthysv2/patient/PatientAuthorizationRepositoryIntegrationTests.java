@@ -1,0 +1,12 @@
+package org.novasos.healthysv2.patient;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import java.time.Instant; import java.util.UUID;
+import org.junit.jupiter.api.Test; import org.novasos.healthysv2.TestcontainersConfiguration; import org.springframework.beans.factory.annotation.Autowired; import org.springframework.boot.test.context.SpringBootTest; import org.springframework.context.annotation.Import; import org.springframework.jdbc.core.JdbcTemplate; import org.springframework.test.context.ActiveProfiles; import org.springframework.transaction.annotation.Transactional;
+
+@ActiveProfiles("test") @SpringBootTest @Import(TestcontainersConfiguration.class) @Transactional
+class PatientAuthorizationRepositoryIntegrationTests {
+ @Autowired CareRelationshipRepository relationships;@Autowired ConsentRepository consents;@Autowired JdbcTemplate jdbc;
+ @Test void persistsCareRelationshipAndAuditedConsent(){UUID patient=patient(),professional=professional(),organization=organization();var relationship=relationships.saveAndFlush(CareRelationship.create(patient,professional,organization,"ATTENDING",null,null));var consent=consents.saveAndFlush(Consent.grant(patient,null,organization,"MEDICAL_RECORD","Continuity of care",null,null,Instant.now().plusSeconds(3600)));assertThat(relationships.findByPatientIdOrderByCreatedAtDesc(patient)).extracting(CareRelationship::getId).containsExactly(relationship.getId());assertThat(consents.findByPatientIdOrderByGrantedAtDesc(patient)).extracting(Consent::getId).containsExactly(consent.getId());assertThat(consent.getCreatedAt()).isNotNull();assertThat(consent.getVersion()).isZero();}
+ private UUID person(){UUID id=UUID.randomUUID();jdbc.update("insert into identity.person(id,person_number,first_name,last_name,status) values (?,?,?,?,?)",id,"PER-"+id,"Test","User","ACTIVE");return id;}private UUID patient(){UUID id=UUID.randomUUID();jdbc.update("insert into patient.patient(id,person_id,patient_number) values (?,?,?)",id,person(),"PAT-"+id);return id;}private UUID professional(){UUID id=UUID.randomUUID();jdbc.update("insert into professional.professional(id,person_id,professional_number,professional_type) values (?,?,?,?)",id,person(),"PRO-"+id,"DOCTOR");return id;}private UUID organization(){UUID id=UUID.randomUUID();jdbc.update("insert into organization.organization(id,organization_number,name) values (?,?,?)",id,"ORG-"+id,"Hospital");return id;}
+}

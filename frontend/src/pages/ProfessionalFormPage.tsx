@@ -1,0 +1,8 @@
+import {FormEvent,useState} from 'react';
+import {useMutation,useQueryClient} from '@tanstack/react-query';
+import {useNavigate} from 'react-router-dom';
+import {useTranslation} from 'react-i18next';
+import {createProfessional,professionalKeys,ProfessionalInput} from '../api/professionals';
+import {ApiErrorMessage} from '../components/ApiErrorMessage';
+export function ProfessionalFormPage(){const {t}=useTranslation();const navigate=useNavigate();const client=useQueryClient();const [v,setV]=useState<ProfessionalInput>({personId:'',professionalNumber:'',professionalType:'',status:'ACTIVE'});const mutation=useMutation({mutationFn:createProfessional,onSuccess:async p=>{await client.invalidateQueries({queryKey:professionalKeys.all});navigate(`/professionals/${p.id}`)}});const submit=(e:FormEvent)=>{e.preventDefault();if(v.personId.trim()&&v.professionalNumber.trim()&&v.professionalType.trim())mutation.mutate(v)};return <section><h1>{t('professionals.create')}</h1>{mutation.isError&&<ApiErrorMessage error={mutation.error}/>}<form className="entity-form" onSubmit={submit}><Field label={t('professionals.personId')} value={v.personId} onChange={personId=>setV({...v,personId})}/><Field label={t('professionals.number')} value={v.professionalNumber} onChange={professionalNumber=>setV({...v,professionalNumber})}/><Field label={t('professionals.type')} value={v.professionalType} onChange={professionalType=>setV({...v,professionalType})}/><button disabled={mutation.isPending}>{t('common.save')}</button></form></section>}
+function Field({label,value,onChange}:{label:string;value:string;onChange:(v:string)=>void}){return <label>{label}<input required value={value} onChange={e=>onChange(e.target.value)}/></label>}

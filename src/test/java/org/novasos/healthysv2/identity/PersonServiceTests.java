@@ -34,13 +34,13 @@ class PersonServiceTests {
     @Test
     void createsAndPersistsAnAggregate() {
         CreatePersonRequest request = request("PER-1", UUID.randomUUID());
-        when(repository.save(any(Person.class)))
+        when(repository.saveAndFlush(any(Person.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         service.create(request);
 
         ArgumentCaptor<Person> captor = ArgumentCaptor.forClass(Person.class);
-        verify(repository).save(captor.capture());
+        verify(repository).saveAndFlush(captor.capture());
         verify(mapper).toResponse(captor.getValue());
     }
 
@@ -53,7 +53,7 @@ class PersonServiceTests {
                 .isInstanceOf(ConflictException.class)
                 .hasMessage("error.person.number.exists");
 
-        verify(repository, never()).save(any());
+        verify(repository, never()).saveAndFlush(any());
     }
 
     @Test

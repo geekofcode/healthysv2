@@ -42,3 +42,17 @@ export type Person = {
 export function getMe(): Promise<Person> {
   return apiRequest<Person>('/persons/me');
 }
+
+export type PatientProvisionResponse = {
+  patientId: string;
+  personId: string;
+  patientNumber: string;
+  status: string;
+  created: boolean;
+};
+
+export function provisionPatient(): Promise<PatientProvisionResponse> {
+  return apiRequest<PatientProvisionResponse>('/patients/me/provision', {
+    method: 'POST',
+  });
+}

@@ -1,2 +1,2 @@
-@org.springframework.modulith.ApplicationModule(displayName = "Messaging and notifications")
+@org.springframework.modulith.ApplicationModule(displayName = "Messaging")
 package org.novasos.healthysv2.messaging;

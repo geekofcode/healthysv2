@@ -11,3 +11,8 @@ healthys:
     access-key: test
     secret-key: test-secret
     path-style-access: true
+  livekit:
+    url: ws://localhost:7880
+    api-key: test-api-key
+    api-secret: test-api-secret-at-least-32-characters-long
+    token-ttl-minutes: 15

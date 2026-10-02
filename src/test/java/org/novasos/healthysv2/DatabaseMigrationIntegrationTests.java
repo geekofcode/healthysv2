@@ -25,7 +25,7 @@ class DatabaseMigrationIntegrationTests {
 
     private static final List<String> EXPECTED_SCHEMAS = List.of(
             "shared", "identity", "catalog", "organization", "professional",
-            "patient", "appointment", "registration", "consultation", "document",
+            "patient", "appointment", "registration", "consultation", "prescription", "document",
             "laboratory", "pharmacy", "maternal_child", "communication",
             "teleconsultation", "notification", "billing", "audit");
 
@@ -42,10 +42,22 @@ class DatabaseMigrationIntegrationTests {
             "appointment.appointment",
             "consultation.consultation",
             "laboratory.lab_order",
-            "pharmacy.prescription",
+            "prescription.prescription",
+            "maternal_child.pregnancy",
+            "maternal_child.child_health_record",
+            "document.document",
+            "maternal_child.vaccination",
+            "communication.conversation",
             "communication.message",
+            "notification.notification",
+            "notification.notification_preference",
             "billing.invoice",
-            "audit.audit_log");
+            "billing.payment",
+            "billing.payment_transaction",
+            "audit.audit_log",
+            "audit.data_access_log",
+            "audit.authentication_log",
+            "audit.security_event");
 
     @Autowired
     JdbcTemplate jdbc;
@@ -54,7 +66,7 @@ class DatabaseMigrationIntegrationTests {
     TransactionTemplate transactions;
 
     @Test
-    void flywayAppliesAllSevenMigrations() {
+    void flywayAppliesAllMigrations() {
         List<String> versions = jdbc.queryForList(
                 """
                 SELECT version
@@ -64,7 +76,7 @@ class DatabaseMigrationIntegrationTests {
                 """,
                 String.class);
 
-        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7");
+        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15");
     }
 
     @Test

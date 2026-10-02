@@ -2,6 +2,8 @@ package org.novasos.healthysv2;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -20,6 +22,9 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.BadJwtException;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -117,6 +122,51 @@ class SecurityIntegrationTests {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    void checksAllPlatformProfilesAgainstRealEndpoints() throws Exception {
+        for (String role : List.of("PATIENT", "DOCTOR", "NURSE", "HOSPITAL_ADMIN",
+                "HOSPITAL_AGENT", "PHARMACIST", "LAB_TECHNICIAN", "CASHIER",
+                "ACCOUNTANT", "PLATFORM_ADMIN")) {
+            var admin = mockMvc.perform(get("/api/v1/admin/overview")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer role-" + role));
+            if (role.equals("PLATFORM_ADMIN")) admin.andExpect(status().isOk());
+            else admin.andExpect(status().isForbidden());
+
+            var professional = mockMvc.perform(get("/api/v1/professionals")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer role-" + role));
+            if (List.of("PATIENT", "CASHIER", "ACCOUNTANT").contains(role))
+                professional.andExpect(status().isForbidden());
+            else professional.andExpect(status().isOk());
+
+            var create = mockMvc.perform(post("/api/v1/organizations")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer role-" + role)
+                    .contentType("application/json")
+                    .content("{\"number\":\"ORG-%s\",\"name\":\"Role Test\"}"
+                            .formatted(java.util.UUID.randomUUID())));
+            if (List.of("PLATFORM_ADMIN", "HOSPITAL_ADMIN").contains(role))
+                create.andExpect(status().isCreated());
+            else create.andExpect(status().isForbidden());
+        }
+    }
+
+    @Test
+    void rejectsExpiredTokenAndUnauthorizedUpload() throws Exception {
+        Instant now = Instant.now();
+        Jwt expired = Jwt.withTokenValue("expired").header("alg", "RS256")
+                .subject("patient").issuedAt(now.minusSeconds(600))
+                .expiresAt(now.minusSeconds(300)).build();
+        org.assertj.core.api.Assertions.assertThat(JwtValidators.createDefault().validate(expired).hasErrors())
+                .isTrue();
+        mockMvc.perform(get("/api/v1/admin/overview")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer expired"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(multipart("/api/v1/documents")
+                .file(new MockMultipartFile("file", "report.pdf", "application/pdf", "%PDF-1.4".getBytes()))
+                .param("patientId", "00000000-0000-0000-0000-000000000001")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer role-PATIENT"))
+                .andExpect(status().isForbidden());
+    }
+
     @RestController
     static class SecurityEndpoints {
 
@@ -153,7 +203,10 @@ class SecurityIntegrationTests {
 
         @Bean
         JwtDecoder jwtDecoder() {
-            return token -> switch (token) {
+            return token -> {
+                if (token.equals("expired")) throw new BadJwtException("JWT expired");
+                if (token.startsWith("role-")) return jwt(token, Map.of("roles", List.of(token.substring(5))), Map.of());
+                return switch (token) {
                 case "patient" -> jwt(
                         token,
                         Map.of("roles", List.of("PATIENT")),
@@ -169,6 +222,7 @@ class SecurityIntegrationTests {
                         Map.of("roles", List.of("PLATFORM_ADMIN")),
                         Map.of());
                 default -> throw new IllegalArgumentException("Unknown token");
+            };
             };
         }
 

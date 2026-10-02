@@ -21,6 +21,7 @@ type AuthContextValue = {
   roles: string[];
   hasAnyRole: (...roles: string[]) => boolean;
   login: (redirectUri?: string) => Promise<void>;
+  register: (redirectUri?: string) => Promise<void>;
   logout: () => Promise<void>;
   getAccessToken: () => Promise<string>;
 };
@@ -57,10 +58,11 @@ export function AuthProvider({children}: {children: ReactNode}) {
     };
 
     const handleUnauthorized = () => {
+      // A 401 can also mean that the API rejected a structurally valid token
+      // (for example because its audience is missing). Redirecting immediately
+      // to Keycloak would return the same token and create an endless loop.
+      keycloak.clearToken();
       setAuthenticated(false);
-      void keycloak.login({
-        redirectUri: window.location.href,
-      });
     };
     window.addEventListener('healthys:unauthorized', handleUnauthorized);
 
@@ -85,6 +87,12 @@ export function AuthProvider({children}: {children: ReactNode}) {
     });
   }, []);
 
+  const register = useCallback(async (redirectUri?: string) => {
+    await keycloak.register({
+      redirectUri: redirectUri ?? `${window.location.origin}/registration/complete`,
+    });
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => {
       const roles = keycloak.tokenParsed?.realm_access?.roles ?? [];
@@ -98,10 +106,11 @@ export function AuthProvider({children}: {children: ReactNode}) {
         (role) => roles.includes(role),
       ),
       login,
+      register,
       logout,
       getAccessToken: validAccessToken,
     });},
-    [authenticated, initialized, login, logout],
+    [authenticated, initialized, login, logout, register],
   );
 
   return (
