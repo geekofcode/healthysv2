@@ -15,7 +15,7 @@ import org.novasos.healthysv2.shared.api.error.ResourceNotFoundException;
 
 @Service
 @Transactional
-class PersonService {
+class PersonService implements org.novasos.healthysv2.identity.api.PersonLookup {
 
     private final PersonRepository repository;
     private final PersonMapper mapper;
@@ -54,7 +54,7 @@ class PersonService {
     }
 
     @Transactional(readOnly = true)
-    PersonResponse findMe(UUID keycloakUserId) {
+    public PersonResponse findMe(UUID keycloakUserId) {
         return mapper.toResponse(repository.findByKeycloakUserId(keycloakUserId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Person for Keycloak user",

@@ -76,6 +76,9 @@ class PersonServiceTests {
 
         assertThatThrownBy(() -> service.findMe(keycloakUser))
                 .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(repository).findByKeycloakUserId(keycloakUser);
+        verify(repository, never()).findById(any());
     }
 
     private CreatePersonRequest request(
