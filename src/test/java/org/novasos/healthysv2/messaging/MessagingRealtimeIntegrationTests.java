@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.novasos.healthysv2.TestcontainersConfiguration;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.web.server.test.LocalServerPort;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -29,7 +29,7 @@ import org.springframework.web.socket.messaging.WebSocketStompClient;
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={"spring.security.oauth2.resourceserver.jwt.issuer-uri=https://keycloak.example/realms/healthys","healthys.security.api-client-id=healthys-backend-apps"})
 @Import({TestcontainersConfiguration.class,MobileMessagingApiIntegrationTests.Fixtures.class})
 class MessagingRealtimeIntegrationTests {
-    @LocalServerPort int port;
+    @Value("${local.server.port}") int port;
     @Autowired JdbcTemplate jdbc;
     @Autowired SimpUserRegistry users;
     private final ObjectMapper json=new ObjectMapper().findAndRegisterModules();
