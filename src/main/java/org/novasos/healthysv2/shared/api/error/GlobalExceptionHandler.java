@@ -111,6 +111,14 @@ public class GlobalExceptionHandler {
                 List.of());
     }
 
+    @ExceptionHandler(org.springframework.dao.OptimisticLockingFailureException.class)
+    ResponseEntity<ErrorResponse> handleConcurrentUpdate(
+            org.springframework.dao.OptimisticLockingFailureException exception,
+            HttpServletRequest request) {
+        return response(HttpStatus.CONFLICT, "CONCURRENT_UPDATE",
+                message("error.data-integrity", null), request, List.of());
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<ErrorResponse> handleDataIntegrity(
             DataIntegrityViolationException exception,
