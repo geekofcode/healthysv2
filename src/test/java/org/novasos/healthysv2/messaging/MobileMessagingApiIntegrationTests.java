@@ -88,7 +88,7 @@ class MobileMessagingApiIntegrationTests {
                 .andExpect(status().isForbidden());
         jdbc.update("update document.document set patient_visible=true where id=?",document);
         send(conversation,"{\"type\":\"DOCUMENT\",\"documentIds\":[\""+document+"\"]}");
-        mvc.perform(get("/api/v1/conversations/{id}/messages",conversation).param("size","101").header(HttpHeaders.AUTHORIZATION,"Bearer patient")).andExpect(status().isUnprocessableContent());
+        mvc.perform(get("/api/v1/conversations/{id}/messages",conversation).param("size","101").header(HttpHeaders.AUTHORIZATION,"Bearer patient")).andExpect(status().isOk()).andExpect(jsonPath("$.page.size").value(100));
     }
 
     private String create(UUID recipient){return "{\"type\":\"DIRECT\",\"participantPersonIds\":[\""+recipient+"\"]}";}
