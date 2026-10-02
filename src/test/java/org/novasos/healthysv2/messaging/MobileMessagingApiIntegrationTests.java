@@ -28,7 +28,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 
 @ActiveProfiles("test")
-@SpringBootTest(properties={"spring.security.oauth2.resourceserver.jwt.issuer-uri=https://keycloak.example/realms/healthys","healthys.security.api-client-id=healthys-backend-apps"})
+@SpringBootTest(properties={"spring.security.oauth2.resourceserver.jwt.issuer-uri=https://keycloak.example/realms/healthys","healthys.security.api-client-id=healthys-backend-apps","healthys.security.cors.allowed-origins=http://localhost:5173"})
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class,MobileMessagingApiIntegrationTests.Fixtures.class})
 @Transactional
