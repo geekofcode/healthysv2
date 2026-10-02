@@ -12,3 +12,9 @@ Migration V16 adds `patient_visible=false` to existing notes, diagnoses and docu
 `GET /api/v1/patients/me/prescriptions` and `/prescriptions/{id}` provide named prescriber/organization, medication and dosing details, prescribed/dispensed/remaining quantities and dispensing history with pharmacy names. The expired flag applies to ACTIVE/PARTIALLY_DISPENSED prescriptions past their expiration; terminal statuses remain unchanged. Both lists use page/size (default 0/20, maximum 100).
 
 Every route requires PATIENT and resolves ownership strictly from the Keycloak subject through PersonLookup. Reads are audited. Legacy patient laboratory/prescription reads enforce the same ownership restriction; patient laboratory responses exclude draft results and internal notes. No patient mutation is added.
+
+## Maternal-child notebook (mobile 18.8)
+
+Patient self routes `GET /api/v1/patients/me/maternal-child/pregnancies`, `/pregnancies/{id}`, `/children` and `/children/{childPatientId}` expose pregnancies, prenatal measurements, birth, vaccinations and growth. Both lists are paginated (default page 0, size 20, maximum size 100). DTO fields carry explicit kg/cm units. Internal prenatal/delivery/risk/postpartum notes and clinical comments are excluded.
+
+The Keycloak linkage resolves the current patient strictly. A mother can read her own pregnancies and children linked by the existing child-health-record mother relationship; a child can read only their own child notebook, without maternal pregnancy data or siblings. No automatic relationship or generalized guardianship permission is introduced. Patient reads are audited; legacy patient endpoints apply the same ownership and privacy restrictions while professional care operations retain their existing access rules.
