@@ -27,7 +27,10 @@ public class PatientSelfAccess {
         UUID subject;
         try { subject=UUID.fromString(jwt.getToken().getSubject()); }
         catch(IllegalArgumentException exception) { throw new AccessDeniedException("Invalid patient identity"); }
-        if(!resolve(subject).patient().equals(patient)) throw new AccessDeniedException("Resource belongs to another patient");
+        Identity self;
+        try { self=resolve(subject); }
+        catch(ResourceNotFoundException exception) { throw new AccessDeniedException("Linked patient identity required"); }
+        if(!self.patient().equals(patient)) throw new AccessDeniedException("Resource belongs to another patient");
     }
     public record Identity(UUID person,UUID patient) {}
 }

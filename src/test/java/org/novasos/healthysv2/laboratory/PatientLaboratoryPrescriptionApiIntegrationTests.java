@@ -81,8 +81,8 @@ class PatientLaboratoryPrescriptionApiIntegrationTests {
         for(String path:List.of("/api/v1/patients/me/lab-results/"+g.result,"/api/v1/lab-orders/"+g.order,"/api/v1/patients/me/prescriptions/"+g.rx,"/api/v1/prescriptions/"+g.rx,"/api/v1/prescriptions/"+g.rx+"/dispenses"))
             read(path,"other").andExpect(status().isForbidden());
         UUID unlinked=person(null);jdbc.update("insert into patient.patient(id,person_id,patient_number) values (?,?,?)",UUID.randomUUID(),unlinked,"PAT-"+unlinked);
-        read("/api/v1/patients/me/lab-results","person:"+unlinked).andExpect(status().isNotFound());
-        read("/api/v1/prescriptions/"+g.rx,"person:"+unlinked).andExpect(status().isNotFound());
+        read("/api/v1/patients/me/lab-results","person-"+unlinked).andExpect(status().isNotFound());
+        read("/api/v1/prescriptions/"+g.rx,"person-"+unlinked).andExpect(status().isForbidden());
         read("/api/v1/patients/me/prescriptions","admin").andExpect(status().isForbidden());
     }
     private org.springframework.test.web.servlet.ResultActions read(String path,String token)throws Exception{return mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION,"Bearer "+token));}
@@ -108,6 +108,6 @@ class PatientLaboratoryPrescriptionApiIntegrationTests {
     private UUID person(UUID subject){UUID id=UUID.randomUUID();jdbc.update("insert into identity.person(id,person_number,keycloak_user_id,first_name,last_name,status) values (?,?,?,?,?,?)",id,"PER-"+id,subject,"Ada","Patient","ACTIVE");return id;}
     private record Graph(UUID order,UUID result,UUID draft,UUID invalid,UUID rx) {}
     @TestConfiguration(proxyBeanMethods=false) static class Fixtures {
-        @Bean JwtDecoder jwtDecoder(){return token->{Instant now=Instant.now();String subject=token.startsWith("person:")?token.substring(7):(token.equals("other")?OTHER:SUBJECT).toString();return Jwt.withTokenValue(token).header("alg","RS256").subject(subject).issuer("https://keycloak.example/realms/healthys").audience(List.of("healthys-backend-apps")).issuedAt(now).expiresAt(now.plusSeconds(300)).claim("realm_access",Map.of("roles",List.of(token.equals("admin")?"PLATFORM_ADMIN":"PATIENT"))).claim("resource_access",Map.of()).build();};}
+        @Bean JwtDecoder jwtDecoder(){return token->{Instant now=Instant.now();String subject=token.startsWith("person-")?token.substring(7):(token.equals("other")?OTHER:SUBJECT).toString();return Jwt.withTokenValue(token).header("alg","RS256").subject(subject).issuer("https://keycloak.example/realms/healthys").audience(List.of("healthys-backend-apps")).issuedAt(now).expiresAt(now.plusSeconds(300)).claim("realm_access",Map.of("roles",List.of(token.equals("admin")?"PLATFORM_ADMIN":"PATIENT"))).claim("resource_access",Map.of()).build();};}
     }
 }
