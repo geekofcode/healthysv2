@@ -24,6 +24,7 @@ import org.springframework.web.socket.config.annotation.*;
 @Configuration
 @EnableWebSocketMessageBroker
 class MessagingWebSocketConfiguration implements WebSocketMessageBrokerConfigurer {
+    private static final Set<String> ROLES=Set.of("ROLE_PLATFORM_ADMIN","ROLE_HOSPITAL_ADMIN","ROLE_HOSPITAL_AGENT","ROLE_DOCTOR","ROLE_NURSE","ROLE_PHARMACIST","ROLE_LAB_TECHNICIAN","ROLE_PATIENT");
     private final ObjectProvider<JwtDecoder> decoder;
     private final ObjectProvider<JwtAuthenticationConverter> converter;
     private final ObjectProvider<ConversationService> conversations;
@@ -81,6 +82,7 @@ class MessagingWebSocketConfiguration implements WebSocketMessageBrokerConfigure
     }
     private void requireValid(Authentication authentication){
         if(!(authentication instanceof JwtAuthenticationToken jwt)||!authentication.isAuthenticated()||jwt.getToken().getExpiresAt()==null||!jwt.getToken().getExpiresAt().isAfter(Instant.now()))throw new AccessDeniedException("SESSION_EXPIRED");
+        if(authentication.getAuthorities().stream().noneMatch(authority->ROLES.contains(authority.getAuthority())))throw new AccessDeniedException("MESSAGING_ROLE_REQUIRED");
     }
     private void authorizeSend(Authentication authentication,String destination){
         UUID id=parse(destination,"/app/conversations/","/messages");
