@@ -57,6 +57,9 @@ class NotificationController {
         return service.unreadCount();
     }
 
+    @GetMapping("/{id}")
+    NotificationResponse find(@PathVariable UUID id) { return service.find(id); }
+
     @PatchMapping("/{id}/read")
     NotificationResponse markRead(@PathVariable UUID id) {
         return service.markRead(id);

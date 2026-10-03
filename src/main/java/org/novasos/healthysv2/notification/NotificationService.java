@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
-import org.novasos.healthysv2.patient.CurrentUserContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.novasos.healthysv2.shared.api.dto.PageResponse;
 import org.novasos.healthysv2.shared.api.error.BusinessRuleException;
 import org.novasos.healthysv2.shared.api.error.ResourceNotFoundException;
@@ -27,17 +27,17 @@ import org.springframework.transaction.annotation.Transactional;
 public class NotificationService {
     private final JdbcTemplate jdbc;
     private final NotificationRepository repository;
-    private final CurrentUserContext users;
+    private final PushDevices devices;
     private final SimpMessagingTemplate broker;
 
     NotificationService(
             JdbcTemplate jdbc,
             NotificationRepository repository,
-            CurrentUserContext users,
+            PushDevices devices,
             SimpMessagingTemplate broker) {
         this.jdbc = jdbc;
         this.repository = repository;
-        this.users = users;
+        this.devices = devices;
         this.broker = broker;
     }
 
@@ -76,11 +76,14 @@ public class NotificationService {
                     recipient,
                     recipient);
         }
+        devices.enqueue(id);
         audit(actor, id, "CREATE_NOTIFICATION");
 
         return request.recipientPersonIds().stream().map(recipient -> {
             NotificationResponse response = repository.findForRecipient(id, recipient).orElseThrow();
-            broker.convertAndSend("/topic/notifications/" + recipient, response);
+            if (repository.preferences(recipient).inAppEnabled()) {
+                afterCommit(() -> broker.convertAndSend("/topic/notifications/" + recipient, response));
+            }
             return response;
         }).toList();
     }
@@ -149,20 +152,31 @@ public class NotificationService {
         }
     }
 
+    private void afterCommit(Runnable action) {
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override public void afterCommit() { action.run(); }
+                    });
+        } else {
+            action.run();
+        }
+    }
+
     private UUID personId(Authentication authentication) {
         if (!(authentication instanceof JwtAuthenticationToken jwt)) {
             throw new AccessDeniedException("JWT_REQUIRED");
         }
         UUID subject;
+        if (jwt.getToken().getSubject() == null) throw new AccessDeniedException("INVALID_SUBJECT");
         try {
             subject = UUID.fromString(jwt.getToken().getSubject());
         } catch (IllegalArgumentException exception) {
             throw new AccessDeniedException("INVALID_SUBJECT");
         }
         UUID person = jdbc.query(
-                "select id from identity.person where keycloak_user_id=? or id=? limit 1",
+                "select id from identity.person where keycloak_user_id=? and status='ACTIVE' limit 1",
                 rs -> rs.next() ? (UUID) rs.getObject(1) : null,
-                subject,
                 subject);
         if (person == null) {
             throw new AccessDeniedException("PERSON_CONTEXT_MISSING");
@@ -171,12 +185,20 @@ public class NotificationService {
     }
 
     private UUID requireCurrentPerson() {
-        UUID person = users.current().personId();
-        if (person == null) {
-            throw new AccessDeniedException("PERSON_CONTEXT_MISSING");
-        }
-        return person;
+        return personId(SecurityContextHolder.getContext().getAuthentication());
     }
+
+    @Transactional(readOnly = true)
+    public NotificationResponse find(UUID id) {
+        NotificationResponse response = repository.findForRecipient(id, requireCurrentPerson())
+                .orElseThrow(() -> new ResourceNotFoundException("Notification", id));
+        if (response.expiresAt() != null && !response.expiresAt().isAfter(Instant.now())) {
+            throw new ResourceNotFoundException("Notification", id);
+        }
+        return response;
+    }
+
+
 
     private void requirePerson(UUID person) {
         Integer count = jdbc.queryForObject(

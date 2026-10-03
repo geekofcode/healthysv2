@@ -19,7 +19,7 @@ public final class NotificationDtos {
             @NotBlank @Size(max = 80) String type,
             @Size(max = 255) String title,
             @NotBlank @Size(max = 10_000) String body,
-            @NotEmpty Set<UUID> recipientPersonIds,
+            @NotEmpty @Size(max = 100) Set<UUID> recipientPersonIds,
             @Size(max = 50) String resourceType,
             UUID resourceId,
             @Size(max = 1_000) String actionUrl,
@@ -63,6 +63,8 @@ public final class NotificationDtos {
             LocalTime quietHoursEnd,
             String locale,
             Instant updatedAt) {
+        @com.fasterxml.jackson.annotation.JsonProperty("quietHoursTimezone")
+        public String quietHoursTimezone() { return "UTC"; }
     }
 
     public record UpdateNotificationPreferencesRequest(
@@ -74,7 +76,8 @@ public final class NotificationDtos {
             LocalTime quietHoursEnd,
             @NotBlank @Pattern(regexp = "en|fr") String locale) {
         public boolean hasConsistentQuietHours() {
-            return (quietHoursStart == null) == (quietHoursEnd == null);
+            return (quietHoursStart == null) == (quietHoursEnd == null)
+                    && (quietHoursStart == null || !quietHoursStart.equals(quietHoursEnd));
         }
     }
 }
