@@ -61,6 +61,7 @@ class SecurityConfiguration {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.OPTIONS, "/**")
                         .permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/notifications/devices/revoke").permitAll()
                         .requestMatchers(PUBLIC_ENDPOINTS)
                         .permitAll()
                         .requestMatchers("/api/v1/admin/**")

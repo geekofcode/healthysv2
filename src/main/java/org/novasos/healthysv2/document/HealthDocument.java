@@ -20,6 +20,8 @@ class HealthDocument {
  @Column(name="uploaded_by") private UUID uploadedBy;
  @Column(name="uploaded_at",nullable=false) private Instant uploadedAt;
  @Column(nullable=false) private String status;
+ @Column(name="patient_visible",nullable=false) private boolean patientVisible;
+ boolean patientVisible(){return patientVisible;}void setPatientVisible(boolean visible){patientVisible=visible;}
  protected HealthDocument(){}
  static HealthDocument create(UUID patientId,UUID categoryId,String fileName,String key,String mimeType,long size,String checksum,UUID uploadedBy){var d=new HealthDocument();d.id=UUID.randomUUID();d.number="DOC-"+UUID.randomUUID().toString().substring(0,12).toUpperCase();d.patientId=patientId;d.categoryId=categoryId;d.fileName=fileName;d.storageKey=key;d.storageProvider="MINIO";d.mimeType=mimeType;d.sizeBytes=size;d.checksum=checksum;d.uploadedBy=uploadedBy;d.uploadedAt=Instant.now();d.status="ACTIVE";return d;}
  void archive(){status="ARCHIVED";}

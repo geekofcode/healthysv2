@@ -12,5 +12,7 @@ import static org.novasos.healthysv2.consultation.api.ConsultationDtos.*;import 
  @PostMapping("/consultations/{id}/treatments") @PreAuthorize(DECISION) ResponseEntity<TreatmentResponse> treatment(@PathVariable UUID id,@Valid @RequestBody TreatmentRequest request){return ResponseEntity.status(201).body(service.addTreatment(id,request));}
  @PostMapping("/consultations/{id}/follow-ups") @PreAuthorize(DECISION) ResponseEntity<FollowUpResponse> followUp(@PathVariable UUID id,@Valid @RequestBody FollowUpRequest request){return ResponseEntity.status(201).body(service.addFollowUp(id,request));}
  @PostMapping("/consultations/{id}/complete") @PreAuthorize(DECISION) ConsultationResponse complete(@PathVariable UUID id){return service.complete(id);}
+ @PatchMapping("/consultations/{id}/notes/{noteId}/patient-visibility") @PreAuthorize(DECISION) PatientVisibilityResponse noteVisibility(@PathVariable UUID id,@PathVariable UUID noteId,@Valid @RequestBody PatientVisibilityRequest request){return service.noteVisibility(id,noteId,request);}
+ @PatchMapping("/consultations/{id}/diagnoses/{diagnosisId}/patient-visibility") @PreAuthorize(DECISION) PatientVisibilityResponse diagnosisVisibility(@PathVariable UUID id,@PathVariable UUID diagnosisId,@Valid @RequestBody PatientVisibilityRequest request){return service.diagnosisVisibility(id,diagnosisId,request);}
  @GetMapping("/diagnosis-catalog") List<DiagnosisCatalogResponse> catalog(@RequestParam(required=false)String query){return service.catalog(query);}
 }

@@ -48,3 +48,10 @@ springdoc:
 logging:
   pattern:
     level: "%5p [correlationId=%X{correlationId:-}]"
+
+healthys:
+  push:
+    enabled: ${PUSH_ENABLED:false}
+    fcm-project-id: ${FCM_PROJECT_ID:}
+    service-account-file: ${FCM_SERVICE_ACCOUNT_FILE:}
+    poll-interval-ms: ${PUSH_POLL_INTERVAL_MS:10000}

@@ -9,7 +9,7 @@ class LiveKitProperties {
     private String url;
     private String apiKey;
     private String apiSecret;
-    private long tokenTtlMinutes = 60;
+    private long tokenTtlMinutes = 5;
 
     public String getUrl(){return url;} public void setUrl(String value){url=value;}
     public String getApiKey(){return apiKey;} public void setApiKey(String value){apiKey=value;}
@@ -19,6 +19,10 @@ class LiveKitProperties {
     void validate(){
         if(url==null||url.isBlank()||apiKey==null||apiKey.isBlank()||apiSecret==null||apiSecret.isBlank())
             throw new IllegalStateException("LiveKit is not configured");
-        if(tokenTtlMinutes<1||tokenTtlMinutes>360)throw new IllegalStateException("Invalid LiveKit token TTL");
+        java.net.URI endpoint;
+        try{endpoint=java.net.URI.create(url);}catch(IllegalArgumentException exception){throw new IllegalStateException("Invalid LiveKit URL");}
+        boolean local=java.util.Set.of("localhost","127.0.0.1","::1").contains(endpoint.getHost()==null?"":endpoint.getHost());
+        if(endpoint.getHost()==null||endpoint.getUserInfo()!=null||!("wss".equals(endpoint.getScheme())||("ws".equals(endpoint.getScheme())&&local)))throw new IllegalStateException("LiveKit must use WSS outside localhost");
+        if(tokenTtlMinutes<1||tokenTtlMinutes>15)throw new IllegalStateException("Invalid LiveKit token TTL");
     }
 }
