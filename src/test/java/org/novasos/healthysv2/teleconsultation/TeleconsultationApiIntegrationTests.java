@@ -84,5 +84,23 @@ class TeleconsultationApiIntegrationTests {
     private void admit(UUID session,UUID entry)throws Exception {mvc.perform(post("/api/v1/video-sessions/{id}/waiting-room/{entry}/admit",session,entry).header(HttpHeaders.AUTHORIZATION,"Bearer doctor")).andExpect(status().isOk());}
     private void start(UUID session)throws Exception {mvc.perform(post("/api/v1/video-sessions/{id}/start",session).header(HttpHeaders.AUTHORIZATION,"Bearer doctor")).andExpect(status().isOk());}
     private Graph graph(){UUID doctor=person(DOCTOR_SUBJECT),patientPerson=person(PATIENT_SUBJECT),organization=UUID.randomUUID(),professional=UUID.randomUUID(),patient=UUID.randomUUID(),appointment=UUID.randomUUID();jdbc.update("insert into organization.organization(id,organization_number,name) values (?,?,?)",organization,"ORG-"+organization,"Hospital");jdbc.update("insert into professional.professional(id,person_id,professional_number,professional_type,status) values (?,?,?,?, 'ACTIVE')",professional,doctor,"PRO-"+professional,"DOCTOR");jdbc.update("insert into patient.patient(id,person_id,patient_number) values (?,?,?)",patient,patientPerson,"PAT-"+patient);jdbc.update("insert into appointment.appointment(id,appointment_number,patient_id,professional_id,organization_id,type,scheduled_start,scheduled_end,status) values (?,?,?,?,?,'TELECONSULTATION',?,?, 'SCHEDULED')",appointment,"APT-"+appointment,patient,professional,organization,java.sql.Timestamp.from(Instant.now().plusSeconds(3600)),java.sql.Timestamp.from(Instant.now().plusSeconds(5400)));return new Graph(appointment,patientPerson);}private UUID person(UUID subject){UUID id=UUID.randomUUID();jdbc.update("insert into identity.person(id,person_number,keycloak_user_id,first_name,last_name,status) values (?,?,?,?,?,'ACTIVE')",id,"PER-"+id,subject,"Video","User");return id;}record Graph(UUID appointment,UUID patientPerson){}
-    @TestConfiguration(proxyBeanMethods=false)static class JwtFixtures{@Bean @Primary LiveKitRoomGateway roomGateway(){return org.mockito.Mockito.mock(LiveKitRoomGateway.class);}@Bean JwtDecoder jwtDecoder(){return token->{Instant now=Instant.now();boolean patient="patient".equals(token)||"other".equals(token)||token.startsWith("spoof-")||"expired".equals(token);String subject=token.startsWith("spoof-")?token.substring(6):"other".equals(token)?"51000000-0000-0000-0000-000000000003":(patient?PATIENT_SUBJECT:DOCTOR_SUBJECT).toString();return Jwt.withTokenValue(token).header("alg","RS256").subject(subject).issuer("https://keycloak.example/realms/healthys").audience(List.of("healthys-backend-apps")).issuedAt(now.minusSeconds(60)).expiresAt("expired".equals(token)?now.minusSeconds(1):now.plusSeconds(300)).claim("realm_access",Map.of("roles",List.of(patient?"PATIENT":"DOCTOR"))).claim("resource_access",Map.of()).build();};}}
+    @TestConfiguration(proxyBeanMethods=false)
+    static class JwtFixtures {
+        @Bean @Primary LiveKitRoomGateway roomGateway(){return org.mockito.Mockito.mock(LiveKitRoomGateway.class);}
+        @Bean JwtDecoder jwtDecoder(){
+            var timestamps=new JwtTimestampValidator();
+            return token->{
+                Instant now=Instant.now();
+                boolean patient="patient".equals(token)||"other".equals(token)||token.startsWith("spoof-")||"expired".equals(token);
+                String subject=token.startsWith("spoof-")?token.substring(6):"other".equals(token)?"51000000-0000-0000-0000-000000000003":(patient?PATIENT_SUBJECT:DOCTOR_SUBJECT).toString();
+                Jwt jwt=Jwt.withTokenValue(token).header("alg","RS256").subject(subject)
+                    .issuer("https://keycloak.example/realms/healthys").audience(List.of("healthys-backend-apps"))
+                    .issuedAt(now.minusSeconds(300)).expiresAt("expired".equals(token)?now.minusSeconds(120):now.plusSeconds(300))
+                    .claim("realm_access",Map.of("roles",List.of(patient?"PATIENT":"DOCTOR"))).claim("resource_access",Map.of()).build();
+                var result=timestamps.validate(jwt);
+                if(result.hasErrors())throw new JwtValidationException("JWT timestamp validation failed",result.getErrors());
+                return jwt;
+            };
+        }
+    }
 }
