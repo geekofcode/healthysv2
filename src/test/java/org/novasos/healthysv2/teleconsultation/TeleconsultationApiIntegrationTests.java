@@ -22,7 +22,7 @@ class TeleconsultationApiIntegrationTests {
     @Test void rejectsPersonUuidImpersonationAndExpiredJwt()throws Exception {
         Graph g=graph();UUID session=create(g);
         mvc.perform(get("/api/v1/video-sessions/{id}",session).header(HttpHeaders.AUTHORIZATION,"Bearer spoof:"+g.patientPerson)).andExpect(status().isForbidden());
-        mvc.perform(get("/api/v1/video-sessions/{id}",session).header(HttpHeaders.AUTHORIZATION,"Bearer expired")).andExpect(status().isForbidden());
+        mvc.perform(get("/api/v1/video-sessions/{id}",session).header(HttpHeaders.AUTHORIZATION,"Bearer expired")).andExpect(status().isUnauthorized());
     }
     @Test void closedSessionsCannotReenterWaitingRoomOrMintTokens()throws Exception {
         Graph g=graph();UUID session=create(g);
