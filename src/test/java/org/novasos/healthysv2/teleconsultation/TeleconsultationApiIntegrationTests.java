@@ -79,6 +79,45 @@ class TeleconsultationApiIntegrationTests {
         assertThat(jdbc.queryForObject("select failed_at is not null and last_error='PROVIDER_UNAVAILABLE' from teleconsultation.room_cleanup where video_session_id=?",Boolean.class,session)).isTrue();
         org.mockito.Mockito.clearInvocations(rooms);cleanup.dispatch();org.mockito.Mockito.verifyNoInteractions(rooms);
     }
+    @Test void admissionRevokedDuringActiveSessionStopsTokenIssuance()throws Exception {
+        UUID session=create(graph());UUID entry=enter(session);admit(session,entry);start(session);
+        mvc.perform(get("/api/v1/video-sessions/{id}",session).header(HttpHeaders.AUTHORIZATION,"Bearer patient")).andExpect(status().isOk()).andExpect(jsonPath("$.canJoin").value(true));
+        jdbc.update("update teleconsultation.waiting_room set status='REJECTED' where id=?",entry);
+        org.mockito.Mockito.clearInvocations(rooms);
+        mvc.perform(get("/api/v1/video-sessions/{id}",session).header(HttpHeaders.AUTHORIZATION,"Bearer patient")).andExpect(status().isOk()).andExpect(jsonPath("$.canJoin").value(false));
+        mvc.perform(post("/api/v1/video-sessions/{id}/token",session).header(HttpHeaders.AUTHORIZATION,"Bearer patient")).andExpect(status().isForbidden());
+        org.mockito.Mockito.verifyNoInteractions(rooms);
+    }
+    @Test void deactivatedAccountCannotReadOrJoinExistingSession()throws Exception {
+        Graph graph=graph();UUID session=create(graph);UUID entry=enter(session);admit(session,entry);start(session);
+        jdbc.update("update identity.person set status='INACTIVE' where id=?",graph.patientPerson);
+        org.mockito.Mockito.clearInvocations(rooms);
+        mvc.perform(get("/api/v1/video-sessions/{id}",session).header(HttpHeaders.AUTHORIZATION,"Bearer patient")).andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/video-sessions/{id}/token",session).header(HttpHeaders.AUTHORIZATION,"Bearer patient")).andExpect(status().isForbidden());
+        org.mockito.Mockito.verifyNoInteractions(rooms);
+    }
+    @Test void cancelledActiveAppointmentRevokesCanJoinWithoutCallingProvider()throws Exception {
+        Graph graph=graph();UUID session=create(graph);UUID entry=enter(session);admit(session,entry);start(session);
+        jdbc.update("update appointment.appointment set status='CANCELLED' where id=?",graph.appointment);
+        org.mockito.Mockito.clearInvocations(rooms);
+        mvc.perform(get("/api/v1/video-sessions/{id}",session).header(HttpHeaders.AUTHORIZATION,"Bearer patient")).andExpect(status().isOk()).andExpect(jsonPath("$.canJoin").value(false));
+        mvc.perform(post("/api/v1/video-sessions/{id}/token",session).header(HttpHeaders.AUTHORIZATION,"Bearer patient")).andExpect(status().isUnprocessableEntity());
+        org.mockito.Mockito.verifyNoInteractions(rooms);
+    }
+    @Test void cannotAdmitWaitingEntryThroughDifferentSession()throws Exception {
+        Graph graph=graph();UUID first=create(graph);UUID second=create(graph);UUID entry=enter(first);
+        mvc.perform(post("/api/v1/video-sessions/{id}/waiting-room/{entry}/admit",second,entry).header(HttpHeaders.AUTHORIZATION,"Bearer doctor")).andExpect(status().isUnprocessableEntity());
+        assertThat(jdbc.queryForObject("select status from teleconsultation.waiting_room where id=?",String.class,entry)).isEqualTo("WAITING");
+    }
+    @Test void leavingAndReenteringRequiresFreshAdmissionWithoutDuplicateWaitingEntry()throws Exception {
+        UUID session=create(graph());UUID entry=enter(session);admit(session,entry);start(session);
+        for(int attempt=0;attempt<2;attempt++)mvc.perform(post("/api/v1/video-sessions/{id}/leave",session).header(HttpHeaders.AUTHORIZATION,"Bearer patient")).andExpect(status().isNoContent());
+        assertThat(enter(session)).isEqualTo(entry);
+        assertThat(jdbc.queryForObject("select count(*) from teleconsultation.waiting_room where video_session_id=?",Integer.class,session)).isEqualTo(1);
+        mvc.perform(post("/api/v1/video-sessions/{id}/token",session).header(HttpHeaders.AUTHORIZATION,"Bearer patient")).andExpect(status().isForbidden());
+        admit(session,entry);
+        mvc.perform(post("/api/v1/video-sessions/{id}/token",session).header(HttpHeaders.AUTHORIZATION,"Bearer patient")).andExpect(status().isOk());
+    }
     private UUID create(Graph graph)throws Exception {return UUID.fromString(json.readTree(mvc.perform(post("/api/v1/video-sessions").header(HttpHeaders.AUTHORIZATION,"Bearer doctor").contentType(MediaType.APPLICATION_JSON).content("{\"appointmentId\":\"%s\"}".formatted(graph.appointment))).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).path("id").asText());}
     private UUID enter(UUID session)throws Exception {return UUID.fromString(json.readTree(mvc.perform(post("/api/v1/video-sessions/{id}/waiting-room",session).header(HttpHeaders.AUTHORIZATION,"Bearer patient")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("id").asText());}
     private void admit(UUID session,UUID entry)throws Exception {mvc.perform(post("/api/v1/video-sessions/{id}/waiting-room/{entry}/admit",session,entry).header(HttpHeaders.AUTHORIZATION,"Bearer doctor")).andExpect(status().isOk());}

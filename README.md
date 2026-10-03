@@ -69,3 +69,17 @@ WHERE video_session_id='SESSION-UUID' AND completed_at IS NULL AND failed_at IS 
 Completed jobs are purged after 30 days. Automated tests mock the LiveKit room gateway; admission, permissions, network interruption and media must also be checked with physical devices and a deployed LiveKit instance.
 
 For the complete Firebase/APNs deployment procedure, see the [mobile configuration README](https://github.com/geekofcode/healthysv2M/blob/feature/18.1-flutter-foundation/docs/firebase-apns/README.md).
+
+
+## Stabilisation mobile 18.12
+
+Les tests API renforcent le retrait d’admission et la désactivation du compte pendant
+une séance active, l’annulation du rendez-vous source, l’isolation des salles et
+la sortie/réentrée sans nouvelle admission. Les tests unitaires LiveKit vérifient
+la signature HMAC, l’identité, les droits limités à la salle, le TTL borné et
+l’absence du bearer dans les diagnostics `JoinTokenResponse.toString()`.
+
+La configuration de signature, les builds Android/iOS, les stores et la recette
+physique sont documentés dans le
+[guide de publication mobile](https://github.com/geekofcode/healthysv2M/blob/feature/18.1-flutter-foundation/docs/mobile-release/README.md).
+Aucune publication store ni activation des fournisseurs n’est effectuée par la CI.
