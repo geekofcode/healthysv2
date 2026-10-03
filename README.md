@@ -40,3 +40,32 @@ Push is disabled by default. To activate it, set `PUSH_ENABLED=true`, `FCM_PROJE
 FCM payloads contain a generic localized HEALTH’YS alert and only `notificationId` as application data. Medical content, person identifiers and destination URLs are excluded. Android uses channel `healthys_notifications`; APNs uses alert delivery. FCM acceptance is recorded as SENT, not as proof of device delivery. The worker rechecks recipient preference, read state, expiration and device ownership before sending, retries transient failures up to five attempts, and disables unregistered tokens. The outbox is bounded to 10,000 pending entries; overflow is recorded as a failed delivery. Completed outbox entries are removed after 30 days.
 
 Preferences retain the existing email/SMS fields. Quiet hours are explicitly UTC and defer push until the end of the interval; equal start/end times are invalid. Disabling push stops queued sends. Email/SMS provider delivery is outside this mobile push implementation. Device credentials require the same database protection as other application secrets. Automated tests use a fake push gateway; Firebase/APNs reception must be validated on configured physical devices.
+
+## Mobile teleconsultation (18.11)
+
+The mobile waiting room uses additive `GET /api/v1/video-sessions/page` with the standard `{content,page}` pagination envelope. The existing list endpoint remains compatible with the web client. Participant names and an authoritative recipient-specific `canJoin` flag are additive. Patient responses contain only their own waiting-room entry and the assigned professionals. Every route resolves an active person strictly through JWT.sub; a person UUID fallback is forbidden.
+
+Patients enter the waiting room explicitly. Only the assigned clinical professional or a permitted administrator can start/admit/complete. Patient join tokens require an ACTIVE session and their own ADMITTED entry; cancelled/no-show appointment sources are rejected. Entering an already admitted room preserves admission. Leaving marks only the caller and their waiting-room entry LEFT; it does not complete the clinician's session. Rejoining after leave requires admission again. LiveKit tokens already issued for an active room remain valid until their short expiry; local clients destroy them and disconnect on leave.
+
+Set backend-only `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` and optionally `LIVEKIT_TOKEN_TTL_MINUTES` (default 5, allowed 1–15). Use WSS for deployed endpoints; insecure WS is restricted to loopback development. Configure TLS, RTC/TURN connectivity and the same server API credentials on LiveKit. The API secret never belongs in a mobile build.
+
+**Required LiveKit server configuration:**
+
+```yaml
+room:
+  auto_create: false
+```
+
+Rooms are explicitly created on authorized start and authorized token issuance, including after an empty-room timeout. Disabling automatic creation prevents still-valid old join tokens from recreating a room deleted after completion. This server setting is a deployment prerequisite, not a setting the application can enforce remotely.
+
+Migration V18 adds durable room-cleanup jobs. Clinical completion commits first and denies further tokens. The worker then deletes the provider room, normally on the next 10-second poll; failures retry every 30 seconds up to 20 attempts with bounded HTTP timeouts. Failed jobs retain `failed_at` and a generic `last_error`, and log only the video-session identifier. Provider outages can delay actual remote disconnection. Operators should monitor pending/failed cleanup and, once the provider is healthy, retry a verified failed session:
+
+```sql
+UPDATE teleconsultation.room_cleanup
+SET failed_at=NULL, attempts=0, next_attempt_at=now(), last_error=NULL
+WHERE video_session_id='SESSION-UUID' AND completed_at IS NULL AND failed_at IS NOT NULL;
+```
+
+Completed jobs are purged after 30 days. Automated tests mock the LiveKit room gateway; admission, permissions, network interruption and media must also be checked with physical devices and a deployed LiveKit instance.
+
+For the complete Firebase/APNs deployment procedure, see the [mobile configuration README](https://github.com/geekofcode/healthysv2M/blob/feature/18.1-flutter-foundation/docs/firebase-apns/README.md).

@@ -7,6 +7,7 @@ import java.net.*;import java.util.*;import jakarta.validation.Valid;import io.s
 class TeleconsultationController {
     private final TeleconsultationService service;TeleconsultationController(TeleconsultationService service){this.service=service;}
     @PostMapping @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE')") ResponseEntity<VideoSessionResponse>create(@Valid@RequestBody CreateVideoSessionRequest request){var out=service.create(request);return ResponseEntity.created(URI.create(ApiPaths.V1+"/video-sessions/"+out.id())).body(out);}
+    @GetMapping("/page") org.novasos.healthysv2.shared.api.dto.PageResponse<VideoSessionResponse> page(org.springframework.data.domain.Pageable pageable){return org.novasos.healthysv2.shared.api.dto.PageResponse.from(service.page(pageable));}
     @GetMapping List<VideoSessionResponse>list(){return service.list();}@GetMapping("/{id}")VideoSessionResponse find(@PathVariable UUID id){return service.find(id);}
     @PostMapping("/{id}/waiting-room")WaitingRoomResponse enter(@PathVariable UUID id){return service.enter(id);}
     @PostMapping("/{id}/waiting-room/{entry}/admit")WaitingRoomResponse admit(@PathVariable UUID id,@PathVariable UUID entry){return service.admit(id,entry);}

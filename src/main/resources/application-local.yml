@@ -35,4 +35,4 @@ healthys:
     url: ${LIVEKIT_URL}
     api-key: ${LIVEKIT_API_KEY}
     api-secret: ${LIVEKIT_API_SECRET}
-    token-ttl-minutes: ${LIVEKIT_TOKEN_TTL_MINUTES:60}
+    token-ttl-minutes: ${LIVEKIT_TOKEN_TTL_MINUTES:5}
