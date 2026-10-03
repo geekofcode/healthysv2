@@ -132,7 +132,7 @@ class PushApiIntegrationTests {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer owner")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"token\":\"some-token\",\"revocationToken\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"platform\":\"WEB\"}"))
-                .andExpect(status().isUnprocessableContent());
+                .andExpect(status().isBadRequest());
     }
 
     @Test
