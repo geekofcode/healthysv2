@@ -1,20 +1,70 @@
-import {NavLink, Outlet} from 'react-router-dom';
-
+import {useEffect, useRef, useState} from 'react';
+import {NavLink, Outlet, useLocation} from 'react-router-dom';
+import {useQuery} from '@tanstack/react-query';
 import {canAccessPath} from '../auth/roles';
 import {useAuth} from '../auth/AuthContext';
+import {keycloak} from '../auth/keycloak';
+import {getMe} from '../api/persons';
 import {useTranslation} from 'react-i18next';
 import {NotificationBell} from '../components/NotificationBell';
 
 export function MainLayout() {
   const auth = useAuth();
   const {t} = useTranslation();
+  const location = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+  const avatarRef = useRef<HTMLButtonElement>(null);
+  const navigationRef = useRef<HTMLButtonElement>(null);
+  const person = useQuery({queryKey: ['person', 'me'], queryFn: getMe});
+  const fullName = person.data ? [person.data.firstName, person.data.middleName, person.data.lastName].filter(Boolean).join(' ') : String(keycloak.tokenParsed?.name || auth.username || t('nav.profile'));
+  const picture = typeof keycloak.tokenParsed?.picture === 'string' ? keycloak.tokenParsed.picture : undefined;
+
+  useEffect(() => {setSidebarOpen(false); setProfileOpen(false);}, [location.pathname]);
+  useEffect(() => {setImageFailed(false);}, [picture]);
+  useEffect(() => {
+    const outside = (event: PointerEvent) => {
+      if (!profileRef.current?.contains(event.target as Node)) setProfileOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (profileOpen) {setProfileOpen(false); avatarRef.current?.focus();}
+      if (sidebarOpen) {setSidebarOpen(false); navigationRef.current?.focus();}
+    };
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', escape);
+    return () => {document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape);};
+  }, [profileOpen, sidebarOpen]);
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main-content">{t('shell.skipContent')}</a>
       <header className="topbar">
-        <NavLink className="brand" to="/">HEALTH'YS</NavLink>
-        <nav aria-label={t('nav.main')}>
-          <NavLink to="/">{t('nav.home')}</NavLink>
+        <div className="brand-group">
+          <button ref={navigationRef} type="button" className="sidebar-toggle" aria-label={t('shell.toggleNavigation')} aria-controls="main-navigation" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(!sidebarOpen)}>☰</button>
+          <NavLink className="brand" to="/">HEALTH'YS</NavLink>
+        </div>
+        <div className="session">
+          <span className="session-name">{fullName}</span>
+          <NotificationBell />
+          <div className="profile-menu" ref={profileRef} onBlur={event => {if (!event.currentTarget.contains(event.relatedTarget as Node)) setProfileOpen(false);}}>
+            <button ref={avatarRef} type="button" className="profile-avatar" aria-label={t('shell.accountMenu')} aria-expanded={profileOpen} aria-controls="account-dropdown" onClick={() => setProfileOpen(!profileOpen)}>
+              {picture && !imageFailed ? <img src={picture} alt="" referrerPolicy="no-referrer" onError={() => setImageFailed(true)} /> : <span aria-hidden="true">{Array.from(fullName.trim())[0]?.toLocaleUpperCase() || '?'}</span>}
+            </button>
+            {profileOpen && <div className="profile-dropdown" id="account-dropdown">
+              <div className="profile-summary"><strong>{fullName}</strong><span>{auth.username}</span></div>
+              <NavLink to="/me">{t('nav.profile')}</NavLink>
+              <button type="button" onClick={() => {setProfileOpen(false); void auth.logout();}}>{t('auth.logout')}</button>
+            </div>}
+          </div>
+        </div>
+      </header>
+      <div className="app-body">
+        <aside className={`sidebar${sidebarOpen ? ' is-open' : ''}`}>
+        <nav id="main-navigation" aria-label={t('nav.main')}>
+          <NavLink to="/" end>{t('nav.home')}</NavLink>
           <NavLink to="/me">{t('nav.profile')}</NavLink>
           {canAccessPath(auth.roles, '/organizations')&&<NavLink to="/organizations">{t('nav.organizations')}</NavLink>}
           {canAccessPath(auth.roles, '/professionals')&&<NavLink to="/professionals">{t('nav.professionals')}</NavLink>}
@@ -30,17 +80,10 @@ export function MainLayout() {
           {canAccessPath(auth.roles, '/billing')&&<NavLink to="/billing">{t('nav.billing')}</NavLink>}
           {canAccessPath(auth.roles, '/admin')&&<NavLink to="/admin">{t('nav.admin')}</NavLink>}
         </nav>
-        <div className="session">
-          <NotificationBell />
-          <span>{auth.username}</span>
-          <button type="button" onClick={() => void auth.logout()}>
-            {t('auth.logout')}
-          </button>
-        </div>
-      </header>
-      <main className="content">
-        <Outlet />
-      </main>
+        </aside>
+        {sidebarOpen && <button className="sidebar-backdrop" type="button" aria-label={t('shell.closeNavigation')} onClick={() => {setSidebarOpen(false); navigationRef.current?.focus();}} />}
+        <main className="content" id="main-content" tabIndex={-1}><Outlet /></main>
+      </div>
     </div>
   );
 }
