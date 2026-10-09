@@ -172,7 +172,8 @@ class SecurityIntegrationTests {
 
             var professional = mockMvc.perform(get("/api/v1/professionals")
                     .header(HttpHeaders.AUTHORIZATION, "Bearer role-" + role));
-            if (List.of("PATIENT", "CASHIER", "ACCOUNTANT").contains(role))
+            // Hospital administrators need an explicit organization context, even with a valid role.
+            if (List.of("PATIENT", "CASHIER", "ACCOUNTANT", "HOSPITAL_ADMIN").contains(role))
                 professional.andExpect(status().isForbidden());
             else professional.andExpect(status().isOk());
 
@@ -185,6 +186,17 @@ class SecurityIntegrationTests {
                 create.andExpect(status().isCreated());
             else create.andExpect(status().isForbidden());
         }
+    }
+
+    @Test
+    void hospitalAdministratorCanReadProfessionalsOnlyInItsSelectedOrganization() throws Exception {
+        mockMvc.perform(get("/api/v1/professionals")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer hospital-scoped"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/professionals")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer hospital-scoped")
+                        .header("X-Organization-ID", "00000000-0000-0000-0000-000000000099"))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -243,6 +255,12 @@ class SecurityIntegrationTests {
         JwtDecoder jwtDecoder() {
             return token -> {
                 if (token.equals("expired")) throw new BadJwtException("JWT expired");
+                if (token.equals("hospital-scoped")) {
+                    Jwt base = jwt(token, Map.of("roles", List.of("HOSPITAL_ADMIN")), Map.of());
+                    return Jwt.withTokenValue(token).headers(headers -> headers.putAll(base.getHeaders()))
+                            .claims(claims -> claims.putAll(base.getClaims()))
+                            .claim("healthys_organization_id", "00000000-0000-0000-0000-000000000098").build();
+                }
                 if (token.startsWith("role-")) return jwt(token, Map.of("roles", List.of(token.substring(5))), Map.of());
                 return switch (token) {
                 case "patient" -> jwt(

@@ -70,7 +70,7 @@ class PatientRepositoryIntegrationTests {
                     patient.getId(), professional);
         }
         jdbc.update("insert into patient.consent(patient_id,grantee_person_id,scope) values (?,?,'MEDICAL_RECORD')", allowed.getId(), person);
-        var page = repository.searchScoped("", null, person, true, org.springframework.data.domain.PageRequest.of(0, 1));
+        var page = repository.searchScoped("", null, person, true, org.springframework.data.domain.PageRequest.of(0, 1, org.springframework.data.domain.Sort.by("patient_number")));
         assertThat(page.getTotalElements()).isEqualTo(1);
         assertThat(page.getContent()).extracting(Patient::getId).containsExactly(allowed.getId());
         jdbc.update("update patient.consent set revoked_at=clock_timestamp(),status='REVOKED' where patient_id=?", allowed.getId());
@@ -87,7 +87,7 @@ class PatientRepositoryIntegrationTests {
         Patient denied = repository.saveAndFlush(Patient.create(insertPerson()));
         jdbc.update("insert into patient.patient_registration(patient_id,organization_id,registration_number) values (?,?,?)", allowed.getId(),own,"REG-"+allowed.getId());
         jdbc.update("insert into patient.patient_registration(patient_id,organization_id,registration_number) values (?,?,?)", denied.getId(),other,"REG-"+denied.getId());
-        var page = repository.searchScoped("", own, null, false, org.springframework.data.domain.PageRequest.of(0, 1));
+        var page = repository.searchScoped("", own, null, false, org.springframework.data.domain.PageRequest.of(0, 1, org.springframework.data.domain.Sort.by("patient_number")));
         assertThat(page.getTotalElements()).isEqualTo(1);
         assertThat(page.getContent()).extracting(Patient::getId).containsExactly(allowed.getId());
     }

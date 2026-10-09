@@ -19,13 +19,35 @@ public class PatientAccessService {
 
     @Transactional(readOnly = true)
     public AccessDecision requireAccess(UUID patientId, String scope, String action) {
-        var user = users.current();
+        CurrentUserContext.UserContext user;
+        try {
+            user = users.current();
+        } catch (AccessDeniedException exception) {
+            auditContextDenied(patientId, scope, exception.getMessage());
+            throw exception;
+        }
         AccessDecision decision = decide(user, patientId, normalize(scope), normalize(action));
         audit.access(user.personId(), patientId, user.organizationId(), scope, patientId,
                 decision.allowed() ? action : "DENIED", decision.reason(),
                 Map.of("allowed", decision.allowed(), "decision", decision.reason(), "roles", user.roles()));
         if (!decision.allowed()) throw new AccessDeniedException(decision.reason());
         return decision;
+    }
+
+    private void auditContextDenied(UUID patientId, String scope, String reason) {
+        UUID person = null;
+        var authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (authentication instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken token) {
+            try {
+                UUID subject = UUID.fromString(token.getToken().getSubject());
+                person = jdbc.query("select id from identity.person where keycloak_user_id=? limit 1",
+                        rs -> rs.next() ? rs.getObject(1, UUID.class) : null, subject);
+            } catch (IllegalArgumentException ignored) {
+                // Invalid subjects must not be attributed to another local person.
+            }
+        }
+        audit.access(person, patientId, null, scope, patientId, "DENIED", reason,
+                Map.of("allowed", false, "decision", reason));
     }
 
     private AccessDecision decide(CurrentUserContext.UserContext user, UUID patientId, String scope, String action) {

@@ -65,7 +65,7 @@ import org.springframework.mock.web.MockMultipartFile;
     @Test void applicantCannotSelfApproveOrUploadExecutable() throws Exception  {
         mvc.perform(get("/api/v1/professional-onboarding/me")
                         .header(HttpHeaders.AUTHORIZATION,"Bearer applicant"))
-                .andExpect(status().isOk()).andExpect(content().json("null"));
+                .andExpect(status().isOk()).andExpect(content().string("null"));
         UUID id=draft();
         mvc.perform(post("/api/v1/professional-onboarding/requests/{id}/review",id).header(HttpHeaders.AUTHORIZATION,"Bearer applicant").contentType(MediaType.APPLICATION_JSON).content("{\"decision\":\"APPROVE\",\"reason\":\"self approval\"}")).andExpect(status().isForbidden());
         mvc.perform(multipart("/api/v1/professional-onboarding/me/proof").file(new MockMultipartFile("file","fake.pdf","application/pdf","<script>bad</script>".getBytes())).header(HttpHeaders.AUTHORIZATION,"Bearer applicant")).andExpect(status().isBadRequest());
