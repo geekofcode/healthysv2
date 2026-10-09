@@ -4,7 +4,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import java.time.Instant;
 import java.util.*;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.novasos.healthysv2.TestcontainersConfiguration;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.*;
@@ -61,6 +63,9 @@ import org.springframework.mock.web.MockMultipartFile;
         assertThat(jdbc.queryForObject("select enabled from professional.role_sync_outbox where subject_id=?",Boolean.class,APPLICANT)).isFalse();
     }
     @Test void applicantCannotSelfApproveOrUploadExecutable() throws Exception  {
+        mvc.perform(get("/api/v1/professional-onboarding/me")
+                        .header(HttpHeaders.AUTHORIZATION,"Bearer applicant"))
+                .andExpect(status().isOk()).andExpect(content().json("null"));
         UUID id=draft();
         mvc.perform(post("/api/v1/professional-onboarding/requests/{id}/review",id).header(HttpHeaders.AUTHORIZATION,"Bearer applicant").contentType(MediaType.APPLICATION_JSON).content("{\"decision\":\"APPROVE\",\"reason\":\"self approval\"}")).andExpect(status().isForbidden());
         mvc.perform(multipart("/api/v1/professional-onboarding/me/proof").file(new MockMultipartFile("file","fake.pdf","application/pdf","<script>bad</script>".getBytes())).header(HttpHeaders.AUTHORIZATION,"Bearer applicant")).andExpect(status().isBadRequest());

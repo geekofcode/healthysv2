@@ -7,6 +7,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.MediaType;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -37,6 +39,24 @@ class RegistrationReferenceController {
     }
 
     record RegistrationOptions(List<Country> countries, List<Speciality> specialities) {}
+
+    @GetMapping("/api/v1/professional-onboarding/me/professional")
+    ResponseEntity<?> ownProfessional(JwtAuthenticationToken authentication) {
+        UUID subject = UUID.fromString(authentication.getToken().getSubject());
+        var rows = jdbc.query("""
+                select p.id,p.professional_type from professional.professional p
+                join identity.person person on person.id=p.person_id
+                left join professional.registration_request r on r.professional_id=p.id
+                where person.keycloak_user_id=? and person.status='ACTIVE' and p.status='ACTIVE'
+                and (r.id is null or r.status='APPROVED')
+                """, (row,index) -> new OwnProfessional(row.getObject("id", UUID.class),
+                        row.getString("professional_type")), subject);
+        return rows.isEmpty()
+                ? ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body("null")
+                : ResponseEntity.ok(rows.getFirst());
+    }
+
+    record OwnProfessional(UUID id, String professionalType) {}
 
     @PostMapping("/api/v1/admin/registration-options/countries")
     @PreAuthorize("hasRole('PLATFORM_ADMIN')")

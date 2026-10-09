@@ -21,8 +21,11 @@ class ProfessionalOnboardingController {
         return service.directory();
     }
 
-    @GetMapping("/me") DossierResponse mine(JwtAuthenticationToken auth) {
-        return service.mine(auth);
+    @GetMapping("/me") ResponseEntity<?> mine(JwtAuthenticationToken auth) {
+        var dossier = service.mine(auth);
+        return dossier == null
+                ? ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body("null")
+                : ResponseEntity.ok(dossier);
     }
 
     @GetMapping("/me/affiliations") List<MyAffiliationResponse> myAffiliations(JwtAuthenticationToken auth) {
