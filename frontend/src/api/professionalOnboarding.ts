@@ -28,3 +28,5 @@ export const createCountry=(input:{iso2:string;name:string})=>apiRequest('/admin
 
 export type DirectoryProfessional={professionalId:string;personId:string;firstName:string;lastName:string;profession:string};
 export const listProfessionalDirectory=()=>apiRequest<DirectoryProfessional[]>(`${base}/directory`);
+
+export const getMyProfessional=()=>apiRequest<{id:string;professionalType:string}|null>(`${base}/me/professional`);

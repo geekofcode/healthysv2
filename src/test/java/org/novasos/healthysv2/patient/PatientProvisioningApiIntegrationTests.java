@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 import org.novasos.healthysv2.TestcontainersConfiguration;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -20,7 +21,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 @ActiveProfiles("test")
 @SpringBootTest(properties = {
@@ -31,10 +32,19 @@ import org.springframework.transaction.annotation.Transactional;
 })
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, PatientProvisioningApiIntegrationTests.JwtFixtures.class})
-@Transactional
 class PatientProvisioningApiIntegrationTests {
     private static final UUID SUBJECT = UUID.fromString("00000000-0000-0000-0000-000000000301");
     @Autowired MockMvc mockMvc;
+    @Autowired JdbcTemplate jdbc;
+
+    @AfterEach
+    void cleanProvisionedIdentity() {
+        jdbc.update("delete from patient.patient where person_id in "
+                + "(select id from identity.person where keycloak_user_id=?)", SUBJECT);
+        jdbc.update("delete from identity.person_contact where person_id in "
+                + "(select id from identity.person where keycloak_user_id=?)", SUBJECT);
+        jdbc.update("delete from identity.person where keycloak_user_id=?", SUBJECT);
+    }
 
     @Test
     void provisionsPersonAndPatientIdempotently() throws Exception {

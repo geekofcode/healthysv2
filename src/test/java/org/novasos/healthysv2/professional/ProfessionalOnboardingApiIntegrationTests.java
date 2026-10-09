@@ -74,6 +74,94 @@ import org.springframework.mock.web.MockMultipartFile;
         mvc.perform(post("/api/v1/professional-onboarding/invitations").header(HttpHeaders.AUTHORIZATION,"Bearer hospital").contentType(MediaType.APPLICATION_JSON).content("{\"email\":\"applicant@example.test\",\"organizationId\":\"%s\"}".formatted(FOREIGN_ORG))).andExpect(status().isForbidden());
         mvc.perform(post("/api/v1/professionals").header(HttpHeaders.AUTHORIZATION,"Bearer hospital").contentType(MediaType.APPLICATION_JSON).content("{\"personId\":\"%s\",\"professionalNumber\":\"BYPASS\",\"professionalType\":\"DOCTOR\"}".formatted(APPLICANT))).andExpect(status().isForbidden());
     }
+    @Test void invitationRequiresVerifiedIdentityApprovalAndScopedIdempotentAffiliation() throws Exception {
+        UUID application=draft();
+        String invitation=createInvitation();
+        String token=extractString(invitation,"token");
+        String acceptance="{\"token\":\"%s\"}".formatted(token);
+
+        mvc.perform(post("/api/v1/professional-onboarding/invitations/accept")
+                        .header(HttpHeaders.AUTHORIZATION,"Bearer other")
+                        .contentType(MediaType.APPLICATION_JSON).content(acceptance))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/professional-onboarding/invitations/accept")
+                        .header(HttpHeaders.AUTHORIZATION,"Bearer unverified")
+                        .contentType(MediaType.APPLICATION_JSON).content(acceptance))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/professional-onboarding/invitations/accept")
+                        .header(HttpHeaders.AUTHORIZATION,"Bearer applicant")
+                        .contentType(MediaType.APPLICATION_JSON).content(acceptance))
+                .andExpect(status().isConflict());
+
+        mvc.perform(multipart("/api/v1/professional-onboarding/me/proof")
+                        .file(new MockMultipartFile("file","license.pdf","application/pdf","%PDF-1.7 proof".getBytes()))
+                        .header(HttpHeaders.AUTHORIZATION,"Bearer applicant"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/v1/professional-onboarding/me/submit")
+                        .header(HttpHeaders.AUTHORIZATION,"Bearer applicant"))
+                .andExpect(status().isOk());
+        review(application,"APPROVE","APPROVED");
+
+        String affiliation=mvc.perform(post("/api/v1/professional-onboarding/invitations/accept")
+                        .header(HttpHeaders.AUTHORIZATION,"Bearer applicant")
+                        .contentType(MediaType.APPLICATION_JSON).content(acceptance))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.organizationId").value(ORG.toString()))
+                .andReturn().getResponse().getContentAsString();
+        UUID assignment=extractId(affiliation);
+        mvc.perform(post("/api/v1/professional-onboarding/invitations/accept")
+                        .header(HttpHeaders.AUTHORIZATION,"Bearer applicant")
+                        .contentType(MediaType.APPLICATION_JSON).content(acceptance))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(assignment.toString()));
+        assertThat(jdbc.queryForObject("select count(*) from professional.professional_assignment where organization_id=?",Integer.class,ORG))
+                .isEqualTo(1);
+        mvc.perform(get("/api/v1/professional-onboarding/me/affiliations")
+                        .header(HttpHeaders.AUTHORIZATION,"Bearer applicant"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].organizationName").value("Hospital A"));
+        mvc.perform(get("/api/v1/professional-onboarding/affiliations")
+                        .header(HttpHeaders.AUTHORIZATION,"Bearer hospital-other"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+
+        String expiredInvitation=createInvitation();
+        UUID expiredId=extractId(expiredInvitation);
+        jdbc.update("update professional.organization_invitation set expires_at=now()-interval '1 minute' where id=?",expiredId);
+        mvc.perform(post("/api/v1/professional-onboarding/invitations/accept")
+                        .header(HttpHeaders.AUTHORIZATION,"Bearer applicant")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"%s\"}".formatted(extractString(expiredInvitation,"token"))))
+                .andExpect(status().isConflict());
+        mvc.perform(delete("/api/v1/professional-onboarding/affiliations/{id}",assignment)
+                        .header(HttpHeaders.AUTHORIZATION,"Bearer hospital-other"))
+                .andExpect(status().isForbidden());
+        assertThat(jdbc.queryForObject("select status from professional.professional_assignment where id=?",String.class,assignment))
+                .isEqualTo("ACTIVE");
+        mvc.perform(delete("/api/v1/professional-onboarding/affiliations/{id}",assignment)
+                        .header(HttpHeaders.AUTHORIZATION,"Bearer hospital"))
+                .andExpect(status().isNoContent());
+        assertThat(jdbc.queryForObject("select status from professional.professional_assignment where id=?",String.class,assignment))
+                .isEqualTo("ENDED");
+        mvc.perform(post("/api/v1/professional-onboarding/invitations/accept")
+                        .header(HttpHeaders.AUTHORIZATION,"Bearer applicant")
+                        .contentType(MediaType.APPLICATION_JSON).content(acceptance))
+                .andExpect(status().isConflict());
+    }
+
+    private String createInvitation() throws Exception {
+        return mvc.perform(post("/api/v1/professional-onboarding/invitations")
+                        .header(HttpHeaders.AUTHORIZATION,"Bearer hospital")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"applicant@example.test\",\"organizationId\":\"%s\",\"position\":\"Doctor\"}".formatted(ORG)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PENDING"))
+                .andReturn().getResponse().getContentAsString();
+    }
+
+    private String extractString(String body,String field) {
+        var match=java.util.regex.Pattern.compile("\""+field+"\":\"([^\"]+)\"").matcher(body);
+        if(!match.find())throw new IllegalArgumentException(body);
+        return match.group(1);
+    }
+
     private UUID draft() throws Exception  {
         String body=mvc.perform(put("/api/v1/professional-onboarding/me").header(HttpHeaders.AUTHORIZATION,"Bearer applicant").contentType(MediaType.APPLICATION_JSON).content("{\"profession\":\"medecin\",\"licenseNumber\":\"LIC-%s\",\"issuingAuthority\":\"College\",\"countryId\":\"%s\"}".formatted(APPLICANT,country))).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("DRAFT")).andReturn().getResponse().getContentAsString();
         return extractId(body);
@@ -90,10 +178,10 @@ import org.springframework.mock.web.MockMultipartFile;
         @Bean JwtDecoder jwtDecoder() {
             return token-> {
                 Instant now=Instant.now();
-                UUID subject="applicant".equals(token)?APPLICANT:"other".equals(token)?OTHER:UUID.randomUUID();
-                String role="admin".equals(token)?"admin":"hospital".equals(token)?"hopital":"patient";
-                var builder=Jwt.withTokenValue(token).header("alg","RS256").subject(subject.toString()).issuer("https://keycloak.example/realms/healthys").audience(List.of("healthys-backend-apps")).issuedAt(now).expiresAt(now.plusSeconds(300)).claim("realm_access",Map.of("roles",List.of(role))).claim("given_name","Ada").claim("family_name","Lovelace").claim("email","applicant".equals(token)?"applicant@example.test":"other@example.test").claim("email_verified",true);
-                if("hospital".equals(token))builder.claim("healthys_organization_id",ORG.toString());
+                UUID subject=Set.of("applicant","unverified").contains(token)?APPLICANT:"other".equals(token)?OTHER:UUID.randomUUID();
+                String role="admin".equals(token)?"admin":token.startsWith("hospital")?"hopital":"patient";
+                var builder=Jwt.withTokenValue(token).header("alg","RS256").subject(subject.toString()).issuer("https://keycloak.example/realms/healthys").audience(List.of("healthys-backend-apps")).issuedAt(now).expiresAt(now.plusSeconds(300)).claim("realm_access",Map.of("roles",List.of(role))).claim("given_name","Ada").claim("family_name","Lovelace").claim("email",Set.of("applicant","unverified").contains(token)?"applicant@example.test":"other@example.test").claim("email_verified",!"unverified".equals(token));
+                if(token.startsWith("hospital"))builder.claim("healthys_organization_id",("hospital-other".equals(token)?FOREIGN_ORG:ORG).toString());
                 return builder.build();
             }
             ;

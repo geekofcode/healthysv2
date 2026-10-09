@@ -5,7 +5,7 @@ import {getMyDossier,listCountries,listSpecialities,onboardingKeys,saveDossier,s
 import {ApiErrorMessage} from '../components/ApiErrorMessage';
 import {useAuth} from '../auth/AuthContext';
 export function ProfessionalOnboardingPage(){
- const {t}=useTranslation();const auth=useAuth();const client=useQueryClient();const query=useQuery({queryKey:onboardingKeys.me,queryFn:getMyDossier});
+ const {t}=useTranslation();const auth=useAuth();const client=useQueryClient();const query=useQuery({queryKey:onboardingKeys.me,queryFn:getMyDossier,refetchInterval:q=>q.state.data?.status==='APPROVED'&&q.state.data.roleSyncStatus!=='SYNCED'?10000:false});
  const countries=useQuery({queryKey:['onboarding-countries'],queryFn:listCountries});const specialities=useQuery({queryKey:['onboarding-specialities'],queryFn:listSpecialities});
  const refresh=()=>client.invalidateQueries({queryKey:onboardingKeys.me});const save=useMutation({mutationFn:saveDossier,onSuccess:refresh});const upload=useMutation({mutationFn:uploadProof,onSuccess:refresh});const submit=useMutation({mutationFn:submitDossier,onSuccess:refresh});
  const [fileError,setFileError]=useState(false);const dossier=query.data;const editable=!dossier||['DRAFT','REJECTED'].includes(dossier.status);const busy=save.isPending||upload.isPending||submit.isPending;
