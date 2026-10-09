@@ -18,7 +18,7 @@ try {
   await mkdir(screenshotDirectory, {recursive:true});
   await waitForServer();
   browser = await chromium.launch({headless:true});
-  const page = await browser.newPage({viewport:{width:1440,height:1000},locale:'fr-CA'});
+  const page = await browser.newPage({viewport:{width:1440,height:1000},locale:'fr-CA',reducedMotion:'reduce'});
   // This smoke test never contacts a real identity provider or reuses a session.
   await page.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
   await page.addInitScript(() => {localStorage.setItem('i18nextLng','fr');localStorage.setItem('healthys.theme','light');});
@@ -41,7 +41,7 @@ try {
     }
   }
   // Exercise the real OIDC adapter against intercepted, test-only responses.
-  const authenticated = await browser.newContext({viewport:{width:1440,height:1000},locale:'fr-CA'});
+  const authenticated = await browser.newContext({viewport:{width:1440,height:1000},locale:'fr-CA',reducedMotion:'reduce'});
   await authenticated.addInitScript(() => {localStorage.setItem('i18nextLng','fr');});
   let nonce;
   let preference = 'LIGHT';
