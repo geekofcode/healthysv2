@@ -1,5 +1,6 @@
 import {NavLink, Outlet} from 'react-router-dom';
 
+import {canAccessPath} from '../auth/roles';
 import {useAuth} from '../auth/AuthContext';
 import {useTranslation} from 'react-i18next';
 import {NotificationBell} from '../components/NotificationBell';
@@ -15,19 +16,19 @@ export function MainLayout() {
         <nav aria-label={t('nav.main')}>
           <NavLink to="/">{t('nav.home')}</NavLink>
           <NavLink to="/me">{t('nav.profile')}</NavLink>
-          <NavLink to="/organizations">{t('nav.organizations')}</NavLink>
-          {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','DOCTOR','NURSE','PHARMACIST','LAB_TECHNICIAN')&&<NavLink to="/professionals">{t('nav.professionals')}</NavLink>}
-          {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','DOCTOR','NURSE','PHARMACIST','LAB_TECHNICIAN')&&<NavLink to="/patients">{t('nav.patients')}</NavLink>}
-          {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','DOCTOR','NURSE','PATIENT')&&<NavLink to="/agenda">{t('nav.agenda')}</NavLink>}
-          {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE')&&<NavLink to="/consultations/new">{t('nav.consultations')}</NavLink>}
-          {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE','LAB_TECHNICIAN')&&<NavLink to="/laboratory/orders">{t('nav.laboratory')}</NavLink>}
-          {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE','PATIENT')&&<NavLink to="/maternal-child">{t('nav.maternalChild')}</NavLink>}
-          {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE','PATIENT')&&<NavLink to="/documents">{t('nav.documents')}</NavLink>}
-          <NavLink to="/chat">{t('nav.chat')}</NavLink>
-          {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE','PATIENT')&&<NavLink to="/teleconsultations">{t('nav.teleconsultations')}</NavLink>}
-          {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE','PHARMACIST')&&<NavLink to="/pharmacy/prescriptions">{t('nav.pharmacy')}</NavLink>}
-          {auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','CASHIER','ACCOUNTANT','PATIENT')&&<NavLink to="/billing">{t('nav.billing')}</NavLink>}
-          {auth.hasAnyRole('PLATFORM_ADMIN')&&<NavLink to="/admin">{t('nav.admin')}</NavLink>}
+          {canAccessPath(auth.roles, '/organizations')&&<NavLink to="/organizations">{t('nav.organizations')}</NavLink>}
+          {canAccessPath(auth.roles, '/professionals')&&<NavLink to="/professionals">{t('nav.professionals')}</NavLink>}
+          {canAccessPath(auth.roles, '/patients')&&<NavLink to="/patients">{t('nav.patients')}</NavLink>}
+          {canAccessPath(auth.roles, '/agenda')&&<NavLink to="/agenda">{t('nav.agenda')}</NavLink>}
+          {canAccessPath(auth.roles, '/consultations/new')&&<NavLink to="/consultations/new">{t('nav.consultations')}</NavLink>}
+          {canAccessPath(auth.roles, '/laboratory/orders')&&<NavLink to="/laboratory/orders">{t('nav.laboratory')}</NavLink>}
+          {canAccessPath(auth.roles, '/maternal-child')&&<NavLink to="/maternal-child">{t('nav.maternalChild')}</NavLink>}
+          {canAccessPath(auth.roles, '/documents')&&<NavLink to="/documents">{t('nav.documents')}</NavLink>}
+          {canAccessPath(auth.roles, '/chat')&&<NavLink to="/chat">{t('nav.chat')}</NavLink>}
+          {canAccessPath(auth.roles, '/teleconsultations')&&<NavLink to="/teleconsultations">{t('nav.teleconsultations')}</NavLink>}
+          {canAccessPath(auth.roles, '/pharmacy/prescriptions')&&<NavLink to="/pharmacy/prescriptions">{t('nav.pharmacy')}</NavLink>}
+          {canAccessPath(auth.roles, '/billing')&&<NavLink to="/billing">{t('nav.billing')}</NavLink>}
+          {canAccessPath(auth.roles, '/admin')&&<NavLink to="/admin">{t('nav.admin')}</NavLink>}
         </nav>
         <div className="session">
           <NotificationBell />

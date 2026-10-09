@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional
 public class NotificationService {
+    private final org.novasos.healthysv2.identity.api.IdentityProvisioningService identities;
     private final JdbcTemplate jdbc;
     private final NotificationRepository repository;
     private final PushDevices devices;
@@ -34,7 +35,9 @@ public class NotificationService {
             JdbcTemplate jdbc,
             NotificationRepository repository,
             PushDevices devices,
-            SimpMessagingTemplate broker) {
+            SimpMessagingTemplate broker,
+            org.novasos.healthysv2.identity.api.IdentityProvisioningService identities) {
+        this.identities = identities;
         this.jdbc = jdbc;
         this.repository = repository;
         this.devices = devices;
@@ -179,7 +182,13 @@ public class NotificationService {
                 rs -> rs.next() ? (UUID) rs.getObject(1) : null,
                 subject);
         if (person == null) {
-            throw new AccessDeniedException("PERSON_CONTEXT_MISSING");
+            var token = jwt.getToken();
+            person = identities.provisionIdentity(subject,
+                    token.getClaimAsString("given_name"),
+                    token.getClaimAsString("family_name"),
+                    token.getClaimAsString("email"),
+                    Boolean.TRUE.equals(token.getClaimAsBoolean("email_verified"))).id();
+            requirePerson(person);
         }
         return person;
     }

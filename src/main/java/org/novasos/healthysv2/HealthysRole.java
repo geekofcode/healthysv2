@@ -6,6 +6,7 @@ public enum HealthysRole {
     NURSE,
     HOSPITAL_ADMIN,
     HOSPITAL_AGENT,
+    HOSPITAL_VIEWER,
     PHARMACIST,
     LAB_TECHNICIAN,
     CASHIER,

@@ -97,6 +97,23 @@ class SecurityIntegrationTests {
     }
 
     @Test
+    void mapsDeployedKeycloakRolesAndKeepsGestionnaireReadOnly() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/security-test")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer role-admin")).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/private/patient-test")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer role-patient")).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/private/laboratory-test")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer role-laboratoire")).andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/organizations")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer role-gestionnaire")
+                .contentType("application/json").content("{}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/admin/security-test")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer role-gestionnaire"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void allowsConfiguredCorsOrigin() throws Exception {
         mockMvc.perform(options("/api/v1/private/security-test")
                         .header(HttpHeaders.ORIGIN, "http://localhost:5173")

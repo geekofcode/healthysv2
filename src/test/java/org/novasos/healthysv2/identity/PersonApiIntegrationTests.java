@@ -10,6 +10,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import org.novasos.healthysv2.identity.api.IdentityProvisioningService;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 import org.novasos.healthysv2.TestcontainersConfiguration;
@@ -25,6 +30,10 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.junit.jupiter.api.AfterEach;
 
 @ActiveProfiles("test")
 @SpringBootTest(properties = {
@@ -53,9 +62,28 @@ class PersonApiIntegrationTests {
     @Autowired
     PersonRepository repository;
 
+    @Autowired
+    PlatformTransactionManager transactions;
+
+    private TransactionTemplate independentTransaction() {
+        TransactionTemplate template = new TransactionTemplate(transactions);
+        template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        return template;
+    }
+
+    @AfterEach
+    void removeCommittedMeFixtures() {
+        independentTransaction().executeWithoutResult(status -> {
+            repository.findByKeycloakUserId(PATIENT_SUBJECT).ifPresent(repository::delete);
+            repository.findByKeycloakUserId(UUID.fromString(
+                    "00000000-0000-0000-0000-000000000199")).ifPresent(repository::delete);
+            repository.flush();
+        });
+    }
+
     @Test
     void meReturnsThePersonLinkedToTheJwtSubject() throws Exception {
-        repository.saveAndFlush(Person.create(
+        independentTransaction().executeWithoutResult(status -> repository.saveAndFlush(Person.create(
                 "PER-ME",
                 PATIENT_SUBJECT,
                 "Ada",
@@ -63,7 +91,7 @@ class PersonApiIntegrationTests {
                 "Lovelace",
                 null,
                 null,
-                null));
+                null)));
 
         mockMvc.perform(get("/api/v1/persons/me")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer patient"))
@@ -73,6 +101,36 @@ class PersonApiIntegrationTests {
                         .value(PATIENT_SUBJECT.toString()));
     }
 
+    @Autowired
+    IdentityProvisioningService provisioning;
+
+    @Test
+    void concurrentProvisioningCreatesOnlyOneIdentity() throws Exception {
+        UUID subject = UUID.randomUUID();
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            java.util.concurrent.Callable<IdentityProvisioningService.ProvisionedPerson> request = () -> {
+                if (!start.await(10, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("Provisioning start timed out");
+                }
+                return provisioning.provisionIdentity(subject, "Ada", "Lovelace", null, false);
+            };
+            var first = executor.submit(request);
+            var second = executor.submit(request);
+            start.countDown();
+            var firstResult = first.get(20, TimeUnit.SECONDS);
+            var secondResult = second.get(20, TimeUnit.SECONDS);
+            assertThat(firstResult.id()).isEqualTo(secondResult.id());
+            assertThat(List.of(firstResult.created(), secondResult.created()))
+                    .containsExactlyInAnyOrder(true, false);
+        } finally {
+            independentTransaction().executeWithoutResult(status -> {
+                repository.findByKeycloakUserId(subject).ifPresent(repository::delete);
+                repository.flush();
+            });
+        }
+    }
+
     @Test
     void meRequiresAuthentication() throws Exception {
         mockMvc.perform(get("/api/v1/persons/me"))
@@ -80,11 +138,19 @@ class PersonApiIntegrationTests {
     }
 
     @Test
-    void meReturnsNotFoundForAnUnprovisionedUser() throws Exception {
+    void meProvisionsAnUnprovisionedUserIdempotently() throws Exception {
+
         mockMvc.perform(get("/api/v1/persons/me")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer unknown"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.firstName").value("Ada"))
+                .andExpect(jsonPath("$.lastName").value("Lovelace"));
+        UUID subject = UUID.fromString("00000000-0000-0000-0000-000000000199");
+        UUID personId = repository.findByKeycloakUserId(subject).orElseThrow().getId();
+        mockMvc.perform(get("/api/v1/persons/me")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer unknown"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(personId.toString()));
     }
 
     @Test
@@ -168,6 +234,10 @@ class PersonApiIntegrationTests {
                     .audience(List.of("healthys-api"))
                     .issuedAt(now)
                     .expiresAt(now.plusSeconds(300))
+                    .claim("given_name", "Ada")
+                    .claim("family_name", "Lovelace")
+                    .claim("email", "ada@example.test")
+                    .claim("email_verified", true)
                     .claim("realm_access", Map.of("roles", roles))
                     .claim("resource_access", Map.of())
                     .build();

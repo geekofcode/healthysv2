@@ -120,6 +120,26 @@ class NotificationApiIntegrationTests {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    void firstNotificationRequestProvisionsIdentityWithoutCallingMe() throws Exception {
+        UUID subject = UUID.randomUUID();
+        JwtFixtures.SUBJECTS.put("first-login", subject);
+        try {
+            mvc.perform(get("/api/v1/notifications/unread-count")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer first-login"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.unreadCount").value(0));
+            mvc.perform(get("/api/v1/notifications/unread-count")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer first-login"))
+                    .andExpect(status().isOk());
+            assertThat(jdbc.queryForObject("select count(*) from identity.person where keycloak_user_id=?", Integer.class, subject)).isEqualTo(1);
+        } finally {
+            jdbc.update("delete from identity.person where keycloak_user_id=?", subject);
+            JwtFixtures.SUBJECTS.remove("first-login");
+        }
+    }
+
     private UUID person(String token) {
         UUID id = UUID.randomUUID();
         jdbc.update(

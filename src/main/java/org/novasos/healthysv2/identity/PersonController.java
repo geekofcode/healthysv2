@@ -9,7 +9,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.novasos.healthysv2.identity.api.IdentityProvisioningService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,8 +30,11 @@ class PersonController {
 
     private final PersonService service;
 
-    PersonController(PersonService service) {
+    private final IdentityProvisioningService provisioning;
+
+    PersonController(PersonService service, IdentityProvisioningService provisioning) {
         this.service = service;
+        this.provisioning = provisioning;
     }
 
     @PostMapping
@@ -56,13 +60,21 @@ class PersonController {
 
     @GetMapping("/me")
     @Operation(summary = "Return the person linked to the authenticated user")
-    PersonResponse me(@AuthenticationPrincipal Jwt jwt) {
+    PersonResponse me(JwtAuthenticationToken authentication) {
+        Jwt jwt = authentication.getToken();
+        UUID subject;
         try {
-            return service.findMe(UUID.fromString(jwt.getSubject()));
+            subject = UUID.fromString(jwt.getSubject());
         } catch (IllegalArgumentException exception) {
             throw new BusinessRuleException(
                     "INVALID_IDENTITY_SUBJECT",
                     "error.identity.subject.invalid");
         }
+        provisioning.provisionIdentity(subject,
+                jwt.getClaimAsString("given_name"),
+                jwt.getClaimAsString("family_name"),
+                jwt.getClaimAsString("email"),
+                Boolean.TRUE.equals(jwt.getClaimAsBoolean("email_verified")));
+        return service.findMe(subject);
     }
 }

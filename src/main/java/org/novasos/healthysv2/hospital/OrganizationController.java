@@ -16,7 +16,7 @@ import org.novasos.healthysv2.shared.api.dto.PageResponse;
 @RestController
 @RequestMapping(ApiPaths.V1 + "/organizations")
 @Tag(name="Organizations", description="Organizations, departments, services, rooms and beds")
-@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','PROFESSIONAL')")
+@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','HOSPITAL_VIEWER','PROFESSIONAL','DOCTOR','NURSE','LAB_TECHNICIAN')")
 class OrganizationController {
     private static final String WRITE = "hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN')";
     private final OrganizationService service;

@@ -1,5 +1,7 @@
 import {Navigate, Outlet, useLocation} from 'react-router-dom';
 
+import {canAccessPath} from './roles';
+
 import {useAuth} from './AuthContext';
 import {useTranslation} from 'react-i18next';
 
@@ -20,6 +22,10 @@ export function ProtectedRoute() {
         state={{from: location.pathname}}
       />
     );
+  }
+
+  if (!canAccessPath(auth.roles, location.pathname)) {
+    return <Navigate to="/" replace />;
   }
 
   return <Outlet />;

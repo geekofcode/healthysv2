@@ -163,6 +163,9 @@ class SecurityConfiguration {
             Collection<GrantedAuthority> authorities,
             Collection<String> roles) {
         roles.stream()
+                .map(KeycloakRoleMapping::canonicalRole)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
                 .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
                 .forEach(authorities::add);
     }

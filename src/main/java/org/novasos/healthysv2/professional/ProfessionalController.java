@@ -5,7 +5,7 @@ import io.swagger.v3.oas.annotations.*; import io.swagger.v3.oas.annotations.tag
 import org.springframework.data.domain.Pageable; import org.springframework.http.ResponseEntity; import org.springframework.security.access.prepost.PreAuthorize; import org.springframework.web.bind.annotation.*;
 import org.novasos.healthysv2.shared.api.ApiPaths; import org.novasos.healthysv2.shared.api.dto.PageResponse;
 @RestController @RequestMapping(ApiPaths.V1+"/professionals") @Tag(name="Professionals",description="Professionals, licences, specialities, assignments, schedules and availabilities")
-@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','DOCTOR','NURSE','PHARMACIST','LAB_TECHNICIAN')")
+@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','HOSPITAL_VIEWER','DOCTOR','NURSE','PHARMACIST','LAB_TECHNICIAN')")
 class ProfessionalController {
  private static final String WRITE="hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN')"; private final ProfessionalService service; ProfessionalController(ProfessionalService s){service=s;}
  @GetMapping @Operation(summary="Search professionals") PageResponse<ProfessionalSummary> list(@RequestParam(defaultValue="") String query,Pageable pageable){return service.findAll(query,pageable);}
