@@ -1,6 +1,6 @@
 import {chromium} from 'playwright';
 import {spawn} from 'node:child_process';
-import {mkdir} from 'node:fs/promises';
+import {mkdir,writeFile} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 
 const origin = 'http://127.0.0.1:4173';
@@ -57,9 +57,10 @@ try {
       return route.fulfill({status:302,headers:{location:target}});
     }
     if (url.pathname.endsWith('/openid-connect/token')) {
+      if (route.request().method() === 'OPTIONS') return route.fulfill({status:204,headers:{'access-control-allow-origin':origin,'access-control-allow-credentials':'true','access-control-allow-methods':'POST,OPTIONS','access-control-allow-headers':'content-type'}});
       const now = Math.floor(Date.now()/1000);
       const token = jwt({sub:subject,iat:now,exp:now+3600,nonce,name:'Camille Martin',preferred_username:'camille',realm_access:{roles:['admin']}});
-      return route.fulfill({contentType:'application/json',headers:{'access-control-allow-origin':origin},body:JSON.stringify({access_token:token,id_token:token,refresh_token:token,token_type:'Bearer',expires_in:3600})});
+      return route.fulfill({contentType:'application/json',headers:{'access-control-allow-origin':origin,'access-control-allow-credentials':'true'},body:JSON.stringify({access_token:token,id_token:token,refresh_token:token,token_type:'Bearer',expires_in:3600})});
     }
     if (url.origin !== origin) return route.abort();
     if (!url.pathname.startsWith('/api/')) return route.continue();
@@ -75,8 +76,20 @@ try {
     return route.fulfill({contentType:'application/json',body:JSON.stringify(data)});
   });
   const workspace = await authenticated.newPage();
+  const diagnostics = [];
+  workspace.on('console', message => diagnostics.push(`console ${message.type()}: ${message.text()}`));
+  workspace.on('pageerror', error => diagnostics.push(`pageerror: ${error.message}`));
+  workspace.on('requestfailed', request => diagnostics.push(`requestfailed: ${request.url()} ${request.failure()?.errorText}`));
+  workspace.on('response', response => {if (response.url().includes('/openid-connect/') || response.url().includes('/api/')) diagnostics.push(`response ${response.status()}: ${response.url()}`);});
   await workspace.goto(`${origin}/organizations`);
-  await workspace.getByRole('cell',{name:'Clinique du Parc',exact:true}).waitFor();
+  try {await workspace.getByRole('cell',{name:'Clinique du Parc',exact:true}).waitFor();}
+  catch (error) {
+    await workspace.screenshot({path:`${screenshotDirectory}/authenticated-failure.png`,fullPage:true});
+    diagnostics.push(`final URL: ${workspace.url()}`,await workspace.locator('body').innerText());
+    await writeFile(`${screenshotDirectory}/authenticated-diagnostics.txt`,diagnostics.join('\n'));
+    console.error(diagnostics.join('\n'));
+    throw error;
+  }
   for (const [device,width,height] of [['desktop',1440,1000],['mobile',390,844]]) {
     await workspace.setViewportSize({width,height});
     for (const theme of ['light','dark']) {
@@ -91,12 +104,15 @@ try {
   await workspace.goto(`${origin}/organizations/new`);
   await workspace.locator('form.entity-form').waitFor();
   await workspace.getByRole('option',{name:'Clinique',exact:true}).waitFor({state:'attached'});
-  for (const theme of ['light','dark']) {
+  for (const [device,width,height] of [['desktop',1440,1000],['mobile',390,844]]) {
+    await workspace.setViewportSize({width,height});
+    for (const theme of ['light','dark']) {
     await workspace.getByRole('combobox',{name:'Thème d’affichage'}).selectOption(theme);
     await workspace.waitForFunction(expected => document.documentElement.dataset.theme === expected,theme);
     assert.equal(await workspace.evaluate(()=>document.documentElement.scrollWidth > innerWidth),false);
-    await workspace.screenshot({path:`${screenshotDirectory}/organization-form-desktop-${theme}.png`,fullPage:true});
-    console.log(`PASS organization form ${theme}`);
+    await workspace.screenshot({path:`${screenshotDirectory}/organization-form-${device}-${theme}.png`,fullPage:true});
+    console.log(`PASS organization form ${device}/${theme}`);
+    }
   }
   await authenticated.close();
 } finally {

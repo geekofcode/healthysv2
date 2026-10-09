@@ -214,3 +214,15 @@ table {border:1px solid var(--border);border-radius:10px;overflow:hidden}td .but
 .login-card .button-secondary,.button.secondary,button.secondary {background:var(--soft);color:var(--primary)}
 .login-card .button-secondary:hover:not(:disabled),.button.secondary:hover,button.secondary:hover:not(:disabled) {background:#dce9ff;color:#1746a2;filter:none}
 :root[data-theme="dark"] .login-card .button-secondary:hover:not(:disabled),:root[data-theme="dark"] .button.secondary:hover,:root[data-theme="dark"] button.secondary:hover:not(:disabled) {background:#2a4770;color:#c5dcff;filter:none}
+
+/* Sections keep related fields together without stretching individual controls. */
+.entity-form fieldset {grid-column:1/-1;min-width:0;margin:0;border:1px solid var(--border);border-radius:8px;padding:1rem 1.15rem 1.2rem;background:var(--surface)}
+.entity-form legend {padding:0 .4rem;color:var(--text);font-size:.93rem;font-weight:650}
+.form-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:1rem 1.2rem;align-items:start}
+.form-grid+.form-grid {margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)}
+.relation-picker {display:grid;gap:.55rem;min-width:0}.search-form>.relation-picker {flex:1;min-width:180px}
+.inline-actions {display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+input[type="checkbox"],input[type="radio"] {width:16px;min-width:16px;height:16px;min-height:16px;padding:0;accent-color:var(--primary)}
+.entity-form .checkbox-label,.entity-form .check-field {display:flex;align-items:center;gap:.6rem;min-height:38px}
+.form-grid>button {justify-self:start}.entity-form fieldset>button {margin-top:.85rem}
+@media(max-width:600px){.entity-form {grid-template-columns:1fr;padding:1rem}.form-grid {grid-template-columns:1fr}.entity-form fieldset {padding:.85rem}.search-form>.relation-picker {min-width:100%}}
