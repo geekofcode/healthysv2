@@ -61,7 +61,12 @@ jobs:
   frontend:
     name: Node 24 / Vite build
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    env:
+      VITE_KEYCLOAK_URL: https://keycloak.invalid
+      VITE_KEYCLOAK_REALM: healthys
+      VITE_KEYCLOAK_CLIENT_ID: healthys-web-apps
+      VITE_API_BASE_URL: /api/v1
 
     defaults:
       run:
@@ -86,6 +91,20 @@ jobs:
 
       - name: Build application
         run: npm run build
+
+      - name: Install Chromium for visual checks
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify desktop and mobile themes
+        run: npm run test:visual
+
+      - name: Upload UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots
+          path: frontend/ui-screenshots/
+          if-no-files-found: warn
 
   containers:
     name: Docker Compose build

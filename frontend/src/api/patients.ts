@@ -13,7 +13,7 @@ export type Flag={id:string;flagType:string;label:string;severity?:string;active
 export type Patient=PatientSummary&{maritalStatus?:string;occupation?:string;identifiers:Identifier[];insurances:Insurance[];registrations:Registration[];allergies:Allergy[];chronicDiseases:ChronicDisease[];medicalHistories:MedicalHistory[];surgicalHistories:unknown[];familyHistories:unknown[];disabilities:unknown[];notes:Note[];flags:Flag[]};
 export type PatientInput={personId:string;bloodGroup?:string;rhesus?:string;maritalStatus?:string;occupation?:string;status?:string};
 export const patientKeys={all:['patients'] as const,list:(query:string)=>['patients','list',query] as const,detail:(id:string)=>['patients',id] as const};
-export const listPatients=(query='')=>apiRequest<Page<PatientSummary>>(`/patients?size=100&sort=patientNumber,asc&query=${encodeURIComponent(query)}`);
+export const listPatients=(query='',page=0,size=100)=>apiRequest<Page<PatientSummary>>(`/patients?size=${size}&page=${page}&sort=patientNumber,asc&query=${encodeURIComponent(query)}`);
 export const getPatient=(id:string)=>apiRequest<Patient>(`/patients/${id}`);
 export const createPatient=(input:PatientInput)=>apiRequest<Patient>('/patients',{method:'POST',body:JSON.stringify(input)});
 const add=<T>(patient:string,path:string,input:unknown)=>apiRequest<T>(`/patients/${patient}/${path}`,{method:'POST',body:JSON.stringify(input)});
@@ -25,3 +25,6 @@ export const addChronicDisease=(p:string,input:Omit<ChronicDisease,'id'>)=>add<C
 export const addMedicalHistory=(p:string,input:Omit<MedicalHistory,'id'>)=>add<MedicalHistory>(p,'medical-histories',input);
 export const addNote=(p:string,input:Omit<Note,'id'|'createdAt'>)=>add<Note>(p,'notes',input);
 export const addFlag=(p:string,input:Omit<Flag,'id'|'createdAt'>)=>add<Flag>(p,'flags',input);
+
+export const deletePatient=(id:string)=>apiRequest<void>(`/patients/${id}`,{method:"DELETE"});
+export const updatePatient=(id:string,input:Omit<PatientInput,"personId">)=>apiRequest<Patient>(`/patients/${id}`,{method:"PUT",body:JSON.stringify(input)});

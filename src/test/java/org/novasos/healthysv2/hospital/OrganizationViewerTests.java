@@ -20,7 +20,7 @@ class OrganizationViewerTests {
     @Test
     void viewerCannotReadWithoutOrganizationContext() {
         when(users.current()).thenReturn(new CurrentUserContext.UserContext(null, null, Set.of("HOSPITAL_VIEWER")));
-        assertThatThrownBy(() -> service.findAll(PageRequest.of(0, 10))).isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> service.findAll("", "", PageRequest.of(0, 10))).isInstanceOf(AccessDeniedException.class);
         verifyNoInteractions(repository);
     }
 
@@ -29,9 +29,9 @@ class OrganizationViewerTests {
         UUID organization = UUID.randomUUID();
         var pageable = PageRequest.of(0, 10);
         when(users.current()).thenReturn(new CurrentUserContext.UserContext(null, organization, Set.of("HOSPITAL_VIEWER")));
-        when(repository.findById(organization, pageable)).thenReturn(Page.empty(pageable));
-        service.findAll(pageable);
-        verify(repository).findById(organization, pageable);
+        when(repository.search(organization, "", "", pageable)).thenReturn(Page.empty(pageable));
+        service.findAll("", "", pageable);
+        verify(repository).search(organization, "", "", pageable);
         verify(repository, never()).findAll(pageable);
         assertThatThrownBy(() -> service.find(UUID.randomUUID())).isInstanceOf(AccessDeniedException.class);
     }

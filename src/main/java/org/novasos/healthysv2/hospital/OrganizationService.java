@@ -33,9 +33,9 @@ class OrganizationService {
         return response(organizations.save(Organization.create(request.number(), request.name(), request.legalName(),
                 request.organizationTypeId(), request.phone(), request.email(), request.website(), request.status())));
     }
-    @Transactional(readOnly=true) PageResponse<OrganizationSummary> findAll(Pageable pageable) {
+    @Transactional(readOnly=true) PageResponse<OrganizationSummary> findAll(String query, String status, Pageable pageable) {
         var viewer = viewerOrganization();
-        var page = viewer == null ? organizations.findAll(pageable) : organizations.findById(viewer, pageable);
+        var page = organizations.search(viewer, query.trim(), status.trim(), pageable);
         return PageResponse.from(page.map(this::summary));
     }
     @Transactional(readOnly=true) OrganizationResponse find(UUID id) {

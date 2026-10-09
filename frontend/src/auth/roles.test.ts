@@ -24,6 +24,12 @@ describe('Keycloak application roles', () => {
     expect(canAccessPath(roles, '/organizations')).toBe(false);
     expect(canAccessPath(roles, '/admin')).toBe(false);
   });
+  it('restricts professional mutations to platform administrators and patient changes to administrative staff', () => {
+    expect(canAccessPath(['HOSPITAL_ADMIN'], '/professionals/123/edit')).toBe(false);
+    expect(canAccessPath(['PLATFORM_ADMIN'], '/professionals/123/edit')).toBe(true);
+    expect(canAccessPath(['DOCTOR'], '/patients/123/edit')).toBe(false);
+    expect(canAccessPath(['HOSPITAL_AGENT'], '/patients/123/edit')).toBe(true);
+  });
   it('allows accounting without clinical privileges', () => {
     const roles = applicationRoles(['comptable']);
     expect(canAccessPath(roles, '/billing')).toBe(true);

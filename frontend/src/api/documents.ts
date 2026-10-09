@@ -6,7 +6,7 @@ import i18n from '../i18n';
 export type HealthDocument={id:string;documentNumber:string;patientId:string;categoryId?:string;categoryCode?:string;categoryName?:string;fileName:string;mimeType:string;sizeBytes:number;checksum:string;uploadedBy?:string;uploadedAt:string;status:string};
 export type DocumentCategory={id:string;code:string;name:string};
 export const documentKeys={list:(patientId:string)=>['documents',patientId] as const,categories:['documents','categories'] as const};
-export const listDocuments=(patientId:string)=>apiRequest<Page<HealthDocument>>(`/documents?patientId=${encodeURIComponent(patientId)}&size=50&sort=uploadedAt,desc`);
+export const listDocuments=(patientId:string,page=0)=>apiRequest<Page<HealthDocument>>(`/documents?patientId=${encodeURIComponent(patientId)}&size=20&page=${page}&sort=uploadedAt,desc`);
 export const listDocumentCategories=()=>apiRequest<DocumentCategory[]>('/documents/categories');
 export async function uploadDocument(patientId:string,categoryId:string,file:File){const body=new FormData();body.append('file',file);const params=new URLSearchParams({patientId});if(categoryId)params.set('categoryId',categoryId);return apiRequest<HealthDocument>(`/documents?${params}`,{method:'POST',body});}
 export const archiveDocument=(id:string)=>apiRequest<HealthDocument>(`/documents/${id}/archive`,{method:'POST'});

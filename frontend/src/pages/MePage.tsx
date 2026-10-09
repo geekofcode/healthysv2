@@ -1,47 +1,46 @@
-import {useQuery} from '@tanstack/react-query';
-
-import {getMe} from '../api/persons';
-import {ApiErrorMessage} from '../components/ApiErrorMessage';
+import {useState,type FormEvent} from 'react';
+import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query';
 import {useTranslation} from 'react-i18next';
+import {getMyProfile,updateMyProfile,type MyProfile,type ProfileInput} from '../api/persons';
+import {getPreferences,updatePreferences,type PersonPreferences} from '../api/preferences';
+import {ThemeSwitch} from '../components/ThemeSwitch';
+import {ApiErrorMessage} from '../components/ApiErrorMessage';
 
-export function MePage() {
-  const {t} = useTranslation();
-  const query = useQuery({
-    queryKey: ['person', 'me'],
-    queryFn: getMe,
-  });
+export function MePage(){
+ const {t}=useTranslation();
+ const query=useQuery({queryKey:['person','me','profile'],queryFn:getMyProfile});
+ if(query.isPending)return <p>{t('profile.loading')}</p>;
+ if(query.isError)return <ApiErrorMessage error={query.error}/>;
+ return <ProfileEditor key={query.data.person.id} profile={query.data}/>;
+}
+function ProfileEditor({profile}:{profile:MyProfile}){
+ const {t,i18n}=useTranslation();const cache=useQueryClient();const fr=i18n.language.startsWith('fr');
+ const label=(key:string,frText:string|undefined,enText:string|undefined)=>t(`profile.${key}`,(fr?frText:enText)??key);
+ const [saved,setSaved]=useState(false);
+ const [form,setForm]=useState<ProfileInput>(()=>({firstName:profile.person.firstName,middleName:profile.person.middleName??'',lastName:profile.person.lastName,gender:profile.person.gender??'',birthDate:profile.person.birthDate??'',preferredLanguageId:profile.person.preferredLanguageId??'',contacts:profile.person.contacts.map(({id,...contact})=>contact),emergencyContacts:profile.person.emergencyContacts.map(({id,...contact})=>contact),homeAddress:profile.homeAddress??{line1:'',line2:'',city:'',province:'',postalCode:'',countryId:''}}));
+ const mutation=useMutation({mutationFn:updateMyProfile,onSuccess:async()=>{setSaved(true);await cache.invalidateQueries({queryKey:['person','me']})}});
+ const submit=(event:FormEvent)=>{event.preventDefault();setSaved(false);mutation.mutate({...form,middleName:form.middleName||undefined,gender:form.gender||undefined,birthDate:form.birthDate||undefined,preferredLanguageId:form.preferredLanguageId||undefined,homeAddress:form.homeAddress?.line1.trim()?{...form.homeAddress,countryId:form.homeAddress.countryId||undefined}:undefined})};
+ const update=(key:keyof ProfileInput,value:string)=>{setSaved(false);setForm({...form,[key]:value})};
+ return <section><div className="page-heading"><div><p className="eyebrow">{t('profile.eyebrow')}</p><h1>{label('title','Mon profil','My profile')}</h1><p>{profile.person.firstName} {profile.person.lastName} · {profile.person.personNumber}</p></div><span className="status-badge">{profile.person.status}</span></div>
+ <form className="entity-form profile-form" onSubmit={submit}>
+ <fieldset><legend>{label('identity','Identité','Identity')}</legend><div className="form-grid">
+ {(['firstName','middleName','lastName'] as const).map((key,index)=><label key={key}>{label(key,['Prénom','Deuxième prénom','Nom'][index],['First name','Middle name','Last name'][index])}<input autoComplete={['given-name','additional-name','family-name'][index]} required={key!=='middleName'} maxLength={120} value={form[key]??''} onChange={e=>update(key,e.target.value)}/></label>)}
+ <label>{label('birthDate','Date de naissance','Date of birth')}<input type="date" max={new Date().toISOString().slice(0,10)} value={form.birthDate??''} onChange={e=>update('birthDate',e.target.value)}/></label>
+ <label>{label('gender','Sexe','Sex')}<select value={form.gender??''} onChange={e=>update('gender',e.target.value)}><option value="">—</option>{[['male','Masculin','Male'],['female','Féminin','Female'],['other','Autre','Other'],['unspecified','Non précisé','Unspecified']].map(([value,f,e])=><option key={value} value={value}>{fr?f:e}</option>)}{form.gender&&!['male','female','other','unspecified'].includes(form.gender)&&<option value={form.gender}>{form.gender}</option>}</select></label>
+ <label>{label('language','Langue préférée','Preferred language')}<select value={form.preferredLanguageId??''} onChange={e=>update('preferredLanguageId',e.target.value)}><option value="">—</option>{profile.languages.map(language=><option key={language.id} value={language.id}>{language.label}</option>)}</select></label></div></fieldset>
+ <fieldset><legend>{label('address','Adresse personnelle','Home address')}</legend><div className="form-grid">{(['line1','line2','city','province','postalCode'] as const).map((key,index)=><label key={key}>{label(key,['Adresse','Complément','Ville','Province / région','Code postal'][index],['Address','Address line 2','City','Province / region','Postal code'][index])}<input required={key==='city'&&!!form.homeAddress?.line1.trim()} maxLength={key==='postalCode'?30:key==='province'||key==='city'?150:255} value={form.homeAddress?.[key]??''} onChange={e=>setForm({...form,homeAddress:{...form.homeAddress!,[key]:e.target.value}})}/></label>)}<label>{label('country','Pays','Country')}<select value={form.homeAddress?.countryId??''} onChange={e=>setForm({...form,homeAddress:{...form.homeAddress!,countryId:e.target.value}})}><option value="">—</option>{profile.countries.map(country=><option key={country.id} value={country.id}>{country.name}</option>)}</select></label></div></fieldset>
+ <fieldset><legend>{label('contacts','Coordonnées','Contact details')}</legend>{form.contacts.map((contact,index)=><div className="form-grid" key={index}><label>{label('contactType','Type','Type')}<select value={contact.type} onChange={e=>setForm({...form,contacts:form.contacts.map((c,i)=>i===index?{...c,type:e.target.value}:c)})}>{['EMAIL','PHONE','MOBILE'].map(type=><option key={type}>{type}</option>)}{!['EMAIL','PHONE','MOBILE'].includes(contact.type)&&<option>{contact.type}</option>}</select></label><label>{label('contactValue','Coordonnée','Contact')}<input required maxLength={255} type={contact.type==='EMAIL'?'email':'tel'} value={contact.value} onChange={e=>setForm({...form,contacts:form.contacts.map((c,i)=>i===index?{...c,value:e.target.value,verified:false}:c)})}/></label><label className="checkbox-label"><input type="checkbox" checked={contact.primary} onChange={e=>setForm({...form,contacts:form.contacts.map((c,i)=>i===index?{...c,primary:e.target.checked}:c)})}/>{label('primary','Principal','Primary')}</label><button type="button" className="danger" onClick={()=>setForm({...form,contacts:form.contacts.filter((_,i)=>i!==index)})}>{t('common.delete')}</button></div>)}<button type="button" className="button-secondary" onClick={()=>setForm({...form,contacts:[...form.contacts,{type:'PHONE',value:'',primary:false,verified:false}]})}>{label('addContact','Ajouter une coordonnée','Add contact')}</button></fieldset>
+ <fieldset><legend>{label('emergencyContacts','Contacts d’urgence','Emergency contacts')}</legend>{form.emergencyContacts.map((contact,index)=><div className="form-grid" key={index}>{(['firstName','lastName','relationship','phone','email'] as const).map((key,field)=><label key={key}>{label(`emergency${key}`,['Prénom','Nom','Lien avec la personne','Téléphone','Courriel'][field],['First name','Last name','Relationship','Phone','Email'][field])}<input required={key==='firstName'||key==='phone'} type={key==='email'?'email':key==='phone'?'tel':'text'} maxLength={key==='email'?255:key==='phone'?50:key==='relationship'?80:120} value={contact[key]??''} onChange={e=>setForm({...form,emergencyContacts:form.emergencyContacts.map((c,i)=>i===index?{...c,[key]:e.target.value}:c)})}/></label>)}<button type="button" className="danger" onClick={()=>setForm({...form,emergencyContacts:form.emergencyContacts.filter((_,i)=>i!==index)})}>{t('common.delete')}</button></div>)}<button type="button" className="button-secondary" onClick={()=>setForm({...form,emergencyContacts:[...form.emergencyContacts,{firstName:'',lastName:'',phone:'',email:'',relationship:''}]})}>{label('addEmergency','Ajouter un contact d’urgence','Add emergency contact')}</button></fieldset>
+ {mutation.isError&&<ApiErrorMessage error={mutation.error}/>} {saved&&<p role="status">{label('saved','Profil enregistré.','Profile saved.')}</p>}<div className="form-actions"><button disabled={mutation.isPending}>{t('common.save')}</button></div></form><ProfileAppearance/></section>;
+}
 
-  if (query.isPending) {
-    return <p>{t('profile.loading')}</p>;
-  }
-
-  if (query.isError) {
-    return <ApiErrorMessage error={query.error} />;
-  }
-
-  const person = query.data;
-  return (
-    <section>
-      <p className="eyebrow">{t('profile.eyebrow')}</p>
-      <h1>{person.firstName} {person.lastName}</h1>
-      <dl className="profile-grid">
-        <div>
-          <dt>{t('profile.number')}</dt>
-          <dd>{person.personNumber}</dd>
-        </div>
-        <div>
-          <dt>{t('profile.status')}</dt>
-          <dd>{person.status}</dd>
-        </div>
-        <div>
-          <dt>{t('profile.contacts')}</dt>
-          <dd>{person.contacts.length}</dd>
-        </div>
-        <div>
-          <dt>{t('profile.emergencyContacts')}</dt>
-          <dd>{person.emergencyContacts.length}</dd>
-        </div>
-      </dl>
-    </section>
-  );
+function ProfileAppearance(){
+ const {i18n}=useTranslation();const fr=i18n.language.startsWith('fr');const cache=useQueryClient();const preferences=useQuery({queryKey:['person','preferences'],queryFn:getPreferences});
+ if(preferences.isError)return <ApiErrorMessage error={preferences.error}/>;
+ if(!preferences.data)return null;
+ return <AppearanceEditor key={preferences.data.avatarUrl??'no-photo'} preferences={preferences.data} fr={fr} onSaved={saved=>cache.setQueryData(['person','preferences'],saved)}/>;
+}
+function AppearanceEditor({preferences,fr,onSaved}:{preferences:PersonPreferences;fr:boolean;onSaved:(saved:PersonPreferences)=>void}){
+ const [avatarUrl,setAvatarUrl]=useState(preferences.avatarUrl??'');const [saved,setSaved]=useState(false);const mutation=useMutation({mutationFn:updatePreferences,onSuccess:result=>{onSaved(result);setSaved(true)}});
+ return <form className="entity-form" onSubmit={e=>{e.preventDefault();mutation.mutate({theme:preferences.theme,avatarUrl:avatarUrl.trim()||null})}}><fieldset><legend>{fr?'Personnalisation':'Personalization'}</legend><div className="form-grid"><label>{fr?'Photo de profil (lien HTTPS)':'Profile photo (HTTPS link)'}<input type="url" pattern="https://.*" maxLength={2048} placeholder="https://…" value={avatarUrl} onChange={e=>{setSaved(false);setAvatarUrl(e.target.value)}}/></label><div><p>{fr?'Thème d’affichage':'Display theme'}</p><ThemeSwitch authenticated/></div></div></fieldset>{mutation.isError&&<ApiErrorMessage error={mutation.error}/>} {saved&&<p role="status">{fr?'Préférences enregistrées.':'Preferences saved.'}</p>}<button disabled={mutation.isPending}>{fr?'Enregistrer la personnalisation':'Save personalization'}</button></form>;
 }

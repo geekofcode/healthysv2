@@ -26,17 +26,10 @@ class PatientProvisioningService {
             String lastName,
             String email,
             boolean emailVerified) {
-        return provision(subject, firstName, lastName, email, emailVerified,
-                IdentityProvisioningService.RegistrationProfile.empty());
-    }
-
-    PatientProvisionResponse provision(UUID subject, String firstName, String lastName,
-            String email, boolean emailVerified,
-            IdentityProvisioningService.RegistrationProfile profile) {
         requireName(firstName, "FIRST_NAME_REQUIRED");
         requireName(lastName, "LAST_NAME_REQUIRED");
         var identity = identities.provisionPatientIdentity(
-                subject, firstName, lastName, email, emailVerified, profile);
+                subject, firstName, lastName, email, emailVerified);
         return patients.findByPersonId(identity.id())
                 .map(patient -> response(patient, false))
                 .orElseGet(() -> response(

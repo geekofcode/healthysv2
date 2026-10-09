@@ -1,3 +1,6 @@
+import {getPreferences} from '../api/preferences';
+import {ThemeSwitch} from '../components/ThemeSwitch';
+import {Breadcrumbs} from '../components/Breadcrumbs';
 import {OrganizationContext} from '../components/OrganizationContext';
 import {useEffect, useRef, useState} from 'react';
 import {NavLink, Outlet, useLocation} from 'react-router-dom';
@@ -20,8 +23,9 @@ export function MainLayout() {
   const avatarRef = useRef<HTMLButtonElement>(null);
   const navigationRef = useRef<HTMLButtonElement>(null);
   const person = useQuery({queryKey: ['person', 'me'], queryFn: getMe});
+  const preferences = useQuery({queryKey:['person','preferences'],queryFn:getPreferences});
   const fullName = person.data ? [person.data.firstName, person.data.middleName, person.data.lastName].filter(Boolean).join(' ') : String(keycloak.tokenParsed?.name || auth.username || t('nav.profile'));
-  const picture = typeof keycloak.tokenParsed?.picture === 'string' ? keycloak.tokenParsed.picture : undefined;
+  const picture = preferences.data?.avatarUrl ?? undefined;
 
   useEffect(() => {setSidebarOpen(false); setProfileOpen(false);}, [location.pathname]);
   useEffect(() => {setImageFailed(false);}, [picture]);
@@ -49,6 +53,7 @@ export function MainLayout() {
         </div>
         <div className="session">
           <span className="session-name">{fullName}</span>
+          <ThemeSwitch authenticated />
           <NotificationBell />
           <div className="profile-menu" ref={profileRef} onBlur={event => {if (!event.currentTarget.contains(event.relatedTarget as Node)) setProfileOpen(false);}}>
             <button ref={avatarRef} type="button" className="profile-avatar" aria-label={t('shell.accountMenu')} aria-expanded={profileOpen} aria-controls="account-dropdown" onClick={() => setProfileOpen(!profileOpen)}>
@@ -88,7 +93,7 @@ export function MainLayout() {
         </nav>
         </aside>
         {sidebarOpen && <button className="sidebar-backdrop" type="button" aria-label={t('shell.closeNavigation')} onClick={() => {setSidebarOpen(false); navigationRef.current?.focus();}} />}
-        <main className="content" id="main-content" tabIndex={-1}><Outlet /></main>
+        <main className="content" id="main-content" tabIndex={-1}><Breadcrumbs /><Outlet /></main>
       </div>
     </div>
   );

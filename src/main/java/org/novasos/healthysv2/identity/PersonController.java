@@ -74,18 +74,41 @@ class PersonController {
                 jwt.getClaimAsString("given_name"),
                 jwt.getClaimAsString("family_name"),
                 jwt.getClaimAsString("email"),
-                Boolean.TRUE.equals(jwt.getClaimAsBoolean("email_verified")),
-                new org.novasos.healthysv2.identity.api.IdentityProvisioningService.RegistrationProfile(
-                        jwt.getClaimAsString("middle_name"), jwt.getClaimAsString("birthdate"),
-                        jwt.getClaimAsString("gender"), jwt.getClaimAsString("phone_number"),
-                        jwt.getClaimAsString("locale"),
-                        new org.novasos.healthysv2.identity.api.IdentityProvisioningService.RegistrationAddress(
-                                jwt.getClaimAsString("healthys_address_line1"),
-                                jwt.getClaimAsString("healthys_address_line2"),
-                                jwt.getClaimAsString("healthys_address_city"),
-                                jwt.getClaimAsString("healthys_address_province"),
-                                jwt.getClaimAsString("healthys_address_postal_code"),
-                                jwt.getClaimAsString("healthys_address_country"))));
+                Boolean.TRUE.equals(jwt.getClaimAsBoolean("email_verified")));
         return service.findMe(subject);
     }
+    @GetMapping("/me/profile")
+    org.novasos.healthysv2.identity.api.PersonProfileResponse profile(JwtAuthenticationToken authentication) {
+        me(authentication);
+        return service.profile(UUID.fromString(authentication.getToken().getSubject()));
+    }
+
+    @org.springframework.web.bind.annotation.PutMapping("/me")
+    org.novasos.healthysv2.identity.api.PersonProfileResponse updateMe(JwtAuthenticationToken authentication,
+            @Valid @RequestBody org.novasos.healthysv2.identity.api.UpdatePersonProfileRequest request) {
+        me(authentication);
+        return service.updateMe(UUID.fromString(authentication.getToken().getSubject()), request);
+    }
+
+    @GetMapping
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    org.novasos.healthysv2.shared.api.dto.PageResponse<PersonResponse> list(
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "") String query,
+            org.springframework.data.domain.Pageable pageable) {
+        return org.novasos.healthysv2.shared.api.dto.PageResponse.from(service.search(query, pageable));
+    }
+
+    @GetMapping("/me/preferences")
+    org.novasos.healthysv2.identity.api.PersonPreferences preferences(JwtAuthenticationToken authentication) {
+        me(authentication);
+        return service.preferences(UUID.fromString(authentication.getToken().getSubject()));
+    }
+
+    @org.springframework.web.bind.annotation.PutMapping("/me/preferences")
+    org.novasos.healthysv2.identity.api.PersonPreferences updatePreferences(JwtAuthenticationToken authentication,
+            @Valid @RequestBody org.novasos.healthysv2.identity.api.PersonPreferences request) {
+        me(authentication);
+        return service.updatePreferences(UUID.fromString(authentication.getToken().getSubject()), request);
+    }
+
 }

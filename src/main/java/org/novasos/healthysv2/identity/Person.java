@@ -171,17 +171,23 @@ public class Person extends AuditableEntity {
         return contact;
     }
 
-    void completeRegistrationProfile(String givenName, String familyName,
-            String middleName, String gender, LocalDate birthDate) {
-        if ("À compléter".equals(firstName) && givenName != null) firstName = givenName;
-        if ("À compléter".equals(lastName) && familyName != null) lastName = familyName;
-        if (this.middleName == null) this.middleName = middleName;
-        if (this.gender == null) this.gender = gender;
-        if (this.birthDate == null) this.birthDate = birthDate;
+    void updateProfile(String firstName, String middleName, String lastName, String gender,
+            LocalDate birthDate, UUID preferredLanguageId) {
+        this.firstName = required(firstName, "firstName");
+        this.middleName = optional(middleName);
+        this.lastName = required(lastName, "lastName");
+        this.gender = optional(gender);
+        this.birthDate = birthDate;
+        this.preferredLanguageId = preferredLanguageId;
     }
 
-    void completePreferredLanguage(UUID languageId) {
-        if (preferredLanguageId == null) preferredLanguageId = languageId;
+    void replaceProfileContacts() {
+        contacts.clear();
+        emergencyContacts.clear();
+    }
+
+    void removeHomeAddresses() {
+        addresses.removeIf(address -> "HOME".equals(address.getAddressType()));
     }
 
     public UUID getId() {

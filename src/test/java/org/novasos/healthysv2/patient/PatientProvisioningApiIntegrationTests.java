@@ -62,9 +62,9 @@ class PatientProvisioningApiIntegrationTests {
         mockMvc.perform(get("/api/v1/persons/me")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer patient"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.middleName").value("Augusta"))
-                .andExpect(jsonPath("$.birthDate").value("1815-12-10"))
-                .andExpect(jsonPath("$.gender").value("female"));
+                .andExpect(jsonPath("$.middleName").doesNotExist())
+                .andExpect(jsonPath("$.birthDate").doesNotExist())
+                .andExpect(jsonPath("$.gender").doesNotExist());
     }
 
     @Test

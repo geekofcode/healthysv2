@@ -199,6 +199,109 @@ class PersonApiIntegrationTests {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    void personalProfileIsPersistedInTheDatabaseAndNeverReplacedByLoginClaims() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/persons/me")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer patient").contentType("application/json")
+                .content("""
+                        {"firstName":"Anne","middleName":"Marie","lastName":"Martin",
+                         "gender":"female","birthDate":"1990-04-12",
+                         "personNumber":"FORGED","keycloakUserId":"00000000-0000-0000-0000-000000000102","status":"INACTIVE",
+                         "contacts":[{"type":"PHONE","value":"+15145551234","primary":true,"verified":true}],
+                         "homeAddress":{"line1":"12 Rue Test","city":"Québec","postalCode":"G1A 1A1"}}
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.person.firstName").value("Anne"))
+                .andExpect(jsonPath("$.person.keycloakUserId").value(PATIENT_SUBJECT.toString()))
+                .andExpect(jsonPath("$.person.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.person.personNumber").value(org.hamcrest.Matchers.startsWith("PER-")))
+                .andExpect(jsonPath("$.person.birthDate").value("1990-04-12"))
+                .andExpect(jsonPath("$.person.contacts[0].verified").value(false))
+                .andExpect(jsonPath("$.homeAddress.city").value("Québec"));
+        mockMvc.perform(get("/api/v1/persons/me/profile")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer patient"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.person.firstName").value("Anne"))
+                .andExpect(jsonPath("$.homeAddress.line1").value("12 Rue Test"));
+    }
+
+    @Test
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    void rejectsFutureBirthDateAndUnknownLanguage() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/persons/me")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer patient").contentType("application/json")
+                .content("""
+                        {"firstName":"Anne","lastName":"Martin","birthDate":"2990-01-01"}
+                        """))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/persons/me")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer patient").contentType("application/json")
+                .content("""
+                        {"firstName":"Anne","lastName":"Martin","preferredLanguageId":"00000000-0000-0000-0000-000000000999"}
+                        """))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    void storesThemeAndAvatarForOnlyTheAuthenticatedPerson() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/persons/me/preferences")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer patient").contentType("application/json")
+                .content("""
+                        {"theme":"DARK","avatarUrl":"https://example.org/avatar.png"}
+                        """))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/persons/me/preferences")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer patient"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.theme").value("DARK"))
+                .andExpect(jsonPath("$.avatarUrl").value("https://example.org/avatar.png"));
+        mockMvc.perform(get("/api/v1/persons").header(HttpHeaders.AUTHORIZATION, "Bearer patient"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/persons/me/preferences")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer patient").contentType("application/json")
+                .content("""
+                        {"theme":"DARK","avatarUrl":"javascript:alert(1)"}
+                        """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void personDirectoryIsRestrictedAndUsesFilteredPagination() throws Exception {
+        String prefix = "PER-PICKER-" + UUID.randomUUID().toString().substring(0, 8);
+        for (int index = 0; index < 3; index++) {
+            repository.saveAndFlush(Person.create(prefix + "-" + index, null,
+                    "Picker", null, "Person " + index, null, null, null));
+        }
+        mockMvc.perform(get("/api/v1/persons")
+                .param("query", prefix).param("page", "1").param("size", "2")
+                .param("sort", "personNumber,asc")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer admin"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].personNumber").value(prefix + "-2"))
+                .andExpect(jsonPath("$.page.totalPages").value(2))
+                .andExpect(jsonPath("$.page.totalElements").value(3));
+        mockMvc.perform(get("/api/v1/persons")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer patient"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void hospitalCanCreateBusinessIdentityWithoutChoosingItsNumber() throws Exception {
+        mockMvc.perform(post("/api/v1/persons")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer hospital")
+                .contentType("application/json")
+                .content("""
+                        {"firstName":"New","lastName":"Patient","birthDate":"1990-04-12"}
+                        """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").isNotEmpty())
+                .andExpect(jsonPath("$.personNumber").value(
+                        org.hamcrest.Matchers.matchesPattern("PER-[A-F0-9]{32}")));
+    }
+
     @TestConfiguration(proxyBeanMethods = false)
     static class JwtFixtures {
 
@@ -209,6 +312,7 @@ class PersonApiIntegrationTests {
                         token,
                         PATIENT_SUBJECT,
                         List.of("PATIENT"));
+                case "hospital" -> jwt(token, ADMIN_SUBJECT, List.of("HOSPITAL_ADMIN"));
                 case "admin" -> jwt(
                         token,
                         ADMIN_SUBJECT,

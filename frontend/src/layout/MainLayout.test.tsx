@@ -4,12 +4,14 @@ import {cleanup, fireEvent, render, screen} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {MainLayout} from './MainLayout';
 const logout = vi.fn();
+vi.mock('../components/ThemeSwitch',()=>({ThemeSwitch:()=>null}));
 vi.mock('../components/OrganizationContext',()=>({OrganizationContext:()=>null}));
 vi.mock('../api/persons', () => ({getMe:vi.fn()}));
 vi.mock('../auth/AuthContext', () => ({useAuth: () => ({roles:['PLATFORM_ADMIN'], username:'ada', logout})}));
 vi.mock('../auth/keycloak', () => ({keycloak:{tokenParsed:{}}}));
 vi.mock('@tanstack/react-query', () => ({useQuery: () => ({data:{firstName:'Ada', lastName:'Lovelace'}})}));
 vi.mock('../components/NotificationBell', () => ({NotificationBell: () => <a href="/notifications">Notifications</a>}));
+vi.mock('../api/preferences',()=>({getPreferences:vi.fn(),updatePreferences:vi.fn()}));
 vi.mock('react-i18next', () => ({useTranslation: () => ({t:(key:string) => key})}));
 afterEach(() => {cleanup(); vi.clearAllMocks();});
 describe('application shell', () => {
