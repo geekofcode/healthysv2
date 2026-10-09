@@ -9,7 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired; import org.spring
 @ActiveProfiles("test") @SpringBootTest(properties={"spring.security.oauth2.resourceserver.jwt.issuer-uri=https://keycloak.example/realms/healthys","spring.security.oauth2.resourceserver.jwt.audiences=healthys-backend-apps","healthys.security.api-client-id=healthys-backend-apps","healthys.security.cors.allowed-origins=http://localhost:5173"}) @AutoConfigureMockMvc @Import({TestcontainersConfiguration.class,PatientApiIntegrationTests.JwtFixtures.class}) @Transactional
 class PatientApiIntegrationTests {
  static final UUID CLINICIAN=UUID.fromString("c1000000-0000-0000-0000-000000000001");
- @Autowired MockMvc mvc; @Autowired JdbcTemplate jdbc;
+ @Autowired MockMvc mvc; @Autowired JdbcTemplate jdbc; @Autowired jakarta.persistence.EntityManager entityManager;
  @Test void managesAdministrativeAndClinicalPatientRecord() throws Exception {UUID person=person();UUID org=organization();UUID company=company();String body=mvc.perform(post("/api/v1/patients").header(HttpHeaders.AUTHORIZATION,"Bearer admin").contentType(MediaType.APPLICATION_JSON).content("{\"personId\":\"%s\",\"bloodGroup\":\"O+\",\"rhesus\":\"POSITIVE\"}".formatted(person))).andExpect(status().isCreated()).andExpect(jsonPath("$.patientNumber").exists()).andReturn().getResponse().getContentAsString();UUID p=id(body);
   clinicalContext(p);
   mvc.perform(post("/api/v1/patients/{p}/identifiers",p).header(HttpHeaders.AUTHORIZATION,"Bearer admin").contentType(MediaType.APPLICATION_JSON).content("{\"type\":\"NATIONAL_ID\",\"value\":\"ID-API\"}")).andExpect(status().isCreated());
@@ -33,6 +33,7 @@ class PatientApiIntegrationTests {
   org.assertj.core.api.Assertions.assertThat(jdbc.queryForObject("select count(*) from patient.allergy where patient_id=?",Integer.class,p)).isZero();
  }
  private void clinicalContext(UUID patient){
+  entityManager.flush();
   UUID person=person(),professional=UUID.randomUUID();
   jdbc.update("update identity.person set keycloak_user_id=? where id=?",CLINICIAN,person);
   jdbc.update("insert into professional.professional(id,person_id,professional_number,professional_type) values (?,?,?,'DOCTOR')",professional,person,"PRO-"+professional);

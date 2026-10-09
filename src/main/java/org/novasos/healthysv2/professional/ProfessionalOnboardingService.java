@@ -89,7 +89,7 @@ class ProfessionalOnboardingService {
     DossierResponse upload(JwtAuthenticationToken auth,MultipartFile file) {
         var dossier=owned(auth,true);
         if(!Set.of("DRAFT","REJECTED").contains(dossier.status()))throw conflict("Application is locked");
-        if(file.isEmpty()||file.getSize()>5242880)throw new IllegalArgumentException("Proof must be between 1 byte and 5 MB");
+        if(file.isEmpty()||file.getSize()>5242880)throw new ProfessionalInputException("INVALID_PROOF_SIZE","error.professional.proof.size");
         try {
             byte[] bytes=file.getBytes();
             String type=proofType(bytes);
@@ -97,7 +97,7 @@ class ProfessionalOnboardingService {
             return bySubject(subject(auth),false);
         }
         catch(java.io.IOException e) {
-            throw new IllegalArgumentException("Unable to read proof",e);
+            throw new ProfessionalInputException("UNREADABLE_PROOF","error.professional.proof.unreadable");
         }
     }
     DossierResponse submit(JwtAuthenticationToken auth) {
@@ -142,7 +142,7 @@ class ProfessionalOnboardingService {
             case "APPROVE" -> "APPROVED";
             case "REJECT" -> "REJECTED";
             case "SUSPEND" -> "SUSPENDED";
-            default -> throw new IllegalArgumentException("Invalid decision");
+            default -> throw new ProfessionalInputException("INVALID_REVIEW_DECISION","error.professional.review.decision");
         };
     }
 
@@ -163,7 +163,7 @@ class ProfessionalOnboardingService {
             case "medecin"->"DOCTOR";
             case "nurse"->"NURSE";
             case "laboratoire"->"LAB_TECHNICIAN";
-            default->throw new IllegalArgumentException("Invalid profession");
+            default->throw new ProfessionalInputException("INVALID_PROFESSION","error.professional.registration.profession");
         };
         if(Boolean.TRUE.equals(jdbc.queryForObject(
                 "select exists(select 1 from professional.professional_license where license_number=? and issuing_authority=?)",
@@ -329,7 +329,7 @@ class ProfessionalOnboardingService {
         if(bytes.length>=5&&new String(bytes,0,5,StandardCharsets.US_ASCII).equals("%PDF-"))return "application/pdf";
         if(bytes.length>=8&&bytes[0]==(byte)137&&bytes[1]==80&&bytes[2]==78&&bytes[3]==71&&bytes[4]==13&&bytes[5]==10&&bytes[6]==26&&bytes[7]==10)return "image/png";
         if(bytes.length>=3&&bytes[0]==(byte)255&&bytes[1]==(byte)216&&bytes[2]==(byte)255)return "image/jpeg";
-        throw new IllegalArgumentException("Only PDF, PNG or JPEG proofs are accepted");
+        throw new ProfessionalInputException("INVALID_PROOF_TYPE","error.professional.proof.type");
     }
     private String extension(String type) {
         return switch(type) {

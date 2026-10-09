@@ -68,7 +68,19 @@ import org.springframework.mock.web.MockMultipartFile;
                 .andExpect(status().isOk()).andExpect(content().string("null"));
         UUID id=draft();
         mvc.perform(post("/api/v1/professional-onboarding/requests/{id}/review",id).header(HttpHeaders.AUTHORIZATION,"Bearer applicant").contentType(MediaType.APPLICATION_JSON).content("{\"decision\":\"APPROVE\",\"reason\":\"self approval\"}")).andExpect(status().isForbidden());
-        mvc.perform(multipart("/api/v1/professional-onboarding/me/proof").file(new MockMultipartFile("file","fake.pdf","application/pdf","<script>bad</script>".getBytes())).header(HttpHeaders.AUTHORIZATION,"Bearer applicant")).andExpect(status().isBadRequest());
+        mvc.perform(multipart("/api/v1/professional-onboarding/me/proof").file(new MockMultipartFile("file","fake.pdf","application/pdf","<script>bad</script>".getBytes())).header(HttpHeaders.AUTHORIZATION,"Bearer applicant"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_PROOF_TYPE"));
+        mvc.perform(multipart("/api/v1/professional-onboarding/me/proof")
+                        .file(new MockMultipartFile("file","empty.pdf","application/pdf",new byte[0]))
+                        .header(HttpHeaders.AUTHORIZATION,"Bearer applicant"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_PROOF_SIZE"));
+        mvc.perform(multipart("/api/v1/professional-onboarding/me/proof")
+                        .file(new MockMultipartFile("file","oversized.pdf","application/pdf",new byte[5242881]))
+                        .header(HttpHeaders.AUTHORIZATION,"Bearer applicant"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_PROOF_SIZE"));
+        mvc.perform(get("/api/v1/professional-onboarding/me")
+                        .header(HttpHeaders.AUTHORIZATION,"Bearer applicant"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.proofUploaded").value(false));
     }
     @Test void organizationCannotInviteIntoAnotherTenantOrCreateProfessionalDirectly() throws Exception  {
         mvc.perform(post("/api/v1/professional-onboarding/invitations").header(HttpHeaders.AUTHORIZATION,"Bearer hospital").contentType(MediaType.APPLICATION_JSON).content("{\"email\":\"applicant@example.test\",\"organizationId\":\"%s\"}".formatted(FOREIGN_ORG))).andExpect(status().isForbidden());
