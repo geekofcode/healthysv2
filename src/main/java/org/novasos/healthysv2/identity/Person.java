@@ -171,6 +171,19 @@ public class Person extends AuditableEntity {
         return contact;
     }
 
+    void completeRegistrationProfile(String givenName, String familyName,
+            String middleName, String gender, LocalDate birthDate) {
+        if ("À compléter".equals(firstName) && givenName != null) firstName = givenName;
+        if ("À compléter".equals(lastName) && familyName != null) lastName = familyName;
+        if (this.middleName == null) this.middleName = middleName;
+        if (this.gender == null) this.gender = gender;
+        if (this.birthDate == null) this.birthDate = birthDate;
+    }
+
+    void completePreferredLanguage(UUID languageId) {
+        if (preferredLanguageId == null) preferredLanguageId = languageId;
+    }
+
     public UUID getId() {
         return id;
     }

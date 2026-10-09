@@ -4,6 +4,7 @@ import {cleanup, fireEvent, render, screen} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {MainLayout} from './MainLayout';
 const logout = vi.fn();
+vi.mock('../components/OrganizationContext',()=>({OrganizationContext:()=>null}));
 vi.mock('../api/persons', () => ({getMe:vi.fn()}));
 vi.mock('../auth/AuthContext', () => ({useAuth: () => ({roles:['PLATFORM_ADMIN'], username:'ada', logout})}));
 vi.mock('../auth/keycloak', () => ({keycloak:{tokenParsed:{}}}));

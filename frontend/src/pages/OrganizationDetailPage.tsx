@@ -1,3 +1,4 @@
+import {ProfessionalAffiliations} from '../components/ProfessionalAffiliations';
 import {FormEvent,useState} from 'react';
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query';
 import {Link,useParams} from 'react-router-dom';
@@ -14,5 +15,6 @@ export function OrganizationDetailPage(){const {id=''}=useParams();const {t}=use
  {canWrite&&<><InlineForm title={t('organizations.addDepartment')} fields={['code','name']} onSubmit={dept.mutate}/><InlineForm title={t('organizations.addService')} fields={['code','name']} select={{value:departmentId,onChange:setDepartmentId,items:o.departments.map(d=>({id:d.id,label:d.name}))}} onSubmit={svc.mutate}/></>}
  <h2>{t('organizations.rooms')} / {t('organizations.beds')}</h2>{o.rooms.map(r=><article className="structure-card" key={r.id}><h3>{r.roomNumber}</h3><ul>{r.beds.map(b=><li key={b.id}>{b.bedNumber} — {b.status}</li>)}</ul></article>)}
  {canWrite&&<><InlineForm title={t('organizations.addRoom')} fields={['roomNumber']} select={{value:departmentId,onChange:setDepartmentId,items:o.departments.map(d=>({id:d.id,label:d.name}))}} onSubmit={room.mutate}/><InlineForm title={t('organizations.addBed')} fields={['bedNumber']} select={{value:roomId,onChange:setRoomId,items:o.rooms.map(r=>({id:r.id,label:r.roomNumber}))}} onSubmit={bed.mutate}/></>}
+ {canWrite&&<ProfessionalAffiliations organizationId={id}/>}
  {[dept,svc,room,bed].some(m=>m.isError)&&<ApiErrorMessage error={[dept,svc,room,bed].find(m=>m.error)?.error}/>}</section>}
 function InlineForm({title,fields,select,onSubmit}:{title:string;fields:string[];select?:{value:string;onChange:(v:string)=>void;items:{id:string;label:string}[]};onSubmit:(v:any)=>void}){const [values,setValues]=useState<Record<string,string>>({});const submit=(e:FormEvent)=>{e.preventDefault();if(fields.every(f=>values[f]?.trim())&&(!select||select.value))onSubmit(values)};return <form className="inline-form" onSubmit={submit}><strong>{title}</strong>{select&&<select value={select.value} onChange={e=>select.onChange(e.target.value)} required><option value="">—</option>{select.items.map(i=><option value={i.id} key={i.id}>{i.label}</option>)}</select>}{fields.map(f=><input key={f} value={values[f]??''} placeholder={f} required onChange={e=>setValues({...values,[f]:e.target.value})}/>)}<button>+</button></form>}

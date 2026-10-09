@@ -63,20 +63,32 @@ class PushApiIntegrationTests {
     }
 
     @Test
-    void notificationIdentityRequiresActualKeycloakLinkInsteadOfPersonIdFallback() throws Exception {
+    void provisioningNeverUsesSubjectAsAnotherPersonsIdentifier() throws Exception {
         UUID personId = person("linked");
+        UUID notificationId = createNotification(personId);
         JwtFixtures.SUBJECTS.put("unlinked", personId);
         mvc.perform(get("/api/v1/notifications")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer unlinked"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isEmpty());
+        UUID provisioned = jdbc.queryForObject(
+                "select id from identity.person where keycloak_user_id=?", UUID.class, personId);
+        assertThat(provisioned).isNotEqualTo(personId);
+        mvc.perform(get("/api/v1/notifications/{id}", notificationId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer unlinked"))
+                .andExpect(status().isNotFound());
         mvc.perform(get("/api/v1/notifications/preferences")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer unlinked"))
-                .andExpect(status().isForbidden());
-        mvc.perform(put("/api/v1/notifications/devices/{id}", UUID.randomUUID())
+                .andExpect(status().isOk());
+        UUID installationId = UUID.randomUUID();
+        mvc.perform(put("/api/v1/notifications/devices/{id}", installationId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer unlinked")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"token\":\"some-device-token\",\"revocationToken\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"platform\":\"ANDROID\"}"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isOk());
+        assertThat(jdbc.queryForObject(
+                "select person_id from notification.push_device where installation_id=?",
+                UUID.class, installationId)).isEqualTo(provisioned);
         assertThat(notifications.maySubscribe(new JwtAuthenticationToken(JwtFixtures.jwt("linked")), personId))
                 .isTrue();
         assertThat(notifications.maySubscribe(new JwtAuthenticationToken(JwtFixtures.jwt("unlinked")), personId))

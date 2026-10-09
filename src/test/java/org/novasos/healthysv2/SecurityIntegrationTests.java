@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
@@ -106,11 +107,31 @@ class SecurityIntegrationTests {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer role-laboratoire")).andExpect(status().isOk());
         mockMvc.perform(post("/api/v1/organizations")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer role-gestionnaire")
-                .contentType("application/json").content("{}"))
+                .contentType("application/json").content("{\"number\":\"ORG-READONLY\",\"name\":\"Read only test\"}"))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/admin/security-test")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer role-gestionnaire"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void registrationReferencesAreReadableBeforeProfessionalApprovalButAdministeredByPlatformOnly() throws Exception {
+        mockMvc.perform(get("/api/v1/registration-options")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer patient"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.countries").isArray())
+                .andExpect(jsonPath("$.specialities").isArray());
+        mockMvc.perform(post("/api/v1/admin/registration-options/countries")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer patient")
+                        .contentType("application/json")
+                        .content("{\"iso2\":\"ZZ\",\"name\":\"Reference test\"}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/admin/registration-options/countries")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer admin")
+                        .contentType("application/json")
+                        .content("{\"iso2\":\"ZZ\",\"name\":\"Reference test\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.iso2").value("ZZ"));
     }
 
     @Test

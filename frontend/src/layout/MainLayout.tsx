@@ -1,3 +1,4 @@
+import {OrganizationContext} from '../components/OrganizationContext';
 import {useEffect, useRef, useState} from 'react';
 import {NavLink, Outlet, useLocation} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
@@ -56,6 +57,8 @@ export function MainLayout() {
             {profileOpen && <div className="profile-dropdown" id="account-dropdown">
               <div className="profile-summary"><strong>{fullName}</strong><span>{auth.username}</span></div>
               <NavLink to="/me">{t('nav.profile')}</NavLink>
+          {auth.roles.includes('PATIENT')&&<NavLink to="/me/access">{t('access.title')}</NavLink>}
+          <NavLink to="/professional-onboarding">{t('onboarding.title')}</NavLink>
               <button type="button" onClick={() => {setProfileOpen(false); void auth.logout();}}>{t('auth.logout')}</button>
             </div>}
           </div>
@@ -63,9 +66,12 @@ export function MainLayout() {
       </header>
       <div className="app-body">
         <aside className={`sidebar${sidebarOpen ? ' is-open' : ''}`}>
+        <OrganizationContext />
         <nav id="main-navigation" aria-label={t('nav.main')}>
           <NavLink to="/" end>{t('nav.home')}</NavLink>
           <NavLink to="/me">{t('nav.profile')}</NavLink>
+          {auth.roles.includes('PATIENT')&&<NavLink to="/me/access">{t('access.title')}</NavLink>}
+          <NavLink to="/professional-onboarding">{t('onboarding.title')}</NavLink>
           {canAccessPath(auth.roles, '/organizations')&&<NavLink to="/organizations">{t('nav.organizations')}</NavLink>}
           {canAccessPath(auth.roles, '/professionals')&&<NavLink to="/professionals">{t('nav.professionals')}</NavLink>}
           {canAccessPath(auth.roles, '/patients')&&<NavLink to="/patients">{t('nav.patients')}</NavLink>}

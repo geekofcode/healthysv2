@@ -1,0 +1,416 @@
+{
+  "attributes": [
+    {
+      "name": "username",
+      "displayName": "${username}",
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "multivalued": false,
+      "group": "identity",
+      "validations": {
+        "length": {
+          "min": 3,
+          "max": 255
+        },
+        "username-prohibited-characters": {}
+      },
+      "required": {
+        "roles": [
+          "user"
+        ]
+      }
+    },
+    {
+      "name": "email",
+      "displayName": "${email}",
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "multivalued": false,
+      "group": "identity",
+      "validations": {
+        "email": {},
+        "length": {
+          "max": 255
+        }
+      },
+      "required": {
+        "roles": [
+          "user"
+        ]
+      },
+      "annotations": {
+        "inputType": "html5-email"
+      }
+    },
+    {
+      "name": "firstName",
+      "displayName": "${firstName}",
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "multivalued": false,
+      "group": "identity",
+      "validations": {
+        "length": {
+          "max": 120
+        }
+      },
+      "required": {
+        "roles": [
+          "user"
+        ]
+      }
+    },
+    {
+      "name": "lastName",
+      "displayName": "${lastName}",
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "multivalued": false,
+      "group": "identity",
+      "validations": {
+        "length": {
+          "max": 120
+        }
+      },
+      "required": {
+        "roles": [
+          "user"
+        ]
+      }
+    },
+    {
+      "name": "middleName",
+      "displayName": "${healthys.middleName}",
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "multivalued": false,
+      "group": "identity",
+      "validations": {
+        "length": {
+          "max": 120
+        }
+      }
+    },
+    {
+      "name": "birthDate",
+      "displayName": "${healthys.birthDate}",
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "multivalued": false,
+      "group": "identity",
+      "validations": {
+        "local-date": {}
+      },
+      "required": {
+        "roles": [
+          "user"
+        ]
+      },
+      "annotations": {
+        "inputType": "html5-date"
+      }
+    },
+    {
+      "name": "gender",
+      "displayName": "${healthys.gender}",
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "multivalued": false,
+      "group": "identity",
+      "validations": {
+        "options": {
+          "options": [
+            "female",
+            "male",
+            "other",
+            "unspecified"
+          ]
+        }
+      },
+      "annotations": {
+        "inputType": "select",
+        "inputOptionLabels": {
+          "female": "${healthys.gender.female}",
+          "male": "${healthys.gender.male}",
+          "other": "${healthys.gender.other}",
+          "unspecified": "${healthys.gender.unspecified}"
+        }
+      }
+    },
+    {
+      "name": "phoneNumber",
+      "displayName": "${healthys.phoneNumber}",
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "multivalued": false,
+      "group": "contact",
+      "validations": {
+        "length": {
+          "max": 30
+        }
+      },
+      "annotations": {
+        "inputType": "html5-tel"
+      }
+    },
+    {
+      "name": "locale",
+      "displayName": "${healthys.locale}",
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "multivalued": false,
+      "group": "identity",
+      "validations": {
+        "options": {
+          "options": [
+            "fr",
+            "en"
+          ]
+        }
+      },
+      "required": {
+        "roles": [
+          "user"
+        ]
+      },
+      "annotations": {
+        "inputType": "select",
+        "inputOptionLabels": {
+          "fr": "Français",
+          "en": "English"
+        }
+      }
+    },
+    {
+      "name": "streetAddress",
+      "displayName": "${healthys.streetAddress}",
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "multivalued": false,
+      "group": "contact",
+      "validations": {
+        "length": {
+          "max": 255
+        }
+      }
+    },
+    {
+      "name": "addressLine2",
+      "displayName": "${healthys.addressLine2}",
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "multivalued": false,
+      "group": "contact",
+      "validations": {
+        "length": {
+          "max": 255
+        }
+      }
+    },
+    {
+      "name": "city",
+      "displayName": "${healthys.city}",
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "multivalued": false,
+      "group": "contact",
+      "validations": {
+        "length": {
+          "max": 150
+        }
+      }
+    },
+    {
+      "name": "region",
+      "displayName": "${healthys.region}",
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "multivalued": false,
+      "group": "contact",
+      "validations": {
+        "length": {
+          "max": 150
+        }
+      }
+    },
+    {
+      "name": "postalCode",
+      "displayName": "${healthys.postalCode}",
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "multivalued": false,
+      "group": "contact",
+      "validations": {
+        "length": {
+          "max": 30
+        }
+      }
+    },
+    {
+      "name": "country",
+      "displayName": "${healthys.country}",
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "multivalued": false,
+      "group": "contact",
+      "validations": {
+        "pattern": {
+          "pattern": "^[A-Z]{2}$",
+          "error-message": "healthys.country.invalid"
+        }
+      },
+      "annotations": {
+        "inputTypeMaxLength": 2
+      }
+    },
+    {
+      "name": "healthys_organization_id",
+      "displayName": "Organization ID",
+      "permissions": {
+        "view": [
+          "admin"
+        ],
+        "edit": [
+          "admin"
+        ]
+      },
+      "multivalued": false,
+      "validations": {
+        "length": {
+          "max": 36
+        }
+      }
+    }
+  ],
+  "groups": [
+    {
+      "name": "identity",
+      "displayHeader": "${healthys.identity}"
+    },
+    {
+      "name": "contact",
+      "displayHeader": "${healthys.contact}"
+    }
+  ],
+  "unmanagedAttributePolicy": "ADMIN_EDIT"
+}

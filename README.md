@@ -83,3 +83,6 @@ La configuration de signature, les builds Android/iOS, les stores et la recette
 physique sont documentés dans le
 [guide de publication mobile](https://github.com/geekofcode/healthysv2M/blob/feature/18.1-flutter-foundation/docs/mobile-release/README.md).
 Aucune publication store ni activation des fournisseurs n’est effectuée par la CI.
+# Inscription et identité HEALTH’YS
+
+Le [guide du thème Keycloak](docs/keycloak-theme.md) décrit l’installation du thème bleu, les champs d’inscription patient et les claims de synchronisation. Le [parcours professionnel](docs/professional-registration.md) décrit les demandes d’accès, la vérification administrative, les invitations et les affiliations facultatives aux établissements.

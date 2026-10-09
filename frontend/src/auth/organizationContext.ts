@@ -1,0 +1,2 @@
+export function selectedOrganization(subject?:string):string|undefined{if(!subject)return;try{return sessionStorage.getItem(`healthys:organization:${subject}`)||undefined;}catch{return;}}
+export function selectOrganization(subject:string,id:string){try{if(id)sessionStorage.setItem(`healthys:organization:${subject}`,id);else sessionStorage.setItem(`healthys:organization:${subject}`,'independent');}catch{return;}}

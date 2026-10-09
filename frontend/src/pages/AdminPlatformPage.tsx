@@ -6,6 +6,7 @@ export function AdminPlatformPage() {
   const destinations = [
     ['/organizations', 'nav.organizations'],
     ['/professionals', 'nav.professionals'],
+    ['/admin/professional-requests', 'onboarding.reviewTitle'],
     ['/patients', 'nav.patients'],
     ['/billing', 'nav.billing'],
     ['/admin/audit-security', 'admin.openAudit'],

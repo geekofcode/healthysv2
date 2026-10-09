@@ -17,6 +17,13 @@ interface PrescriptionRepository extends JpaRepository<Prescription, UUID> {
     Page<Prescription> search(@Param("patient") UUID patient, @Param("organization") UUID organization,
                               @Param("status") String status, Pageable pageable);
 
+    @Query("select p from Prescription p where (:patient is null or p.patientId=:patient) "
+            + "and ((:organization is null and p.organizationId is null) or p.organizationId=:organization) "
+            + "and (:owner is null or p.prescriberId=:owner) "
+            + "and (:status is null or p.status=:status) order by p.prescribedAt desc")
+    Page<Prescription> searchScoped(@Param("patient") UUID patient, @Param("organization") UUID organization,
+                                   @Param("owner") UUID owner, @Param("status") String status, Pageable pageable);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Prescription p where p.id=:id")
     Optional<Prescription> lock(@Param("id") UUID id);

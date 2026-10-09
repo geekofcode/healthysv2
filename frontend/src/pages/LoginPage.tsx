@@ -36,6 +36,7 @@ export function LoginPage() {
         >
           {t('registration.createAccount')}
         </button>
+      <button className="button-secondary" type="button" onClick={()=>void auth.register(`${window.location.origin}${from.startsWith('/professional-invitation')?from:'/professional-onboarding'}`)}>{t('onboarding.createProfessionalAccount')}</button>
       </section>
     </main>
   );

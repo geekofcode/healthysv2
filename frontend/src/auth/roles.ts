@@ -23,7 +23,7 @@ const routeRoles: Record<string, readonly string[]> = {
 export function canAccessPath(roles: readonly string[], path: string): boolean {
   const segments = path.split('/').filter(Boolean);
   const section = segments[0];
-  if (!section || ['me', 'registration', 'notifications'].includes(section)) return true;
+  if (!section || ['me', 'registration', 'notifications', 'professional-onboarding', 'professional-invitation'].includes(section)) return true;
   if (['organizations', 'professionals'].includes(section) &&
       (segments[1] === 'new' || segments[2] === 'edit')) {
     return roles.some(role => ['PLATFORM_ADMIN', 'HOSPITAL_ADMIN'].includes(role));

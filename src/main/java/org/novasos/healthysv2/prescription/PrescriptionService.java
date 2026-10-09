@@ -20,6 +20,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Service;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -40,6 +41,8 @@ class PrescriptionService implements PrescriptionDispensing {
 
     PrescriptionResponse create(CreatePrescriptionRequest request) {
         access.requireAccess(request.patientId(), "PRESCRIPTIONS", "WRITE");
+        requireScope(request.organizationId(), request.prescriberId());
+        requirePrescriber(request.prescriberId(), request.organizationId());
         validatePrescription(request);
         var prescription = Prescription.create(request.patientId(), request.consultationId(),
                 request.prescriberId(), request.organizationId(), request.expiresAt());
@@ -60,11 +63,25 @@ class PrescriptionService implements PrescriptionDispensing {
 
     @Transactional(readOnly = true)
     PageResponse<PrescriptionSummary> search(UUID patient, UUID organization, String status, Pageable pageable) {
-        if (patient != null) {
-            access.requireAccess(patient, "PRESCRIPTIONS", "READ");
+        var user = users.current();
+        if (user.has("PLATFORM_ADMIN")) {
+            return PageResponse.from(prescriptions.search(patient, organization, normalize(status), pageable).map(this::summary));
         }
-        return PageResponse.from(prescriptions.search(patient, organization, normalize(status), pageable)
-                .map(this::summary));
+        if (user.has("PATIENT") && !user.hasAny("DOCTOR", "NURSE", "HOSPITAL_ADMIN", "PHARMACIST")) {
+            if (patient == null) throw new AccessDeniedException("Patient identifier required");
+            selves.requireOwn(patient);
+            access.requireAccess(patient, "PRESCRIPTIONS", "READ");
+            return PageResponse.from(prescriptions.search(patient, organization, normalize(status), pageable).map(this::summary));
+        }
+        if (organization != null && !organization.equals(user.organizationId())) {
+            throw new AccessDeniedException("Prescription organization access denied");
+        }
+        if (patient == null && !user.has("HOSPITAL_ADMIN")) {
+            throw new AccessDeniedException("Patient identifier required for clinical search");
+        }
+        if (patient != null) access.requireAccess(patient, "PRESCRIPTIONS", "READ");
+        UUID owner = user.organizationId() == null ? currentProfessional() : null;
+        return PageResponse.from(prescriptions.searchScoped(patient, user.organizationId(), owner, normalize(status), pageable).map(this::summary));
     }
 
     PrescriptionResponse cancel(UUID id) {
@@ -124,8 +141,8 @@ class PrescriptionService implements PrescriptionDispensing {
             require("organization.organization", request.organizationId(), "Organization");
         }
         if (request.consultationId() != null && !exists(
-                "select count(*) from consultation.consultation where id=? and patient_id=? and professional_id=?",
-                request.consultationId(), request.patientId(), request.prescriberId())) {
+                "select count(*) from consultation.consultation where id=? and patient_id=? and professional_id=? and organization_id is not distinct from ?",
+                request.consultationId(), request.patientId(), request.prescriberId(), request.organizationId())) {
             throw rule("CONSULTATION_PRESCRIPTION_MISMATCH", "error.pharmacy.consultation");
         }
         var medications = new HashSet<UUID>();
@@ -144,12 +161,40 @@ class PrescriptionService implements PrescriptionDispensing {
 
     private Prescription forWrite(UUID id) {
         var prescription = prescriptions.lock(id).orElseThrow(() -> notFound("Prescription", id));
+        requireScope(prescription.getOrganizationId(), prescription.getPrescriberId());
         access.requireAccess(prescription.getPatientId(), "PRESCRIPTIONS", "WRITE");
         return prescription;
     }
 
     private Prescription get(UUID id) {
-        return prescriptions.findById(id).orElseThrow(() -> notFound("Prescription", id));
+        var prescription = prescriptions.findById(id).orElseThrow(() -> notFound("Prescription", id));
+        requireScope(prescription.getOrganizationId(), prescription.getPrescriberId());
+        return prescription;
+    }
+
+    private void requireScope(UUID organization, UUID prescriber) {
+        var user = users.current();
+        if (user.has("PLATFORM_ADMIN")) return;
+        if (user.has("PATIENT") && !user.hasAny("DOCTOR", "NURSE", "HOSPITAL_ADMIN", "PHARMACIST")) return;
+        if (!Objects.equals(user.organizationId(), organization)) throw new AccessDeniedException("Prescription organization access denied");
+        if (organization == null && !currentProfessional().equals(prescriber)) throw new AccessDeniedException("Prescription owner access denied");
+    }
+
+    private void requirePrescriber(UUID prescriber, UUID organization) {
+        var user = users.current();
+        if (user.has("DOCTOR") && !user.hasAny("PLATFORM_ADMIN", "HOSPITAL_ADMIN") && !currentProfessional().equals(prescriber)) {
+            throw new AccessDeniedException("Prescriber must be the authenticated professional");
+        }
+        if (organization != null && !exists("select count(*) from professional.professional_assignment where professional_id=? and organization_id=? and status='ACTIVE' and start_date<=current_date and (end_date is null or end_date>=current_date)", prescriber, organization)) {
+            throw new AccessDeniedException("Prescriber is not assigned to the selected organization");
+        }
+    }
+
+    private UUID currentProfessional() {
+        UUID person = users.current().personId();
+        UUID professional = person == null ? null : jdbc.query("select id from professional.professional where person_id=? and status='ACTIVE' limit 1", rs -> rs.next() ? (UUID) rs.getObject(1) : null, person);
+        if (professional == null) throw new AccessDeniedException("Active professional required");
+        return professional;
     }
 
     private void requireMedication(UUID id) {

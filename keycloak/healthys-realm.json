@@ -1,6 +1,6 @@
 {
   "realm": "healthys",
-  "displayName": "HEALTHYS",
+  "displayName": "HEALTH’YS",
   "enabled": true,
   "sslRequired": "external",
   "registrationAllowed": true,
@@ -9,19 +9,43 @@
   "rememberMe": true,
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
-  "defaultRoles": ["PATIENT"],
+  "defaultRoles": [
+    "patient"
+  ],
   "roles": {
     "realm": [
-      {"name": "PATIENT", "description": "Patient HEALTHYS"},
-      {"name": "DOCTOR", "description": "Médecin"},
-      {"name": "NURSE", "description": "Infirmier ou infirmière"},
-      {"name": "HOSPITAL_ADMIN", "description": "Administrateur d'établissement"},
-      {"name": "HOSPITAL_AGENT", "description": "Agent d'établissement"},
-      {"name": "PHARMACIST", "description": "Pharmacien"},
-      {"name": "LAB_TECHNICIAN", "description": "Personnel de laboratoire"},
-      {"name": "CASHIER", "description": "Caissier ou caissière"},
-      {"name": "ACCOUNTANT", "description": "Comptable"},
-      {"name": "PLATFORM_ADMIN", "description": "Administrateur de la plateforme"}
+      {
+        "name": "admin",
+        "description": "Administration globale HEALTH’YS"
+      },
+      {
+        "name": "comptable",
+        "description": "Finances et relevés financiers"
+      },
+      {
+        "name": "gestionnaire",
+        "description": "Lecture des informations de son établissement"
+      },
+      {
+        "name": "hopital",
+        "description": "Administration de son établissement"
+      },
+      {
+        "name": "laboratoire",
+        "description": "Analyses et résultats"
+      },
+      {
+        "name": "medecin",
+        "description": "Activités médicales"
+      },
+      {
+        "name": "nurse",
+        "description": "Soins et suivi infirmier"
+      },
+      {
+        "name": "patient",
+        "description": "Espace patient"
+      }
     ]
   },
   "clients": [
@@ -45,21 +69,24 @@
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "redirectUris": [
-        "http://localhost:5173/*"
+        "http://localhost:5173/*",
+        "http://localhost:3000/*"
       ],
       "webOrigins": [
-        "http://localhost:5173"
+        "http://localhost:5173",
+        "http://localhost:3000"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:5173/*"
+        "post.logout.redirect.uris": "http://localhost:5173/*##http://localhost:3000/*"
       },
       "defaultClientScopes": [
         "web-origins",
         "acr",
         "roles",
         "profile",
-        "email"
+        "email",
+        "healthys-patient-profile"
       ],
       "protocolMappers": [
         {
@@ -111,7 +138,8 @@
         "acr",
         "roles",
         "profile",
-        "email"
+        "email",
+        "healthys-patient-profile"
       ],
       "protocolMappers": [
         {
@@ -139,6 +167,191 @@
             "id.token.claim": "false",
             "access.token.claim": "true",
             "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "loginTheme": "healthys",
+  "internationalizationEnabled": true,
+  "supportedLocales": [
+    "fr",
+    "en"
+  ],
+  "defaultLocale": "fr",
+  "clientScopes": [
+    {
+      "name": "healthys-patient-profile",
+      "description": "HEALTH’YS identity fields for account provisioning",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "healthys-middleName",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "middleName",
+            "claim.name": "middle_name",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "multivalued": "false"
+          }
+        },
+        {
+          "name": "healthys-birthDate",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "birthDate",
+            "claim.name": "birthdate",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "multivalued": "false"
+          }
+        },
+        {
+          "name": "healthys-gender",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "gender",
+            "claim.name": "gender",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "multivalued": "false"
+          }
+        },
+        {
+          "name": "healthys-phoneNumber",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "phoneNumber",
+            "claim.name": "phone_number",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "multivalued": "false"
+          }
+        },
+        {
+          "name": "healthys-locale",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "locale",
+            "claim.name": "locale",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "multivalued": "false"
+          }
+        },
+        {
+          "name": "healthys-streetAddress",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "streetAddress",
+            "claim.name": "healthys_address_line1",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "multivalued": "false"
+          }
+        },
+        {
+          "name": "healthys-addressLine2",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "addressLine2",
+            "claim.name": "healthys_address_line2",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "multivalued": "false"
+          }
+        },
+        {
+          "name": "healthys-city",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "city",
+            "claim.name": "healthys_address_city",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "multivalued": "false"
+          }
+        },
+        {
+          "name": "healthys-region",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "region",
+            "claim.name": "healthys_address_province",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "multivalued": "false"
+          }
+        },
+        {
+          "name": "healthys-postalCode",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "postalCode",
+            "claim.name": "healthys_address_postal_code",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "multivalued": "false"
+          }
+        },
+        {
+          "name": "healthys-country",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "country",
+            "claim.name": "healthys_address_country",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "multivalued": "false"
           }
         }
       ]

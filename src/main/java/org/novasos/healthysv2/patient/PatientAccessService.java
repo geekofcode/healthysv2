@@ -35,14 +35,26 @@ public class PatientAccessService {
         if (user.has("HOSPITAL_ADMIN") && registered(patientId,user.organizationId())) return allowed("ORGANIZATION_ADMIN");
         if (!user.hasAny("DOCTOR","NURSE","PHARMACIST","LAB_TECHNICIAN")) return denied("ROLE_NOT_AUTHORIZED");
         if (user.personId()==null) return denied("PERSON_CONTEXT_MISSING");
-        if (user.organizationId()==null) return denied("ORGANIZATION_CONTEXT_MISSING");
+
         UUID professional=jdbc.query("select id from professional.professional where person_id=? and status='ACTIVE' limit 1",rs->rs.next()?(UUID)rs.getObject(1):null,user.personId());
         if (professional==null) return denied("PROFESSIONAL_PROFILE_MISSING");
+        if (user.organizationId()==null) return independent(user, patientId, professional, scope);
         if (!exists("select count(*) from professional.professional_assignment where professional_id=? and organization_id=? and status='ACTIVE' and start_date<=current_date and (end_date is null or end_date>=current_date)",professional,user.organizationId())) return denied("PROFESSIONAL_NOT_ASSIGNED");
         if (!registered(patientId,user.organizationId())) return denied("PATIENT_OTHER_ORGANIZATION");
         if (!exists("select count(*) from patient.care_relationship where patient_id=? and professional_id=? and organization_id=? and status='ACTIVE' and start_date<=clock_timestamp() and (end_date is null or end_date>clock_timestamp())",patientId,professional,user.organizationId())) return denied("CARE_RELATIONSHIP_MISSING");
-        if (!exists("select count(*) from patient.consent where patient_id=? and status='ACTIVE' and revoked_at is null and (expires_at is null or expires_at>clock_timestamp()) and (grantee_person_id=? or grantee_organization_id=?) and (scope=? or scope='FULL_RECORD')",patientId,user.personId(),user.organizationId(),scope)) return denied("CONSENT_MISSING_OR_INACTIVE");
+        if (!exists("select count(*) from patient.consent where patient_id=? and status='ACTIVE' and revoked_at is null and granted_at<=clock_timestamp() and (expires_at is null or expires_at>clock_timestamp()) and (grantee_person_id=? or grantee_organization_id=?) and (scope=? or scope='FULL_RECORD')",patientId,user.personId(),user.organizationId(),scope)) return denied("CONSENT_MISSING_OR_INACTIVE");
         return allowed("CARE_CONTEXT_AUTHORIZED");
+    }
+
+    private AccessDecision independent(CurrentUserContext.UserContext user, UUID patient,
+            UUID professional, String scope) {
+        if (!exists("select count(*) from patient.care_relationship where patient_id=? and professional_id=? and organization_id is null and status='ACTIVE' and start_date<=clock_timestamp() and (end_date is null or end_date>clock_timestamp())", patient, professional)) {
+            return denied("INDEPENDENT_CARE_RELATIONSHIP_MISSING");
+        }
+        if (!exists("select count(*) from patient.consent where patient_id=? and grantee_person_id=? and grantee_organization_id is null and status='ACTIVE' and revoked_at is null and granted_at<=clock_timestamp() and (expires_at is null or expires_at>clock_timestamp()) and (scope=? or scope='FULL_RECORD')", patient, user.personId(), scope)) {
+            return denied("CONSENT_MISSING_OR_INACTIVE");
+        }
+        return allowed("INDEPENDENT_CARE_CONTEXT_AUTHORIZED");
     }
 
     private boolean registered(UUID patient,UUID organization){return organization!=null&&exists("select count(*) from patient.patient_registration where patient_id=? and organization_id=? and status='ACTIVE'",patient,organization);}

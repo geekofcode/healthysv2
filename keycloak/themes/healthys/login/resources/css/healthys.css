@@ -1,0 +1,25 @@
+/* Keep Keycloak's native forms, validation, password controls and accessibility. */
+:root {
+  --pf-v5-global--primary-color--100: #2563eb;
+  --pf-v5-global--primary-color--200: #1d4ed8;
+  --pf-v5-global--link--Color: #1d4ed8;
+}
+body { background: #eff6ff; color: #172554; }
+.pf-v5-c-login { min-height: 100vh; background: radial-gradient(ellipse at top left, #dbeafe, transparent 65%), #f8fafc; }
+.pf-v5-c-login__container { max-width: 600px; margin-inline: auto; }
+.pf-v5-c-login__header { text-align: center; }
+#kc-header-wrapper { color: #1e40af; font-size: 1.75rem; font-weight: 800; letter-spacing: .04em; }
+.pf-v5-c-login__main { border-radius: 20px; border: 1px solid #dbeafe; box-shadow: 0 20px 60px #1e3a8a14; overflow: hidden; }
+.pf-v5-c-login__main-header { padding-bottom: 1rem; }
+.pf-v5-c-login__main-header .pf-v5-c-title { color: #172554; }
+.pf-v5-c-form-control { border-radius: 8px; }
+.pf-v5-c-button.pf-m-primary { background: #2563eb; border-radius: 8px; min-height: 44px; font-weight: 600; }
+.pf-v5-c-button.pf-m-primary:hover { background: #1d4ed8; }
+a { color: #1d4ed8; }
+:focus-visible { outline: 3px solid #60a5fa; outline-offset: 3px; }
+.pf-v5-c-form__group { margin-bottom: .35rem; }
+@media (max-width: 640px) {
+  .pf-v5-c-login__container { padding: 20px 12px; width: 100%; }
+  .pf-v5-c-login__main { border-radius: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }

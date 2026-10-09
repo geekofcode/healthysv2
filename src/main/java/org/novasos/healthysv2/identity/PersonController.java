@@ -74,7 +74,18 @@ class PersonController {
                 jwt.getClaimAsString("given_name"),
                 jwt.getClaimAsString("family_name"),
                 jwt.getClaimAsString("email"),
-                Boolean.TRUE.equals(jwt.getClaimAsBoolean("email_verified")));
+                Boolean.TRUE.equals(jwt.getClaimAsBoolean("email_verified")),
+                new org.novasos.healthysv2.identity.api.IdentityProvisioningService.RegistrationProfile(
+                        jwt.getClaimAsString("middle_name"), jwt.getClaimAsString("birthdate"),
+                        jwt.getClaimAsString("gender"), jwt.getClaimAsString("phone_number"),
+                        jwt.getClaimAsString("locale"),
+                        new org.novasos.healthysv2.identity.api.IdentityProvisioningService.RegistrationAddress(
+                                jwt.getClaimAsString("healthys_address_line1"),
+                                jwt.getClaimAsString("healthys_address_line2"),
+                                jwt.getClaimAsString("healthys_address_city"),
+                                jwt.getClaimAsString("healthys_address_province"),
+                                jwt.getClaimAsString("healthys_address_postal_code"),
+                                jwt.getClaimAsString("healthys_address_country"))));
         return service.findMe(subject);
     }
 }

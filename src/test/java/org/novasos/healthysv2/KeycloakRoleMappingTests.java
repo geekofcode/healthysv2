@@ -22,7 +22,7 @@ class KeycloakRoleMappingTests {
     @Test
     void converterReadsRealmAndOnlyConfiguredClientRoles() {
         var properties = new SecurityConfiguration.SecurityProperties("healthys-backend-apps", null);
-        var converter = new SecurityConfiguration().jwtAuthenticationConverter(properties);
+        var converter = new SecurityConfiguration().unfilteredJwtAuthenticationConverter(properties);
         var token = Jwt.withTokenValue("test").header("alg", "RS256").subject("user")
                 .claim("realm_access", Map.of("roles", List.of("patient", "offline_access")))
                 .claim("resource_access", Map.of(

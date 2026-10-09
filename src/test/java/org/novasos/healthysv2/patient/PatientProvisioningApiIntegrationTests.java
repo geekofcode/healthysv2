@@ -1,6 +1,7 @@
 package org.novasos.healthysv2.patient;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import java.time.Instant;
 import java.util.List;
@@ -47,6 +48,13 @@ class PatientProvisioningApiIntegrationTests {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer patient"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.created").value(false));
+
+        mockMvc.perform(get("/api/v1/persons/me")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer patient"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.middleName").value("Augusta"))
+                .andExpect(jsonPath("$.birthDate").value("1815-12-10"))
+                .andExpect(jsonPath("$.gender").value("female"));
     }
 
     @Test
@@ -83,6 +91,10 @@ class PatientProvisioningApiIntegrationTests {
                     .claim("family_name", "Lovelace")
                     .claim("email", "ada@example.com")
                     .claim("email_verified", true)
+                    .claim("middle_name", "Augusta")
+                    .claim("birthdate", "1815-12-10")
+                    .claim("gender", "female")
+                    .claim("phone_number", "+15145550123")
                     .claim("realm_access", Map.of("roles", roles))
                     .claim("resource_access", Map.of())
                     .build();

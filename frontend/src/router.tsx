@@ -1,3 +1,7 @@
+import {MyPatientAccessPage} from './pages/MyPatientAccessPage';
+import {ProfessionalOnboardingPage} from './pages/ProfessionalOnboardingPage';
+import {ProfessionalReviewPage} from './pages/ProfessionalReviewPage';
+import {ProfessionalInvitationPage} from './pages/ProfessionalInvitationPage';
 import {createBrowserRouter} from 'react-router-dom';
 import {lazy,Suspense} from 'react';
 
@@ -53,6 +57,10 @@ export const router = createBrowserRouter([
         children: [
           {path: '/', element: <DashboardPage />},
           {path: '/me', element: <MePage />},
+          {path: '/me/access', element: <MyPatientAccessPage />},
+          {path: '/professional-onboarding', element: <ProfessionalOnboardingPage />},
+          {path: '/professional-invitation', element: <ProfessionalInvitationPage />},
+          {path: '/admin/professional-requests', element: <ProfessionalReviewPage />},
           {path: '/organizations', element: <OrganizationsPage />},
           {path: '/organizations/new', element: <OrganizationFormPage />},
           {path: '/organizations/:id', element: <OrganizationDetailPage />},

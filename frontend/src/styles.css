@@ -171,3 +171,7 @@ button:focus-visible,a:focus-visible {outline:3px solid #60a5fa;outline-offset:3
 }
 @media(max-width:480px) {.session-name {display:none}.brand-group,.session {gap:.6rem}.brand {font-size:1.1rem}.content {padding:1.25rem 1rem}}
 @media(prefers-reduced-motion:reduce) {.sidebar {transition:none}}
+.organization-context {display:grid;gap:.5rem;padding:1rem;font-size:.85rem;color:#334155}
+.organization-context select {width:100%;min-width:0;background:#fff;border:1px solid #cbd5e1;border-radius:.5rem;padding:.5rem}
+.professional-onboarding .structure-card label {display:grid;gap:.5rem;margin-bottom:1rem}
+.form-actions {display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1rem}
