@@ -40,6 +40,65 @@ try {
       console.log(`PASS login ${device}/${theme}`);
     }
   }
+  // Exercise the real OIDC adapter against intercepted, test-only responses.
+  const authenticated = await browser.newContext({viewport:{width:1440,height:1000},locale:'fr-CA'});
+  await authenticated.addInitScript(() => {localStorage.setItem('i18nextLng','fr');});
+  let nonce;
+  let preference = 'LIGHT';
+  const subject = '11111111-1111-4111-8111-111111111111';
+  const jwt = claims => `${Buffer.from(JSON.stringify({alg:'none',typ:'JWT'})).toString('base64url')}.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.test-only`;
+  const organizations = [{id:'22222222-2222-4222-8222-222222222222',number:'ORG-001',name:'Clinique du Parc',legalName:'Clinique du Parc',status:'ACTIVE'},{id:'33333333-3333-4333-8333-333333333333',number:'ORG-002',name:'Centre médical Horizon',status:'ACTIVE'}];
+  await authenticated.route('**/*',async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.includes('/3p-cookies/')) return route.fulfill({contentType:'text/html',body:`<script>parent.postMessage('supported','*')</script>`});
+    if (url.pathname.endsWith('/openid-connect/auth')) {
+      nonce = url.searchParams.get('nonce');
+      const target = `${url.searchParams.get('redirect_uri')}#code=visual-test-code&state=${url.searchParams.get('state')}&session_state=visual-test-session`;
+      return route.fulfill({status:302,headers:{location:target}});
+    }
+    if (url.pathname.endsWith('/openid-connect/token')) {
+      const now = Math.floor(Date.now()/1000);
+      const token = jwt({sub:subject,iat:now,exp:now+3600,nonce,name:'Camille Martin',preferred_username:'camille',realm_access:{roles:['admin']}});
+      return route.fulfill({contentType:'application/json',headers:{'access-control-allow-origin':origin},body:JSON.stringify({access_token:token,id_token:token,refresh_token:token,token_type:'Bearer',expires_in:3600})});
+    }
+    if (url.origin !== origin) return route.abort();
+    if (!url.pathname.startsWith('/api/')) return route.continue();
+    let data;
+    if (url.pathname === '/api/v1/persons/me') data = {id:subject,firstName:'Camille',lastName:'Martin',personNumber:'PER-001',contacts:[],addresses:[],emergencyContacts:[],status:'ACTIVE'};
+    else if (url.pathname === '/api/v1/persons/me/preferences') {
+      if (route.request().method() === 'PUT') preference = route.request().postDataJSON().theme;
+      data = {theme:preference,avatarUrl:null};
+    } else if (url.pathname === '/api/v1/organizations/types') data = [{id:'44444444-4444-4444-8444-444444444444',code:'CLINIC',label:'Clinique'}];
+    else if (url.pathname === '/api/v1/organizations') data = {content:organizations,page:{number:0,size:20,totalElements:2,totalPages:1,first:true,last:true}};
+    else if (url.pathname === '/api/v1/notifications/unread-count') data = {unreadCount:2};
+    else data = [];
+    return route.fulfill({contentType:'application/json',body:JSON.stringify(data)});
+  });
+  const workspace = await authenticated.newPage();
+  await workspace.goto(`${origin}/organizations`);
+  await workspace.getByRole('cell',{name:'Clinique du Parc',exact:true}).waitFor();
+  for (const [device,width,height] of [['desktop',1440,1000],['mobile',390,844]]) {
+    await workspace.setViewportSize({width,height});
+    for (const theme of ['light','dark']) {
+      await workspace.getByRole('combobox',{name:'Thème d’affichage'}).selectOption(theme);
+      await workspace.waitForFunction(expected => document.documentElement.dataset.theme === expected,theme);
+      assert.equal(await workspace.evaluate(()=>document.documentElement.scrollWidth > innerWidth),false,`Organizations ${device}/${theme}: horizontal overflow`);
+      await workspace.screenshot({path:`${screenshotDirectory}/organizations-${device}-${theme}.png`,fullPage:true});
+      console.log(`PASS organizations ${device}/${theme}`);
+    }
+  }
+  await workspace.setViewportSize({width:1440,height:1000});
+  await workspace.goto(`${origin}/organizations/new`);
+  await workspace.locator('form.entity-form').waitFor();
+  await workspace.getByRole('option',{name:'Clinique',exact:true}).waitFor({state:'attached'});
+  for (const theme of ['light','dark']) {
+    await workspace.getByRole('combobox',{name:'Thème d’affichage'}).selectOption(theme);
+    await workspace.waitForFunction(expected => document.documentElement.dataset.theme === expected,theme);
+    assert.equal(await workspace.evaluate(()=>document.documentElement.scrollWidth > innerWidth),false);
+    await workspace.screenshot({path:`${screenshotDirectory}/organization-form-desktop-${theme}.png`,fullPage:true});
+    console.log(`PASS organization form ${theme}`);
+  }
+  await authenticated.close();
 } finally {
   await browser?.close();
   server.kill('SIGTERM');

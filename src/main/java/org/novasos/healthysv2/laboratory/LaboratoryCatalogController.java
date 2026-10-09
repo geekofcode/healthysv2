@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@org.springframework.validation.annotation.Validated
 @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE','LAB_TECHNICIAN')")
 class LaboratoryCatalogController {
     private final JdbcTemplate jdbc;
