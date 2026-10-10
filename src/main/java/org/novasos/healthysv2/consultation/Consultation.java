@@ -8,7 +8,7 @@ import java.util.*;
 class Consultation {
  @Id private UUID id; @Column(name="consultation_number",nullable=false,unique=true,length=50) private String number;
  @Column(name="patient_id",nullable=false) private UUID patientId; @Column(name="professional_id",nullable=false) private UUID professionalId;
- @Column(name="organization_id",nullable=false) private UUID organizationId; @Column(name="appointment_id") private UUID appointmentId;
+ @Column(name="organization_id") private UUID organizationId; @Column(name="appointment_id") private UUID appointmentId;
  @Column(name="encounter_id") private UUID encounterId; @Column(nullable=false,length=50) private String type;
  @Column(columnDefinition="text") private String reason; @Column(name="started_at",nullable=false) private Instant startedAt;
  @Column(name="completed_at") private Instant completedAt; @Column(nullable=false,length=30) private String status;
@@ -20,7 +20,7 @@ class Consultation {
  @OneToMany(mappedBy="consultation",cascade=CascadeType.ALL,orphanRemoval=true) private List<TreatmentPlan> treatments=new ArrayList<>();
  @OneToMany(mappedBy="consultation",cascade=CascadeType.ALL,orphanRemoval=true) private List<FollowUp> followUps=new ArrayList<>();
  protected Consultation(){}
- static Consultation start(UUID patient,UUID professional,UUID organization,UUID appointment,UUID encounter,String type,String reason){var x=new Consultation();x.id=UUID.randomUUID();x.number="CON-"+x.id.toString().replace("-","").substring(0,20).toUpperCase();x.patientId=Objects.requireNonNull(patient);x.professionalId=Objects.requireNonNull(professional);x.organizationId=Objects.requireNonNull(organization);x.appointmentId=appointment;x.encounterId=encounter;x.type=required(type).toUpperCase();x.reason=optional(reason);x.startedAt=Instant.now();x.createdAt=x.startedAt;x.updatedAt=x.startedAt;x.status="IN_PROGRESS";return x;}
+ static Consultation start(UUID patient,UUID professional,UUID organization,UUID appointment,UUID encounter,String type,String reason){var x=new Consultation();x.id=UUID.randomUUID();x.number="CON-"+x.id.toString().replace("-","").substring(0,20).toUpperCase();x.patientId=Objects.requireNonNull(patient);x.professionalId=Objects.requireNonNull(professional);x.organizationId=organization;x.appointmentId=appointment;x.encounterId=encounter;x.type=required(type).toUpperCase();x.reason=optional(reason);x.startedAt=Instant.now();x.createdAt=x.startedAt;x.updatedAt=x.startedAt;x.status="IN_PROGRESS";return x;}
  void complete(){ensureOpen();status="COMPLETED";completedAt=Instant.now();updatedAt=completedAt;}
  VitalSign addVitalSign(java.math.BigDecimal temperature,java.math.BigDecimal weight,java.math.BigDecimal height,Integer systolic,Integer diastolic,Integer heartRate,Integer respiratoryRate,java.math.BigDecimal oxygen,Instant measuredAt,UUID measuredBy){ensureOpen();var v=VitalSign.create(this,temperature,weight,height,systolic,diastolic,heartRate,respiratoryRate,oxygen,measuredAt,measuredBy);vitalSigns.add(v);touch();return v;}
  Diagnosis addDiagnosis(UUID catalog,String type,String description,String status){ensureOpen();var d=Diagnosis.create(this,catalog,type,description,status);diagnoses.add(d);touch();return d;}

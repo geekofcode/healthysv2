@@ -1,12 +1,14 @@
 package org.novasos.healthysv2.patient;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 import org.novasos.healthysv2.TestcontainersConfiguration;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,7 +21,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 @ActiveProfiles("test")
 @SpringBootTest(properties = {
@@ -30,10 +32,19 @@ import org.springframework.transaction.annotation.Transactional;
 })
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, PatientProvisioningApiIntegrationTests.JwtFixtures.class})
-@Transactional
 class PatientProvisioningApiIntegrationTests {
     private static final UUID SUBJECT = UUID.fromString("00000000-0000-0000-0000-000000000301");
     @Autowired MockMvc mockMvc;
+    @Autowired JdbcTemplate jdbc;
+
+    @AfterEach
+    void cleanProvisionedIdentity() {
+        jdbc.update("delete from patient.patient where person_id in "
+                + "(select id from identity.person where keycloak_user_id=?)", SUBJECT);
+        jdbc.update("delete from identity.person_contact where person_id in "
+                + "(select id from identity.person where keycloak_user_id=?)", SUBJECT);
+        jdbc.update("delete from identity.person where keycloak_user_id=?", SUBJECT);
+    }
 
     @Test
     void provisionsPersonAndPatientIdempotently() throws Exception {
@@ -47,6 +58,13 @@ class PatientProvisioningApiIntegrationTests {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer patient"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.created").value(false));
+
+        mockMvc.perform(get("/api/v1/persons/me")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer patient"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.middleName").doesNotExist())
+                .andExpect(jsonPath("$.birthDate").doesNotExist())
+                .andExpect(jsonPath("$.gender").doesNotExist());
     }
 
     @Test
@@ -83,6 +101,10 @@ class PatientProvisioningApiIntegrationTests {
                     .claim("family_name", "Lovelace")
                     .claim("email", "ada@example.com")
                     .claim("email_verified", true)
+                    .claim("middle_name", "Augusta")
+                    .claim("birthdate", "1815-12-10")
+                    .claim("gender", "female")
+                    .claim("phone_number", "+15145550123")
                     .claim("realm_access", Map.of("roles", roles))
                     .claim("resource_access", Map.of())
                     .build();

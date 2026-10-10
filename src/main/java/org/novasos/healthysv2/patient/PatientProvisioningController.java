@@ -6,7 +6,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -29,13 +29,14 @@ class PatientProvisioningController {
     @PreAuthorize("hasRole('PATIENT')")
     @Operation(summary = "Provision the authenticated patient after registration")
     ResponseEntity<PatientProvisionResponse> provision(
-            @AuthenticationPrincipal Jwt jwt) {
+            JwtAuthenticationToken authentication) {
+        Jwt jwt = authentication.getToken();
         PatientProvisionResponse response = service.provision(
                 subject(jwt),
                 jwt.getClaimAsString("given_name"),
                 jwt.getClaimAsString("family_name"),
                 jwt.getClaimAsString("email"),
-                Boolean.TRUE.equals(jwt.getClaim("email_verified")));
+                Boolean.TRUE.equals(jwt.getClaimAsBoolean("email_verified")));
         return ResponseEntity.status(
                 response.created() ? HttpStatus.CREATED : HttpStatus.OK)
                 .body(response);

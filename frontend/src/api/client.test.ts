@@ -2,6 +2,7 @@
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 vi.mock('../auth/keycloak', () => ({
+  keycloak:{tokenParsed:{sub:'test-user'}},
   validAccessToken: vi.fn().mockResolvedValue('access-token'),
 }));
 

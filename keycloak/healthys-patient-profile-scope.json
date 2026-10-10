@@ -1,0 +1,10 @@
+{
+  "name": "healthys-patient-profile",
+  "description": "Legacy compatibility scope. Business profiles are stored in HEALTH’YS, not authentication tokens.",
+  "protocol": "openid-connect",
+  "attributes": {
+    "include.in.token.scope": "true",
+    "display.on.consent.screen": "false"
+  },
+  "protocolMappers": []
+}

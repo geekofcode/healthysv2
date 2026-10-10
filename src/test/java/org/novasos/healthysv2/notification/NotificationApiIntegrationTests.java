@@ -45,6 +45,7 @@ import org.springframework.transaction.annotation.Transactional;
 class NotificationApiIntegrationTests {
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
+    @Autowired org.novasos.healthysv2.notification.api.ProfessionalRegistrationNotifications registrations;
     private final ObjectMapper json = new ObjectMapper().findAndRegisterModules();
 
     @Test
@@ -117,6 +118,53 @@ class NotificationApiIntegrationTests {
 
         mvc.perform(patch("/api/v1/notifications/{id}/read", id)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer outsider"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    void firstNotificationRequestProvisionsIdentityWithoutCallingMe() throws Exception {
+        UUID subject = UUID.randomUUID();
+        JwtFixtures.SUBJECTS.put("first-login", subject);
+        try {
+            mvc.perform(get("/api/v1/notifications/unread-count")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer first-login"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.unreadCount").value(0));
+            mvc.perform(get("/api/v1/notifications/unread-count")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer first-login"))
+                    .andExpect(status().isOk());
+            assertThat(jdbc.queryForObject("select count(*) from identity.person where keycloak_user_id=?", Integer.class, subject)).isEqualTo(1);
+        } finally {
+            jdbc.update("delete from identity.person where keycloak_user_id=?", subject);
+            JwtFixtures.SUBJECTS.remove("first-login");
+        }
+    }
+
+    @Test
+    void submittedDossierIsDurableDeduplicatedAndVisibleOnlyToCurrentAdministrators() throws Exception {
+        UUID applicant = person("applicant");
+        UUID administrator = person("admin");
+        UUID dossier = UUID.randomUUID();
+        registrations.professionalRegistrationSubmitted(dossier, applicant);
+        registrations.professionalRegistrationSubmitted(dossier, applicant);
+        assertThat(jdbc.queryForObject("select count(*) from notification.notification where id=?", Integer.class, dossier)).isEqualTo(1);
+
+        mvc.perform(get("/api/v1/notifications/unread-count").header(HttpHeaders.AUTHORIZATION, "Bearer applicant"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.unreadCount").value(0));
+        mvc.perform(get("/api/v1/notifications/{id}", dossier).header(HttpHeaders.AUTHORIZATION, "Bearer applicant"))
+                .andExpect(status().isNotFound());
+        // The account has never loaded notifications before the dossier was submitted.
+        mvc.perform(get("/api/v1/notifications/unread-count").header(HttpHeaders.AUTHORIZATION, "Bearer admin"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.unreadCount").value(1));
+        mvc.perform(get("/api/v1/notifications/unread-count").header(HttpHeaders.AUTHORIZATION, "Bearer admin"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.unreadCount").value(1));
+        mvc.perform(get("/api/v1/notifications/{id}", dossier).header(HttpHeaders.AUTHORIZATION, "Bearer admin"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.actionUrl").value("/admin/professional-requests"));
+        assertThat(jdbc.queryForObject("select count(*) from notification.notification_recipient where notification_id=?", Integer.class, dossier)).isEqualTo(1);
+        // Same subject, newly verified patient token: previous administrator assignment is revoked.
+        JwtFixtures.SUBJECTS.put("demoted", administrator);
+        mvc.perform(get("/api/v1/notifications/{id}", dossier).header(HttpHeaders.AUTHORIZATION, "Bearer demoted"))
                 .andExpect(status().isNotFound());
     }
 

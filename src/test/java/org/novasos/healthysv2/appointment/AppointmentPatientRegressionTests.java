@@ -50,6 +50,15 @@ class AppointmentPatientRegressionTests {
         verifyNoInteractions(repository);
     }
 
+    @Test void mineKeepsPatientScopeAndAppliesStatusBeforePagination() {
+        when(jdbc.query(eq("select id from patient.patient where person_id=?"),org.mockito.ArgumentMatchers.<ResultSetExtractor<UUID>>any(),eq(person))).thenReturn(patient);
+        var pageable=PageRequest.of(1,2);
+        Instant from=start.minusSeconds(3600),to=start.plusSeconds(3600);
+        when(repository.search(patient,null,"CANCELLED",from,to,pageable)).thenReturn(org.springframework.data.domain.Page.empty(pageable));
+        service.mine(from,to," CANCELLED ",pageable);
+        verify(repository).search(patient,null,"CANCELLED",from,to,pageable);
+    }
+
     @Test void legacyCancelRescheduleAndUpdateRejectOtherPatient() {
         Appointment other = Appointment.create(UUID.randomUUID(), professional, organization, null, "CONSULTATION", start, start.plusSeconds(1800), null, person);
         when(repository.findLockedById(other.getId())).thenReturn(Optional.of(other));

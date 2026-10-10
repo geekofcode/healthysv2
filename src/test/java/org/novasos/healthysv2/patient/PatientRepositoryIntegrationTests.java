@@ -58,6 +58,40 @@ class PatientRepositoryIntegrationTests {
         assertThat(reloaded.getEmergencyProfile()).isNotNull();
     }
 
+    @Test
+    void independentListRequiresLivePersonalConsentBeforePagination() {
+        UUID person = insertPerson(), professional = UUID.randomUUID();
+        jdbc.update("insert into professional.professional(id,person_id,professional_number,professional_type) values (?,?,?,'DOCTOR')",
+                professional, person, "PRO-"+professional);
+        Patient allowed = repository.saveAndFlush(Patient.create(insertPerson()));
+        Patient denied = repository.saveAndFlush(Patient.create(insertPerson()));
+        for (Patient patient : java.util.List.of(allowed, denied)) {
+            jdbc.update("insert into patient.care_relationship(patient_id,professional_id,relationship_type) values (?,?,'PRIMARY')",
+                    patient.getId(), professional);
+        }
+        jdbc.update("insert into patient.consent(patient_id,grantee_person_id,scope) values (?,?,'MEDICAL_RECORD')", allowed.getId(), person);
+        var page = repository.searchScoped("", null, person, true, org.springframework.data.domain.PageRequest.of(0, 1, org.springframework.data.domain.Sort.by("patient_number")));
+        assertThat(page.getTotalElements()).isEqualTo(1);
+        assertThat(page.getContent()).extracting(Patient::getId).containsExactly(allowed.getId());
+        jdbc.update("update patient.consent set revoked_at=clock_timestamp(),status='REVOKED' where patient_id=?", allowed.getId());
+        assertThat(repository.searchScoped("", null, person, true, org.springframework.data.domain.PageRequest.of(0, 1)).getTotalElements()).isZero();
+    }
+
+    @Test
+    void hospitalListNeverIncludesPatientsRegisteredOnlyElsewhere() {
+        UUID own = UUID.randomUUID(), other = UUID.randomUUID();
+        for (UUID organization : java.util.List.of(own, other)) {
+            jdbc.update("insert into organization.organization(id,organization_number,name) values (?,?,?)", organization, "ORG-"+organization,"Hospital");
+        }
+        Patient allowed = repository.saveAndFlush(Patient.create(insertPerson()));
+        Patient denied = repository.saveAndFlush(Patient.create(insertPerson()));
+        jdbc.update("insert into patient.patient_registration(patient_id,organization_id,registration_number) values (?,?,?)", allowed.getId(),own,"REG-"+allowed.getId());
+        jdbc.update("insert into patient.patient_registration(patient_id,organization_id,registration_number) values (?,?,?)", denied.getId(),other,"REG-"+denied.getId());
+        var page = repository.searchScoped("", own, null, false, org.springframework.data.domain.PageRequest.of(0, 1, org.springframework.data.domain.Sort.by("patient_number")));
+        assertThat(page.getTotalElements()).isEqualTo(1);
+        assertThat(page.getContent()).extracting(Patient::getId).containsExactly(allowed.getId());
+    }
+
     private UUID insertPerson() {
         UUID id = UUID.randomUUID();
         jdbc.update("""
