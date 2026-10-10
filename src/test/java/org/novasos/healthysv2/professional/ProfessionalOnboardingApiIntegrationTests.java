@@ -216,7 +216,7 @@ import org.springframework.mock.web.MockMultipartFile;
     }
     @Test void identityExpiryBoundaryAndMissingScansAreRejected() throws Exception {
         UUID id=draft();
-        String invalid="{\"profession\":\"medecin\",\"licenseNumber\":\"LIC-%s\",\"issuingAuthority\":\"College\",\"countryId\":\"%s\",\"identityDocumentType\":\"NATIONAL_ID\",\"identityExpiresOn\":\"%s\"}".formatted(APPLICANT,country,java.time.LocalDate.now().plusMonths(3));
+        String invalid="{\"profession\":\"medecin\",\"licenseNumber\":\"LIC-%s\",\"issuingAuthority\":\"College\",\"countryId\":\"%s\",\"identityDocumentType\":\"NATIONAL_ID\",\"identityDocumentNumber\":\"ID-123\",\"identityExpiresOn\":\"%s\"}".formatted(APPLICANT,country,java.time.LocalDate.now().plusMonths(3));
         mvc.perform(put("/api/v1/professional-onboarding/me").header(HttpHeaders.AUTHORIZATION,"Bearer applicant")
                 .contentType(MediaType.APPLICATION_JSON).content(invalid)).andExpect(status().isConflict());
         mvc.perform(multipart("/api/v1/professional-onboarding/me/proof")
@@ -234,15 +234,32 @@ import org.springframework.mock.web.MockMultipartFile;
     @Test void identityMetadataChangeInvalidatesBothScans() throws Exception {
         draft();
         uploadIdentity();
-        String changed="{\"profession\":\"medecin\",\"licenseNumber\":\"LIC-%s\",\"issuingAuthority\":\"College\",\"countryId\":\"%s\",\"identityDocumentType\":\"PASSPORT\",\"identityExpiresOn\":\"%s\",\"specialityName\":\"New speciality\"}".formatted(APPLICANT,country,java.time.LocalDate.now().plusYears(1));
+        String changed="{\"profession\":\"medecin\",\"licenseNumber\":\"LIC-%s\",\"issuingAuthority\":\"College\",\"countryId\":\"%s\",\"identityDocumentType\":\"PASSPORT\",\"identityDocumentNumber\":\"ID-123\",\"identityExpiresOn\":\"%s\",\"specialityName\":\"New speciality\"}".formatted(APPLICANT,country,java.time.LocalDate.now().plusYears(1));
         mvc.perform(put("/api/v1/professional-onboarding/me").header(HttpHeaders.AUTHORIZATION,"Bearer applicant")
                 .contentType(MediaType.APPLICATION_JSON).content(changed)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.identityFrontUploaded").value(false))
                 .andExpect(jsonPath("$.identityBackUploaded").value(false))
                 .andExpect(jsonPath("$.specialityName").value("New speciality"));
     }
+    @Test void identityNumberRequiredAndChangingItInvalidatesScans() throws Exception {
+        UUID id=draft();
+        uploadIdentity();
+        mvc.perform(multipart("/api/v1/professional-onboarding/me/proof")
+                .file(new MockMultipartFile("file","license.pdf","application/pdf","%PDF-1.7 proof".getBytes()))
+                .header(HttpHeaders.AUTHORIZATION,"Bearer applicant")).andExpect(status().isOk());
+        jdbc.update("update professional.registration_request set identity_document_number=null where id=?",id);
+        mvc.perform(post("/api/v1/professional-onboarding/me/submit").header(HttpHeaders.AUTHORIZATION,"Bearer applicant")).andExpect(status().isConflict());
+        jdbc.update("update professional.registration_request set identity_document_number='ID-123' where id=?",id);
+        String changed="{\"profession\":\"medecin\",\"licenseNumber\":\"LIC-%s\",\"issuingAuthority\":\"College\",\"countryId\":\"%s\",\"identityDocumentType\":\"NATIONAL_ID\",\"identityDocumentNumber\":\" ID-456 ",\"identityExpiresOn\":\"%s\"}".formatted(APPLICANT,country,java.time.LocalDate.now().plusYears(1));
+        mvc.perform(put("/api/v1/professional-onboarding/me").header(HttpHeaders.AUTHORIZATION,"Bearer applicant")
+                .contentType(MediaType.APPLICATION_JSON).content(changed)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.identityDocumentNumber").value("ID-456"))
+                .andExpect(jsonPath("$.identityFrontUploaded").value(false))
+                .andExpect(jsonPath("$.identityBackUploaded").value(false))
+                .andExpect(jsonPath("$.proofUploaded").value(true));
+    }
     private UUID draft() throws Exception  {
-        String body=mvc.perform(put("/api/v1/professional-onboarding/me").header(HttpHeaders.AUTHORIZATION,"Bearer applicant").contentType(MediaType.APPLICATION_JSON).content("{\"profession\":\"medecin\",\"licenseNumber\":\"LIC-%s\",\"issuingAuthority\":\"College\",\"countryId\":\"%s\",\"identityDocumentType\":\"NATIONAL_ID\",\"identityExpiresOn\":\"%s\"}".formatted(APPLICANT,country,java.time.LocalDate.now().plusYears(1)))).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("DRAFT")).andReturn().getResponse().getContentAsString();
+        String body=mvc.perform(put("/api/v1/professional-onboarding/me").header(HttpHeaders.AUTHORIZATION,"Bearer applicant").contentType(MediaType.APPLICATION_JSON).content("{\"profession\":\"medecin\",\"licenseNumber\":\"LIC-%s\",\"issuingAuthority\":\"College\",\"countryId\":\"%s\",\"identityDocumentType\":\"NATIONAL_ID\",\"identityDocumentNumber\":\"ID-123\",\"identityExpiresOn\":\"%s\"}".formatted(APPLICANT,country,java.time.LocalDate.now().plusYears(1)))).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("DRAFT")).andReturn().getResponse().getContentAsString();
         return extractId(body);
     }
     private void review(UUID id,String decision,String status) throws Exception  {

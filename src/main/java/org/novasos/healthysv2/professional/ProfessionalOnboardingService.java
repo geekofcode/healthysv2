@@ -25,7 +25,7 @@ class ProfessionalOnboardingService {
                 (select last_name from identity.person person where person.id=person_id) as last_name,
                 profession, license_number, issuing_authority, country_id, speciality_catalog_id,
                 status, reason, professional_id, created_at, updated_at,
-                speciality_name, identity_document_type, identity_expires_on,
+                speciality_name, identity_document_type, identity_document_number, identity_expires_on,
                 (identity_front is not null) as identity_front_uploaded,
                 (identity_back is not null) as identity_back_uploaded,
                 (proof is not null) as proof_uploaded,
@@ -63,8 +63,8 @@ class ProfessionalOnboardingService {
         if(input.specialityCatalogId()!=null)requireReference("catalog.speciality_catalog",input.specialityCatalogId());
         validateExpiry(input.identityExpiresOn(),false);
         saveDraft(subject,person,old,input);
-        jdbc.update("update professional.registration_request set speciality_name=?,identity_document_type=?,identity_expires_on=? where keycloak_user_id=?",blank(input.specialityName()),input.identityDocumentType(),input.identityExpiresOn(),subject);
-        if(old!=null && (!Objects.equals(old.identityDocumentType(),input.identityDocumentType()) || !Objects.equals(old.identityExpiresOn(),input.identityExpiresOn()))) {
+        jdbc.update("update professional.registration_request set speciality_name=?,identity_document_type=?,identity_document_number=?,identity_expires_on=? where keycloak_user_id=?",blank(input.specialityName()),input.identityDocumentType(),blank(input.identityDocumentNumber()),input.identityExpiresOn(),subject);
+        if(old!=null && (!Objects.equals(old.identityDocumentType(),input.identityDocumentType()) || !Objects.equals(old.identityDocumentNumber(),blank(input.identityDocumentNumber())) || !Objects.equals(old.identityExpiresOn(),input.identityExpiresOn()))) {
             jdbc.update("update professional.registration_request set identity_front=null,identity_front_type=null,identity_front_name=null,identity_back=null,identity_back_type=null,identity_back_name=null where id=?",old.id());
         }
         var result=bySubject(subject,false);
@@ -214,9 +214,9 @@ class ProfessionalOnboardingService {
         };
     }
     private void requireDocuments(DossierResponse dossier) {
-        if(dossier.identityDocumentType()==null || !dossier.proofUploaded()
+        if(dossier.identityDocumentType()==null || blank(dossier.identityDocumentNumber())==null || !dossier.proofUploaded()
                 || !dossier.identityFrontUploaded() || !dossier.identityBackUploaded())
-            throw conflict("Identity front, identity back and professional license scans are required");
+            throw conflict("Identity document number, identity front, identity back and professional license scans are required");
         validateExpiry(dossier.identityExpiresOn(),true);
     }
     private void validateExpiry(LocalDate expiry,boolean required) {
@@ -348,7 +348,7 @@ class ProfessionalOnboardingService {
         return rows.getFirst();
     }
     private DossierResponse dossier(ResultSet rs,int n)throws SQLException {
-        return new DossierResponse(rs.getObject("id",UUID.class),rs.getObject("person_id",UUID.class),rs.getObject("keycloak_user_id",UUID.class),rs.getString("first_name"),rs.getString("last_name"),rs.getString("profession"),rs.getString("license_number"),rs.getString("issuing_authority"),rs.getObject("country_id",UUID.class),rs.getObject("speciality_catalog_id",UUID.class),rs.getString("status"),rs.getString("reason"),rs.getString("role_sync_status"),rs.getBoolean("proof_uploaded"),rs.getString("speciality_name"),rs.getString("identity_document_type"),rs.getObject("identity_expires_on",LocalDate.class),rs.getBoolean("identity_front_uploaded"),rs.getBoolean("identity_back_uploaded"),rs.getObject("professional_id",UUID.class),rs.getTimestamp("created_at").toInstant(),rs.getTimestamp("updated_at").toInstant());
+        return new DossierResponse(rs.getObject("id",UUID.class),rs.getObject("person_id",UUID.class),rs.getObject("keycloak_user_id",UUID.class),rs.getString("first_name"),rs.getString("last_name"),rs.getString("profession"),rs.getString("license_number"),rs.getString("issuing_authority"),rs.getObject("country_id",UUID.class),rs.getObject("speciality_catalog_id",UUID.class),rs.getString("status"),rs.getString("reason"),rs.getString("role_sync_status"),rs.getBoolean("proof_uploaded"),rs.getString("speciality_name"),rs.getString("identity_document_type"),rs.getString("identity_document_number"),rs.getObject("identity_expires_on",LocalDate.class),rs.getBoolean("identity_front_uploaded"),rs.getBoolean("identity_back_uploaded"),rs.getObject("professional_id",UUID.class),rs.getTimestamp("created_at").toInstant(),rs.getTimestamp("updated_at").toInstant());
     }
     private void lockSubject(UUID id) {
         jdbc.execute("select pg_advisory_xact_lock("+(id.getMostSignificantBits()^id.getLeastSignificantBits())+")");

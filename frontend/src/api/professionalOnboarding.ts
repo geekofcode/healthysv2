@@ -3,7 +3,7 @@ import {validAccessToken} from '../auth/keycloak';
 export type Profession='medecin'|'nurse'|'laboratoire';
 export type IdentityDocumentType='PASSPORT'|'NATIONAL_ID'|'DRIVING_LICENSE';
 export type DocumentKind='ID_FRONT'|'ID_BACK'|'LICENSE';
-export type DossierInput={profession:Profession;licenseNumber:string;issuingAuthority:string;countryId:string;specialityCatalogId?:string;specialityName?:string;identityDocumentType?:IdentityDocumentType;identityExpiresOn?:string};
+export type DossierInput={profession:Profession;licenseNumber:string;issuingAuthority:string;countryId:string;specialityCatalogId?:string;specialityName?:string;identityDocumentType?:IdentityDocumentType;identityDocumentNumber?:string;identityExpiresOn?:string};
 export type Dossier=DossierInput & {id:string;personId:string;keycloakUserId:string;firstName?:string;lastName?:string;roleSyncStatus?:string;status:'DRAFT'|'SUBMITTED'|'APPROVED'|'REJECTED'|'SUSPENDED';reason?:string;proofUploaded:boolean;identityFrontUploaded?:boolean;identityBackUploaded?:boolean;professionalId?:string;createdAt:string;updatedAt:string};
 export type Invitation={id:string;email:string;organizationId:string;position:string;token?:string;expiresAt:string;status:string};
 export type Affiliation={id:string;professionalId:string;organizationId:string;organizationName?:string;status:string};

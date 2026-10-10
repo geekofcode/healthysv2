@@ -15,6 +15,7 @@ public final class ProfessionalOnboardingDtos {
             @NotNull UUID countryId, UUID specialityCatalogId,
             @Size(max=255) String specialityName,
             @Pattern(regexp="PASSPORT|NATIONAL_ID|DRIVING_LICENSE") String identityDocumentType,
+            @Size(max=100) String identityDocumentNumber,
             LocalDate identityExpiresOn) {}
 
     public record ReviewRequest(
@@ -30,7 +31,7 @@ public final class ProfessionalOnboardingDtos {
             String firstName, String lastName, String profession, String licenseNumber,
             String issuingAuthority, UUID countryId, UUID specialityCatalogId,
             String status, String reason, String roleSyncStatus, boolean proofUploaded,
-            String specialityName, String identityDocumentType, LocalDate identityExpiresOn,
+            String specialityName, String identityDocumentType, String identityDocumentNumber, LocalDate identityExpiresOn,
             boolean identityFrontUploaded, boolean identityBackUploaded,
             UUID professionalId, Instant createdAt, Instant updatedAt) {}
 
