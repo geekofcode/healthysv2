@@ -1,5 +1,7 @@
 import {MyPatientAccessPage} from './pages/MyPatientAccessPage';
 import {ProfessionalOnboardingPage} from './pages/ProfessionalOnboardingPage';
+import {ConsultationsPage} from './pages/ConsultationsPage';
+import {RegistrationOptionsPage} from './pages/RegistrationOptionsPage';
 import {ProfessionalReviewPage} from './pages/ProfessionalReviewPage';
 import {ProfessionalInvitationPage} from './pages/ProfessionalInvitationPage';
 import {createBrowserRouter} from 'react-router-dom';
@@ -60,6 +62,7 @@ export const router = createBrowserRouter([
           {path: '/me/access', element: <MyPatientAccessPage />},
           {path: '/professional-onboarding', element: <ProfessionalOnboardingPage />},
           {path: '/professional-invitation', element: <ProfessionalInvitationPage />},
+          {path: '/admin/registration-options', element: <RegistrationOptionsPage />},
           {path: '/admin/professional-requests', element: <ProfessionalReviewPage />},
           {path: '/organizations', element: <OrganizationsPage />},
           {path: '/organizations/new', element: <OrganizationFormPage />},
@@ -75,6 +78,7 @@ export const router = createBrowserRouter([
           {path: '/patients/:id/edit', element: <PatientFormPage />},
           {path: '/patients/:id/access', element: <PatientAccessPage />},
           {path: '/agenda', element: <AgendaPage />},
+          {path: '/consultations', element: <ConsultationsPage />},
           {path: '/consultations/new', element: <ConsultationStartPage />},
           {path: '/consultations/:id', element: <ConsultationPage />},
           {path: '/laboratory/orders', element: <LaboratoryOrdersPage />},

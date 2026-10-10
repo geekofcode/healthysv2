@@ -23,3 +23,7 @@ Le profil du compte Keycloak peut différer du nom métier après une modificati
 ## Déploiement
 
 Reconstruire le frontend et le backend, puis appliquer V22 avec Flyway. Pour un realm existant, suivre `docs/keycloak-theme.md` pour retirer les anciens attributs et mappers démographiques. Ne pas réimporter le realm et ne pas supprimer les données déjà présentes en base.
+
+Les entrées Agenda, Consultations, Laboratoire, Mère-enfant, Documents, Téléconsultations, Pharmacie et Facturation suivent maintenant une présentation par tableau et filtres. Les actions Nouveau/Créer ouvrent les formulaires selon les droits. Les consultations disposent d’une nouvelle liste serveur limitée par contexte d’exercice et consentement. Le filtre de statut de l’agenda est appliqué avant pagination. Les listes de stocks et téléconsultations sont paginées côté navigateur sur la collection renvoyée par leurs APIs. Le carnet enfant reste accessible par sélection de patient, l’API ne proposant pas de collection globale.
+
+Administration est organisée en sections avec descriptions : établissements/dossiers, inscriptions/référentiels, finances/supervision. Le libellé manquant `patients.number` est corrigé en français et anglais.

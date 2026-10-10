@@ -81,7 +81,7 @@ export function MainLayout() {
           {canAccessPath(auth.roles, '/professionals')&&<NavLink to="/professionals">{t('nav.professionals')}</NavLink>}
           {canAccessPath(auth.roles, '/patients')&&<NavLink to="/patients">{t('nav.patients')}</NavLink>}
           {canAccessPath(auth.roles, '/agenda')&&<NavLink to="/agenda">{t('nav.agenda')}</NavLink>}
-          {canAccessPath(auth.roles, '/consultations/new')&&<NavLink to="/consultations/new">{t('nav.consultations')}</NavLink>}
+          {canAccessPath(auth.roles, '/consultations')&&<NavLink to="/consultations">{t('nav.consultations')}</NavLink>}
           {canAccessPath(auth.roles, '/laboratory/orders')&&<NavLink to="/laboratory/orders">{t('nav.laboratory')}</NavLink>}
           {canAccessPath(auth.roles, '/maternal-child')&&<NavLink to="/maternal-child">{t('nav.maternalChild')}</NavLink>}
           {canAccessPath(auth.roles, '/documents')&&<NavLink to="/documents">{t('nav.documents')}</NavLink>}

@@ -16,6 +16,7 @@ public final class ConsultationDtos{private ConsultationDtos(){}
  public record ObservationResponse(UUID id,UUID authorProfessionalId,String type,String value,String notes,Instant observedAt){}
  public record TreatmentResponse(UUID id,String description,LocalDate startDate,LocalDate endDate,String status){}
  public record FollowUpResponse(UUID id,LocalDate recommendedDate,String instructions,String status){}
+ public record ConsultationSummary(UUID id,String consultationNumber,UUID patientId,UUID professionalId,UUID organizationId,String type,Instant startedAt,String status){}
  public record ConsultationResponse(UUID id,String consultationNumber,UUID patientId,UUID professionalId,UUID organizationId,UUID appointmentId,UUID encounterId,String type,String reason,Instant startedAt,Instant completedAt,String status,Instant createdAt,Instant updatedAt,long version,List<VitalSignResponse>vitalSigns,List<DiagnosisResponse>diagnoses,List<NoteResponse>notes,List<ObservationResponse>observations,List<TreatmentResponse>treatments,List<FollowUpResponse>followUps){}
  public record PatientSummary(UUID patientId,String patientNumber,String firstName,String lastName,LocalDate birthDate,String gender,String bloodGroup,String rhesus,String status,List<String>activeAllergies,List<String>activeChronicDiseases,List<String>activeFlags){}
  public record DiagnosisCatalogResponse(UUID id,String code,String system,String label){}

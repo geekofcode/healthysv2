@@ -13,3 +13,4 @@ describe('agenda loading', () => {
     expect(apiRequest).toHaveBeenCalledWith(path);
   });
 });
+it('sends status to the server before paging',async()=>{await listAppointments(true,2,20,'CONFIRMED');expect(apiRequest).toHaveBeenCalledWith('/appointments/me?size=20&page=2&status=CONFIRMED');});

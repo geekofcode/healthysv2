@@ -40,6 +40,19 @@ class ProfessionalOnboardingController {
         return service.upload(auth,file);
     }
 
+    @PostMapping(value="/me/documents/{kind}",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
+    DossierResponse document(JwtAuthenticationToken auth,@PathVariable String kind,@RequestParam MultipartFile file) {
+        return service.uploadDocument(auth,kind,file);
+    }
+
+    @GetMapping("/requests/{id}/documents/{kind}")
+    ResponseEntity<byte[]> documentDownload(@PathVariable UUID id,@PathVariable String kind,JwtAuthenticationToken auth) {
+        var document=service.document(id,kind,auth);
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType(document.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment().filename(document.filename()).build().toString())
+                .header(HttpHeaders.CACHE_CONTROL,"no-store").header("X-Content-Type-Options","nosniff").body(document.bytes());
+    }
+
     @PostMapping("/me/submit") DossierResponse submit(JwtAuthenticationToken auth) {
         return service.submit(auth);
     }

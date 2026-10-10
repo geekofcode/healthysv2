@@ -1,3 +1,4 @@
+import type {Page} from './organizations';
 import {apiRequest} from './client';
 
 export type VitalSign={id:string;temperature?:number;weight?:number;height?:number;bmi?:number;systolicPressure?:number;diastolicPressure?:number;heartRate?:number;respiratoryRate?:number;oxygenSaturation?:number;measuredAt:string;measuredBy?:string};
@@ -21,3 +22,6 @@ export const addFollowUp=(id:string,input:Record<string,unknown>)=>add<Consultat
 export const completeConsultation=(id:string)=>apiRequest<Consultation>(`/consultations/${id}/complete`,{method:'POST'});
 export const searchDiagnosisCatalog=(query='')=>apiRequest<DiagnosisCatalog[]>(`/diagnosis-catalog?${new URLSearchParams({query})}`);
 export const hasVitalValue=(input:Record<string,unknown>)=>['temperature','weight','height','systolicPressure','diastolicPressure','heartRate','respiratoryRate','oxygenSaturation'].some(key=>input[key]!==''&&input[key]!=null);
+
+export type ConsultationSummary=Pick<Consultation,'id'|'consultationNumber'|'patientId'|'professionalId'|'type'|'startedAt'|'status'>;
+export const listConsultations=(page=0,query='',status='')=>apiRequest<Page<ConsultationSummary>>(`/consultations?page=${page}&size=20&query=${encodeURIComponent(query)}&status=${encodeURIComponent(status)}`);

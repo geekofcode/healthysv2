@@ -38,6 +38,10 @@ import org.springframework.mock.web.MockMultipartFile;
         jdbc.update("insert into organization.organization(id,organization_number,name) values (?,?,?) on conflict do nothing",FOREIGN_ORG,"ONBOARD-"+FOREIGN_ORG,"Hospital B");
     }
     @AfterEach void cleanup() {
+        for(String table: java.util.List.of("notification_recipient","notification_delivery")) {
+            jdbc.update("delete from notification."+table+" where notification_id in (select id from professional.registration_request where keycloak_user_id in (?,?))",APPLICANT,OTHER);
+        }
+        jdbc.update("delete from notification.notification where id in (select id from professional.registration_request where keycloak_user_id in (?,?))",APPLICANT,OTHER);
         jdbc.update("delete from professional.organization_invitation where organization_id in (?,?)",ORG,FOREIGN_ORG);
         jdbc.update("delete from professional.registration_request where keycloak_user_id in (?,?)",APPLICANT,OTHER);
         jdbc.update("delete from professional.professional_assignment where professional_id in (select id from professional.professional where person_id in(select id from identity.person where keycloak_user_id in (?,?)))",APPLICANT,OTHER);
@@ -48,10 +52,38 @@ import org.springframework.mock.web.MockMultipartFile;
         jdbc.update("delete from identity.person where keycloak_user_id in (?,?)",APPLICANT,OTHER);
         jdbc.update("delete from organization.organization where id in (?,?)",ORG,FOREIGN_ORG);
     }
+    @Test void administratorManagesCountriesAndReferencedCountryCannotBeDeleted() throws Exception {
+        mvc.perform(post("/api/v1/admin/registration-options/countries").header(HttpHeaders.AUTHORIZATION,"Bearer applicant")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"iso2\":\"YX\",\"name\":\"Reference country\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/admin/registration-options/countries").header(HttpHeaders.AUTHORIZATION,"Bearer admin")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"iso2\":\"YX\",\"name\":\"Reference country\"}"))
+                .andExpect(status().isOk());
+        UUID id=jdbc.queryForObject("select id from shared.country where iso2='YX'",UUID.class);
+        try {
+            mvc.perform(put("/api/v1/admin/registration-options/countries/{id}",id).header(HttpHeaders.AUTHORIZATION,"Bearer admin")
+                    .contentType(MediaType.APPLICATION_JSON).content("{\"iso2\":\"YX\",\"name\":\"Updated country\"}"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("Updated country"));
+            mvc.perform(delete("/api/v1/admin/registration-options/countries/{id}",id).header(HttpHeaders.AUTHORIZATION,"Bearer applicant"))
+                    .andExpect(status().isForbidden());
+            mvc.perform(delete("/api/v1/admin/registration-options/countries/{id}",id).header(HttpHeaders.AUTHORIZATION,"Bearer admin"))
+                    .andExpect(status().isNoContent());
+            UUID address=UUID.randomUUID();
+            jdbc.update("insert into shared.address(id,line1,city,country_id) values (?,'Street','City',?)",address,country);
+            try {
+                mvc.perform(delete("/api/v1/admin/registration-options/countries/{id}",country).header(HttpHeaders.AUTHORIZATION,"Bearer admin"))
+                        .andExpect(status().isConflict());
+            } finally { jdbc.update("delete from shared.address where id=?",address); }
+        } finally { jdbc.update("delete from shared.country where id=?",id); }
+        mvc.perform(get("/api/v1/registration-options").header(HttpHeaders.AUTHORIZATION,"Bearer applicant"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.professions.length()").value(3));
+    }
+
     @Test void approvalIsIdempotentPrivateAndIndependentAndSuspensionRevokesRole() throws Exception  {
         UUID id=draft();
         mvc.perform(post("/api/v1/professional-onboarding/me/submit").header(HttpHeaders.AUTHORIZATION,"Bearer applicant")).andExpect(status().isConflict());
         mvc.perform(multipart("/api/v1/professional-onboarding/me/proof").file(new MockMultipartFile("file","license.pdf","application/pdf","%PDF-1.7 proof".getBytes())).header(HttpHeaders.AUTHORIZATION,"Bearer applicant")).andExpect(status().isOk());
+        uploadIdentity();
         mvc.perform(get("/api/v1/professional-onboarding/requests/{id}/proof",id).header(HttpHeaders.AUTHORIZATION,"Bearer other")).andExpect(status().isForbidden());
         mvc.perform(post("/api/v1/professional-onboarding/me/submit").header(HttpHeaders.AUTHORIZATION,"Bearer applicant")).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("SUBMITTED"));
         review(id,"APPROVE","APPROVED");
@@ -109,6 +141,7 @@ import org.springframework.mock.web.MockMultipartFile;
                         .file(new MockMultipartFile("file","license.pdf","application/pdf","%PDF-1.7 proof".getBytes()))
                         .header(HttpHeaders.AUTHORIZATION,"Bearer applicant"))
                 .andExpect(status().isOk());
+        uploadIdentity();
         mvc.perform(post("/api/v1/professional-onboarding/me/submit")
                         .header(HttpHeaders.AUTHORIZATION,"Bearer applicant"))
                 .andExpect(status().isOk());
@@ -174,8 +207,42 @@ import org.springframework.mock.web.MockMultipartFile;
         return match.group(1);
     }
 
+    private void uploadIdentity() throws Exception {
+        for(String kind: java.util.List.of("ID_FRONT","ID_BACK")) {
+            mvc.perform(multipart("/api/v1/professional-onboarding/me/documents/{kind}",kind)
+                    .file(new MockMultipartFile("file","identity.pdf","application/pdf","%PDF-1.7 identity".getBytes()))
+                    .header(HttpHeaders.AUTHORIZATION,"Bearer applicant")).andExpect(status().isOk());
+        }
+    }
+    @Test void identityExpiryBoundaryAndMissingScansAreRejected() throws Exception {
+        UUID id=draft();
+        String invalid="{\"profession\":\"medecin\",\"licenseNumber\":\"LIC-%s\",\"issuingAuthority\":\"College\",\"countryId\":\"%s\",\"identityDocumentType\":\"NATIONAL_ID\",\"identityExpiresOn\":\"%s\"}".formatted(APPLICANT,country,java.time.LocalDate.now().plusMonths(3));
+        mvc.perform(put("/api/v1/professional-onboarding/me").header(HttpHeaders.AUTHORIZATION,"Bearer applicant")
+                .contentType(MediaType.APPLICATION_JSON).content(invalid)).andExpect(status().isConflict());
+        mvc.perform(multipart("/api/v1/professional-onboarding/me/proof")
+                .file(new MockMultipartFile("file","license.pdf","application/pdf","%PDF-1.7 proof".getBytes()))
+                .header(HttpHeaders.AUTHORIZATION,"Bearer applicant")).andExpect(status().isOk());
+        mvc.perform(post("/api/v1/professional-onboarding/me/submit").header(HttpHeaders.AUTHORIZATION,"Bearer applicant")).andExpect(status().isConflict());
+        uploadIdentity();
+        mvc.perform(get("/api/v1/professional-onboarding/requests/{id}/documents/ID_FRONT",id)
+                .header(HttpHeaders.AUTHORIZATION,"Bearer other")).andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/professional-onboarding/me/submit").header(HttpHeaders.AUTHORIZATION,"Bearer applicant")).andExpect(status().isOk());
+        jdbc.update("update professional.registration_request set identity_expires_on=? where id=?",java.time.LocalDate.now().plusMonths(3),id);
+        mvc.perform(post("/api/v1/professional-onboarding/requests/{id}/review",id).header(HttpHeaders.AUTHORIZATION,"Bearer admin")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"decision\":\"APPROVE\",\"reason\":\"verified\"}")).andExpect(status().isConflict());
+    }
+    @Test void identityMetadataChangeInvalidatesBothScans() throws Exception {
+        draft();
+        uploadIdentity();
+        String changed="{\"profession\":\"medecin\",\"licenseNumber\":\"LIC-%s\",\"issuingAuthority\":\"College\",\"countryId\":\"%s\",\"identityDocumentType\":\"PASSPORT\",\"identityExpiresOn\":\"%s\",\"specialityName\":\"New speciality\"}".formatted(APPLICANT,country,java.time.LocalDate.now().plusYears(1));
+        mvc.perform(put("/api/v1/professional-onboarding/me").header(HttpHeaders.AUTHORIZATION,"Bearer applicant")
+                .contentType(MediaType.APPLICATION_JSON).content(changed)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.identityFrontUploaded").value(false))
+                .andExpect(jsonPath("$.identityBackUploaded").value(false))
+                .andExpect(jsonPath("$.specialityName").value("New speciality"));
+    }
     private UUID draft() throws Exception  {
-        String body=mvc.perform(put("/api/v1/professional-onboarding/me").header(HttpHeaders.AUTHORIZATION,"Bearer applicant").contentType(MediaType.APPLICATION_JSON).content("{\"profession\":\"medecin\",\"licenseNumber\":\"LIC-%s\",\"issuingAuthority\":\"College\",\"countryId\":\"%s\"}".formatted(APPLICANT,country))).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("DRAFT")).andReturn().getResponse().getContentAsString();
+        String body=mvc.perform(put("/api/v1/professional-onboarding/me").header(HttpHeaders.AUTHORIZATION,"Bearer applicant").contentType(MediaType.APPLICATION_JSON).content("{\"profession\":\"medecin\",\"licenseNumber\":\"LIC-%s\",\"issuingAuthority\":\"College\",\"countryId\":\"%s\",\"identityDocumentType\":\"NATIONAL_ID\",\"identityExpiresOn\":\"%s\"}".formatted(APPLICANT,country,java.time.LocalDate.now().plusYears(1)))).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("DRAFT")).andReturn().getResponse().getContentAsString();
         return extractId(body);
     }
     private void review(UUID id,String decision,String status) throws Exception  {

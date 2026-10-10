@@ -25,6 +25,9 @@ class ProfessionalOnboardingService {
                 (select last_name from identity.person person where person.id=person_id) as last_name,
                 profession, license_number, issuing_authority, country_id, speciality_catalog_id,
                 status, reason, professional_id, created_at, updated_at,
+                speciality_name, identity_document_type, identity_expires_on,
+                (identity_front is not null) as identity_front_uploaded,
+                (identity_back is not null) as identity_back_uploaded,
                 (proof is not null) as proof_uploaded,
                 (select status from professional.role_sync_outbox sync
                     where sync.subject_id=keycloak_user_id) as role_sync_status
@@ -37,13 +40,15 @@ class ProfessionalOnboardingService {
     private final CurrentUserContext users;
     private final AuditTrail audit;
     private final ProfessionalRoleProvisioning roles;
-    ProfessionalOnboardingService(JdbcTemplate jdbc,IdentityProvisioningService identities,ProfessionalRepository professionals,CurrentUserContext users,AuditTrail audit,ProfessionalRoleProvisioning roles) {
+    private final org.novasos.healthysv2.notification.api.ProfessionalRegistrationNotifications notifications;
+    ProfessionalOnboardingService(JdbcTemplate jdbc,IdentityProvisioningService identities,ProfessionalRepository professionals,CurrentUserContext users,AuditTrail audit,ProfessionalRoleProvisioning roles,org.novasos.healthysv2.notification.api.ProfessionalRegistrationNotifications notifications) {
         this.jdbc=jdbc;
         this.identities=identities;
         this.professionals=professionals;
         this.users=users;
         this.audit=audit;
         this.roles=roles;
+        this.notifications=notifications;
     }
     DossierResponse mine(JwtAuthenticationToken auth) {
         return bySubject(subject(auth),false);
@@ -56,7 +61,12 @@ class ProfessionalOnboardingService {
         if(old!=null&&!Set.of("DRAFT","REJECTED").contains(old.status()))throw conflict("This application cannot be edited");
         requireReference("shared.country",input.countryId());
         if(input.specialityCatalogId()!=null)requireReference("catalog.speciality_catalog",input.specialityCatalogId());
+        validateExpiry(input.identityExpiresOn(),false);
         saveDraft(subject,person,old,input);
+        jdbc.update("update professional.registration_request set speciality_name=?,identity_document_type=?,identity_expires_on=? where keycloak_user_id=?",blank(input.specialityName()),input.identityDocumentType(),input.identityExpiresOn(),subject);
+        if(old!=null && (!Objects.equals(old.identityDocumentType(),input.identityDocumentType()) || !Objects.equals(old.identityExpiresOn(),input.identityExpiresOn()))) {
+            jdbc.update("update professional.registration_request set identity_front=null,identity_front_type=null,identity_front_name=null,identity_back=null,identity_back_type=null,identity_back_name=null where id=?",old.id());
+        }
         var result=bySubject(subject,false);
         change(result,"DRAFT",old);
         return result;
@@ -87,13 +97,17 @@ class ProfessionalOnboardingService {
     }
 
     DossierResponse upload(JwtAuthenticationToken auth,MultipartFile file) {
+        return uploadDocument(auth,"LICENSE",file);
+    }
+    DossierResponse uploadDocument(JwtAuthenticationToken auth,String kind,MultipartFile file) {
+        String prefix=documentPrefix(kind);
         var dossier=owned(auth,true);
         if(!Set.of("DRAFT","REJECTED").contains(dossier.status()))throw conflict("Application is locked");
         if(file.isEmpty()||file.getSize()>5242880)throw new ProfessionalInputException("INVALID_PROOF_SIZE","error.professional.proof.size");
         try {
             byte[] bytes=file.getBytes();
             String type=proofType(bytes);
-            jdbc.update("update professional.registration_request set proof=?,proof_type=?,proof_name=?,updated_at=now() where id=?",bytes,type,"professional-proof"+extension(type),dossier.id());
+            jdbc.update("update professional.registration_request set "+prefix+"=?,"+prefix+"_type=?,"+prefix+"_name=?,updated_at=now() where id=?",bytes,type,"professional-"+kind.toLowerCase(Locale.ROOT)+extension(type),dossier.id());
             return bySubject(subject(auth),false);
         }
         catch(java.io.IOException e) {
@@ -104,10 +118,11 @@ class ProfessionalOnboardingService {
         var dossier=owned(auth,true);
         if("SUBMITTED".equals(dossier.status()))return dossier;
         if(!Set.of("DRAFT","REJECTED").contains(dossier.status()))throw conflict("Invalid application transition");
-        if(!dossier.proofUploaded())throw conflict("Proof is required before submitting");
+        requireDocuments(dossier);
         jdbc.update("update professional.registration_request set status='SUBMITTED',reason=null,updated_at=now() where id=?",dossier.id());
         var result=bySubject(subject(auth),false);
         change(result,"SUBMIT",dossier);
+        notifications.professionalRegistrationSubmitted(dossier.id(),dossier.personId());
         return result;
     }
     List<DossierResponse> requests() {
@@ -120,6 +135,7 @@ class ProfessionalOnboardingService {
         requireReviewTransition(before.status(),status);
         UUID professional=before.professionalId();
         if("APPROVED".equals(status)) {
+            requireDocuments(before);
             if(professional==null)professional=createProfessional(before);
             else {
                 var p=professionals.findById(professional).orElseThrow();
@@ -172,17 +188,56 @@ class ProfessionalOnboardingService {
         }
         var p=Professional.create(d.personId(),"PRO-"+d.id(),type,"ACTIVE");
         p.addLicense(d.licenseNumber(),d.issuingAuthority(),d.countryId(),null,null,"ACTIVE");
-        if(d.specialityCatalogId()!=null)p.addSpeciality(d.specialityCatalogId(),true);
+        UUID specialty=resolveSpeciality(d);
+        if(specialty!=null)p.addSpeciality(specialty,true);
         return professionals.saveAndFlush(p).getId();
     }
     Proof proof(UUID id,JwtAuthenticationToken auth) {
+        return document(id,"LICENSE",auth);
+    }
+    Proof document(UUID id,String kind,JwtAuthenticationToken auth) {
+        String prefix=documentPrefix(kind);
         var d=byId(id,false);
-        if(!users.current().has("PLATFORM_ADMIN")&&!d.keycloakUserId().equals(subject(auth)))throw new AccessDeniedException("Proof belongs to another applicant");
-        audit.access(users.current().personId(),null,null,"professional_proof",id,"READ","Professional credential review",Map.of("ownerKeycloakUserId",d.keycloakUserId()));
-        return jdbc.query("select proof,proof_type,proof_name from professional.registration_request where id=?",rs-> {
-            if(!rs.next()||rs.getBytes(1)==null)throw new ResourceNotFoundException("Proof",id);
+        if(!users.current().has("PLATFORM_ADMIN")&&!d.keycloakUserId().equals(subject(auth)))throw new AccessDeniedException("Document belongs to another applicant");
+        audit.access(users.current().personId(),null,null,"professional_document",id,"READ","Professional credential review",Map.of("kind",kind));
+        return jdbc.query("select "+prefix+","+prefix+"_type,"+prefix+"_name from professional.registration_request where id=?",rs-> {
+            if(!rs.next()||rs.getBytes(1)==null)throw new ResourceNotFoundException("ProfessionalDocument",id);
             return new Proof(rs.getBytes(1),rs.getString(2),rs.getString(3));
         },id);
+    }
+    private String documentPrefix(String kind) {
+        return switch(kind) {
+            case "LICENSE" -> "proof";
+            case "ID_FRONT" -> "identity_front";
+            case "ID_BACK" -> "identity_back";
+            default -> throw conflict("Unknown document kind");
+        };
+    }
+    private void requireDocuments(DossierResponse dossier) {
+        if(dossier.identityDocumentType()==null || !dossier.proofUploaded()
+                || !dossier.identityFrontUploaded() || !dossier.identityBackUploaded())
+            throw conflict("Identity front, identity back and professional license scans are required");
+        validateExpiry(dossier.identityExpiresOn(),true);
+    }
+    private void validateExpiry(LocalDate expiry,boolean required) {
+        if(expiry==null && !required)return;
+        if(expiry==null || !expiry.isAfter(LocalDate.now().plusMonths(3)))
+            throw conflict("Identity document must remain valid for more than three months");
+    }
+    private String blank(String value) {
+        return value==null || value.isBlank()?null:value.trim();
+    }
+    private UUID resolveSpeciality(DossierResponse dossier) {
+        if(dossier.specialityCatalogId()!=null)return dossier.specialityCatalogId();
+        String name=blank(dossier.specialityName());
+        if(name==null)return null;
+        // Serialize catalog resolution so parallel approvals reuse the same existing value.
+        jdbc.execute("select pg_advisory_xact_lock(73492103)");
+        var matches=jdbc.query("select id from catalog.speciality_catalog where lower(name)=lower(?) order by active desc,id limit 1",(rs,n)->rs.getObject(1,UUID.class),name);
+        if(!matches.isEmpty())return matches.getFirst();
+        UUID id=UUID.randomUUID();
+        jdbc.update("insert into catalog.speciality_catalog(id,code,name,active) values (?,?,?,true)",id,"CUSTOM-"+id,name);
+        return id;
     }
     List<DirectoryEntry> directory() {
         return jdbc.query("select p.id,p.person_id,person.first_name,person.last_name,r.profession from professional.professional p join professional.registration_request r on r.professional_id=p.id join identity.person person on person.id=p.person_id where r.status='APPROVED' and p.status='ACTIVE' and person.status='ACTIVE' order by person.last_name,person.first_name limit 500",(rs,n)->new DirectoryEntry(rs.getObject(1,UUID.class),rs.getObject(2,UUID.class),rs.getString(3),rs.getString(4),rs.getString(5)));
@@ -293,7 +348,7 @@ class ProfessionalOnboardingService {
         return rows.getFirst();
     }
     private DossierResponse dossier(ResultSet rs,int n)throws SQLException {
-        return new DossierResponse(rs.getObject("id",UUID.class),rs.getObject("person_id",UUID.class),rs.getObject("keycloak_user_id",UUID.class),rs.getString("first_name"),rs.getString("last_name"),rs.getString("profession"),rs.getString("license_number"),rs.getString("issuing_authority"),rs.getObject("country_id",UUID.class),rs.getObject("speciality_catalog_id",UUID.class),rs.getString("status"),rs.getString("reason"),rs.getString("role_sync_status"),rs.getBoolean("proof_uploaded"),rs.getObject("professional_id",UUID.class),rs.getTimestamp("created_at").toInstant(),rs.getTimestamp("updated_at").toInstant());
+        return new DossierResponse(rs.getObject("id",UUID.class),rs.getObject("person_id",UUID.class),rs.getObject("keycloak_user_id",UUID.class),rs.getString("first_name"),rs.getString("last_name"),rs.getString("profession"),rs.getString("license_number"),rs.getString("issuing_authority"),rs.getObject("country_id",UUID.class),rs.getObject("speciality_catalog_id",UUID.class),rs.getString("status"),rs.getString("reason"),rs.getString("role_sync_status"),rs.getBoolean("proof_uploaded"),rs.getString("speciality_name"),rs.getString("identity_document_type"),rs.getObject("identity_expires_on",LocalDate.class),rs.getBoolean("identity_front_uploaded"),rs.getBoolean("identity_back_uploaded"),rs.getObject("professional_id",UUID.class),rs.getTimestamp("created_at").toInstant(),rs.getTimestamp("updated_at").toInstant());
     }
     private void lockSubject(UUID id) {
         jdbc.execute("select pg_advisory_xact_lock("+(id.getMostSignificantBits()^id.getLeastSignificantBits())+")");
