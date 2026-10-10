@@ -12,7 +12,7 @@ describe('patient maternal projections',()=>{
   vi.mocked(apiRequest).mockResolvedValueOnce({pregnancy:{id:'p',pregnancyNumber:'P1'},prenatalVisits:[{id:'v',weightKg:64}],delivery:{newborns:[{birthWeightKg:3.4,birthHeightCm:50,headCircumferenceCm:34}]}});
   const pregnancy=await getMyPregnancy('p');
   expect(apiRequest).toHaveBeenCalledWith('/patients/me/maternal-child/pregnancies/p');
-  expect(pregnancy.prenatalVisits[0].weight).toBe(64);expect(pregnancy.risks).toEqual([]);expect(pregnancy.postpartumVisits).toEqual([]);expect(pregnancy.delivery?.newborns[0].birthWeight).toBe(3.4);
+  expect(pregnancy.prenatalVisits[0]).toMatchObject({weight:64});expect(pregnancy.risks).toEqual([]);expect(pregnancy.postpartumVisits).toEqual([]);expect(pregnancy.delivery?.newborns[0]).toMatchObject({birthWeight:3.4});
   vi.mocked(apiRequest).mockResolvedValueOnce({child:{id:'record',childPatientId:'child',status:'ACTIVE'},vaccinations:[],growthMeasurements:[{weightKg:5,heightCm:60,headCircumferenceCm:40}]});
   const child=await getMyChildHealthRecord('child');expect(child.growthMeasurements[0]).toMatchObject({weight:5,height:60,headCircumference:40});
  });
