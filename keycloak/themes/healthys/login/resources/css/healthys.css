@@ -72,3 +72,51 @@ input[type=checkbox], input[type=radio] { accent-color: #2563eb; }
   .pf-v5-c-login__main-header, .pf-v5-c-login__main-body, .pf-v5-c-login__main-footer { padding-inline: 1.7rem; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; transition: none; } }
+
+/* Legacy realms may still configure the identity group: do not show its label. */
+#header-identity, #description-identity { display: none; }
+
+/* Replace the native footer rule/band with simple breathing room. */
+.pf-v5-c-login__main-footer,
+.pf-v5-c-login__main-footer-band,
+#kc-info, #kc-info-wrapper {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.pf-v5-c-login__main-footer::before,
+.pf-v5-c-login__main-footer::after,
+.pf-v5-c-login__main-footer-band::before,
+.pf-v5-c-login__main-footer-band::after { display: none; }
+.pf-v5-c-login__main-footer-band { margin-top: 1.25rem; padding: 0; }
+.pf-v5-c-login__main-footer:empty { display: none; }
+.pf-v5-c-login__main-footer:not(:empty) { padding-top: 1.25rem; padding-bottom: 1.5rem; }
+.pf-v5-c-login__main-footer .pf-v5-c-divider { display: none; }
+
+/* Registration's plain return link matches reset-password's secondary button. */
+a.pf-v5-c-button.pf-m-secondary,
+#kc-register-form #kc-form-options a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 36px;
+  padding: .55rem .9rem;
+  border: 1px solid var(--healthys-border);
+  border-radius: 7px;
+  background: var(--healthys-soft);
+  color: var(--healthys-primary);
+  font: inherit;
+  font-size: .93rem;
+  font-weight: 600;
+  line-height: 1.55;
+  text-align: center;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+a.pf-v5-c-button.pf-m-secondary::after { border: 0; }
+a.pf-v5-c-button.pf-m-secondary:hover,
+#kc-register-form #kc-form-options a:hover { background: #dce9ff; color: #1746a2; }
+#kc-register-form #kc-form-options,
+#kc-register-form #kc-form-options > div,
+#kc-register-form #kc-form-options span { display: block; width: 100%; }
