@@ -2,12 +2,24 @@ import {FormEvent,useState} from 'react';
 import {useMutation,useQuery} from '@tanstack/react-query';
 import {Link,useNavigate} from 'react-router-dom';
 import {useTranslation} from 'react-i18next';
-import {listPregnancies,maternalKeys,startPregnancy} from '../api/maternalChild';
+import {listMyPregnancies,listMyChildren,listPregnancies,maternalKeys,startPregnancy} from '../api/maternalChild';
 import {ApiErrorMessage} from '../components/ApiErrorMessage';
 import {ClinicalReferenceSelect} from '../components/ClinicalReferenceSelect';
+import {ResourceTable} from '../components/ResourceTable';
 import {useAuth} from '../auth/AuthContext';
 
 export function MaternalChildPage(){
+ const auth=useAuth();
+ return auth.hasAnyRole('PATIENT')&&!auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE')?<PatientMaternalChildPage/>:<ClinicalMaternalChildPage/>;
+}
+function PatientMaternalChildPage(){
+ const {t,i18n}=useTranslation();const [pregnancyPage,setPregnancyPage]=useState(0);const [childPage,setChildPage]=useState(0);
+ const pregnancies=useQuery({queryKey:['maternal-child','mine','pregnancies',pregnancyPage],queryFn:()=>listMyPregnancies(pregnancyPage)});
+ const children=useQuery({queryKey:['maternal-child','mine','children',childPage],queryFn:()=>listMyChildren(childPage)});
+ return <section><div className="page-heading"><div><p className="eyebrow">{t('maternal.eyebrow')}</p><h1>{t('maternal.title')}</h1></div></div><h2>{t('maternal.pregnancy')}</h2>{pregnancies.isPending&&<p>{t('common.loading')}</p>}{pregnancies.isError&&<ApiErrorMessage error={pregnancies.error}/>} {pregnancies.data&&<ResourceTable data={pregnancies.data} page={pregnancyPage} onPageChange={setPregnancyPage} empty={t('common.empty')} columns={[{label:t('maternal.pregnancy'),render:p=>p.pregnancyNumber},{label:t('maternal.expectedDeliveryDate'),render:p=>new Date(`${p.expectedDeliveryDate}T00:00:00`).toLocaleDateString(i18n.language)},{label:t('common.status'),render:p=>t(`status.${p.status}`,p.status)}]} actions={p=><Link to={`/maternal-child/pregnancies/${p.id}`}>{t('common.view')}</Link>}/>}
+ <h2>{t('maternal.childRecord')}</h2>{children.isPending&&<p>{t('common.loading')}</p>}{children.isError&&<ApiErrorMessage error={children.error}/>} {children.data&&<ResourceTable data={children.data} page={childPage} onPageChange={setChildPage} empty={t('common.empty')} columns={[{label:t('maternal.child'),render:c=>`${c.firstName} ${c.lastName}`},{label:t('common.status'),render:c=>t(`status.${c.status}`,c.status)}]} actions={c=><Link to={`/maternal-child/children/${c.childPatientId}`}>{t('common.view')}</Link>}/>}</section>;
+}
+function ClinicalMaternalChildPage(){
  const {t,i18n}=useTranslation();const fr=i18n.language.startsWith('fr');const auth=useAuth();const navigate=useNavigate();
  const [mother,setMother]=useState('');const [searched,setSearched]=useState('');const [child,setChild]=useState('');const [show,setShow]=useState(false);const [status,setStatus]=useState('');
  const [form,setForm]=useState({motherPatientId:'',estimatedConceptionDate:'',lastMenstrualPeriod:'',expectedDeliveryDate:''});
