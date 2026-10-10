@@ -1,25 +1,74 @@
-/* Keep Keycloak's native forms, validation, password controls and accessibility. */
+/* Match the HEALTH’YS public page while preserving native Keycloak controls. */
 :root {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  color-scheme: light;
+  --healthys-background: #f5f7fb;
+  --healthys-surface: #fff;
+  --healthys-text: #22324b;
+  --healthys-muted: #63728a;
+  --healthys-border: #e2e8f0;
+  --healthys-primary: #2563eb;
+  --healthys-soft: #edf3ff;
+  --pf-v5-global--FontFamily--text: Inter, ui-sans-serif, system-ui, sans-serif;
+  --pf-v5-global--FontFamily--heading: Inter, ui-sans-serif, system-ui, sans-serif;
   --pf-v5-global--primary-color--100: #2563eb;
-  --pf-v5-global--primary-color--200: #1d4ed8;
-  --pf-v5-global--link--Color: #1d4ed8;
+  --pf-v5-global--primary-color--200: #245fe2;
+  --pf-v5-global--link--Color: #2563eb;
 }
-body { background: #eff6ff; color: #172554; }
-.pf-v5-c-login { min-height: 100vh; background: radial-gradient(ellipse at top left, #dbeafe, transparent 65%), #f8fafc; }
-.pf-v5-c-login__container { max-width: 600px; margin-inline: auto; }
-.pf-v5-c-login__header { text-align: center; }
-#kc-header-wrapper { color: #1e40af; font-size: 1.75rem; font-weight: 800; letter-spacing: .04em; }
-.pf-v5-c-login__main { border-radius: 20px; border: 1px solid #dbeafe; box-shadow: 0 20px 60px #1e3a8a14; overflow: hidden; }
-.pf-v5-c-login__main-header { padding-bottom: 1rem; }
-.pf-v5-c-login__main-header .pf-v5-c-title { color: #172554; }
-.pf-v5-c-form-control { border-radius: 8px; }
-.pf-v5-c-button.pf-m-primary { background: #2563eb; border-radius: 8px; min-height: 44px; font-weight: 600; }
-.pf-v5-c-button.pf-m-primary:hover { background: #1d4ed8; }
-a { color: #1d4ed8; }
-:focus-visible { outline: 3px solid #60a5fa; outline-offset: 3px; }
+body, .pf-v5-c-login {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 1rem;
+  line-height: 1.55;
+  color: var(--healthys-text);
+  background: radial-gradient(ellipse at 15% 25%, var(--healthys-soft), transparent 65%), var(--healthys-background);
+  background-image: radial-gradient(ellipse at 15% 25%, var(--healthys-soft), transparent 65%);
+}
+.pf-v5-c-login { min-height: 100dvh; padding: 2rem 1.5rem; }
+.pf-v5-c-login__container { width: 100%; max-width: 460px; margin-inline: auto; }
+.pf-v5-c-login__header { text-align: left; margin-bottom: 1.5rem; }
+#kc-header-wrapper { color: var(--healthys-primary); font-size: 1.3rem; font-weight: 800; letter-spacing: -.025em; padding: 0; }
+.pf-v5-c-login__main {
+  background: var(--healthys-surface);
+  color: var(--healthys-text);
+  border-radius: 16px;
+  border: 1px solid var(--healthys-border);
+  box-shadow: 0 12px 36px rgb(20 41 82 / 8%);
+  overflow: hidden;
+}
+.pf-v5-c-login__main-header, .pf-v5-c-login__main-body, .pf-v5-c-login__main-footer { padding-inline: 2.2rem; }
+.pf-v5-c-login__main-header { padding-top: 2.2rem; padding-bottom: 1rem; }
+.pf-v5-c-login__main-body { padding-bottom: 2rem; }
+.pf-v5-c-login__main-header .pf-v5-c-title { color: var(--healthys-text); font-size: 1.5rem; line-height: 1.35; letter-spacing: -.015em; font-weight: 750; }
+.pf-v5-c-form__label, .pf-v5-c-form__label-text { font-size: .93rem; color: var(--healthys-text); }
+.pf-v5-c-form-control {
+  color: var(--healthys-text);
+  background: var(--healthys-surface);
+  border: 1px solid var(--healthys-border);
+  border-radius: 7px;
+  min-height: 38px;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 3%);
+}
+.pf-v5-c-form-control::before, .pf-v5-c-form-control::after { border: 0; }
+.pf-v5-c-form-control:hover { border-color: #97afcf; }
+.pf-v5-c-form-control:focus-within { outline: 2px solid #60a5fa; outline-offset: 1px; border-color: #60a5fa; }
+.pf-v5-c-form-control input, .pf-v5-c-form-control select, .pf-v5-c-form-control textarea { font: inherit; color: inherit; padding: .55rem .7rem; min-height: 36px; }
+.pf-v5-c-form-control.pf-m-error { border-color: #b42318; }
+.pf-v5-c-input-group { gap: .35rem; }
+.pf-v5-c-button { font: inherit; font-size: .93rem; font-weight: 600; border-radius: 7px; min-height: 36px; }
+.pf-v5-c-button.pf-m-primary { color: #fff; background: #2563eb; min-height: 41px; padding: .55rem .9rem; }
+.pf-v5-c-button.pf-m-primary:hover { background: #245fe2; }
+.pf-v5-c-button.pf-m-secondary { color: var(--healthys-primary); background: var(--healthys-soft); border: 1px solid var(--healthys-border); }
+.pf-v5-c-button.pf-m-control { color: var(--healthys-muted); background: var(--healthys-soft); border-radius: 7px; }
+.pf-v5-c-button:disabled { opacity: .55; cursor: not-allowed; }
+a { color: var(--healthys-primary); }
+a:hover { color: #1746a2; }
+:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
 .pf-v5-c-form__group { margin-bottom: .35rem; }
+.pf-v5-c-form__helper-text, .pf-v5-c-login__main-footer, #kc-registration { color: var(--healthys-muted); font-size: .9rem; }
+input[type=checkbox], input[type=radio] { accent-color: #2563eb; }
 @media (max-width: 640px) {
-  .pf-v5-c-login__container { padding: 20px 12px; width: 100%; }
-  .pf-v5-c-login__main { border-radius: 12px; }
+  .pf-v5-c-login { padding: 1.5rem; }
+  .pf-v5-c-login__main-header, .pf-v5-c-login__main-body, .pf-v5-c-login__main-footer { padding-inline: 1.7rem; }
 }
-@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; transition: none; } }

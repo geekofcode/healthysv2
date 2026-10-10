@@ -14,7 +14,6 @@
         ]
       },
       "multivalued": false,
-      "group": "identity",
       "validations": {
         "length": {
           "min": 3,
@@ -42,7 +41,6 @@
         ]
       },
       "multivalued": false,
-      "group": "identity",
       "validations": {
         "email": {},
         "length": {
@@ -72,7 +70,6 @@
         ]
       },
       "multivalued": false,
-      "group": "identity",
       "validations": {
         "length": {
           "max": 120
@@ -98,7 +95,6 @@
         ]
       },
       "multivalued": false,
-      "group": "identity",
       "validations": {
         "length": {
           "max": 120
@@ -129,11 +125,6 @@
       }
     }
   ],
-  "groups": [
-    {
-      "name": "identity",
-      "displayHeader": "${healthys.identity}"
-    }
-  ],
+  "groups": [],
   "unmanagedAttributePolicy": "ADMIN_EDIT"
 }
