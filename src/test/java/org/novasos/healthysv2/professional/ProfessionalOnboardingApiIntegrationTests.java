@@ -234,9 +234,7 @@ import org.springframework.mock.web.MockMultipartFile;
     @Test void identityMetadataChangeInvalidatesBothScans() throws Exception {
         draft();
         uploadIdentity();
-        String changed="""
-                {"profession":"medecin","licenseNumber":"LIC-%s","issuingAuthority":"College","countryId":"%s","identityDocumentType":"NATIONAL_ID","identityDocumentNumber":" ID-456 ","identityExpiresOn":"%s"}
-                """.formatted(APPLICANT,country,java.time.LocalDate.now().plusYears(1));
+        String changed="{\"profession\":\"medecin\",\"licenseNumber\":\"LIC-%s\",\"issuingAuthority\":\"College\",\"countryId\":\"%s\",\"identityDocumentType\":\"PASSPORT\",\"identityDocumentNumber\":\"ID-123\",\"identityExpiresOn\":\"%s\",\"specialityName\":\"New speciality\"}".formatted(APPLICANT,country,java.time.LocalDate.now().plusYears(1));
         mvc.perform(put("/api/v1/professional-onboarding/me").header(HttpHeaders.AUTHORIZATION,"Bearer applicant")
                 .contentType(MediaType.APPLICATION_JSON).content(changed)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.identityFrontUploaded").value(false))
@@ -252,7 +250,9 @@ import org.springframework.mock.web.MockMultipartFile;
         jdbc.update("update professional.registration_request set identity_document_number=null where id=?",id);
         mvc.perform(post("/api/v1/professional-onboarding/me/submit").header(HttpHeaders.AUTHORIZATION,"Bearer applicant")).andExpect(status().isConflict());
         jdbc.update("update professional.registration_request set identity_document_number='ID-123' where id=?",id);
-        String changed="{\"profession\":\"medecin\",\"licenseNumber\":\"LIC-%s\",\"issuingAuthority\":\"College\",\"countryId\":\"%s\",\"identityDocumentType\":\"NATIONAL_ID\",\"identityDocumentNumber\":\" ID-456 ",\"identityExpiresOn\":\"%s\"}".formatted(APPLICANT,country,java.time.LocalDate.now().plusYears(1));
+        String changed="""
+                {"profession":"medecin","licenseNumber":"LIC-%s","issuingAuthority":"College","countryId":"%s","identityDocumentType":"NATIONAL_ID","identityDocumentNumber":" ID-456 ","identityExpiresOn":"%s"}
+                """.formatted(APPLICANT,country,java.time.LocalDate.now().plusYears(1));
         mvc.perform(put("/api/v1/professional-onboarding/me").header(HttpHeaders.AUTHORIZATION,"Bearer applicant")
                 .contentType(MediaType.APPLICATION_JSON).content(changed)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.identityDocumentNumber").value("ID-456"))
