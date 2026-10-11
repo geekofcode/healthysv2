@@ -234,7 +234,9 @@ import org.springframework.mock.web.MockMultipartFile;
     @Test void identityMetadataChangeInvalidatesBothScans() throws Exception {
         draft();
         uploadIdentity();
-        String changed="{\"profession\":\"medecin\",\"licenseNumber\":\"LIC-%s\",\"issuingAuthority\":\"College\",\"countryId\":\"%s\",\"identityDocumentType\":\"PASSPORT\",\"identityDocumentNumber\":\"ID-123\",\"identityExpiresOn\":\"%s\",\"specialityName\":\"New speciality\"}".formatted(APPLICANT,country,java.time.LocalDate.now().plusYears(1));
+        String changed="""
+                {"profession":"medecin","licenseNumber":"LIC-%s","issuingAuthority":"College","countryId":"%s","identityDocumentType":"NATIONAL_ID","identityDocumentNumber":" ID-456 ","identityExpiresOn":"%s"}
+                """.formatted(APPLICANT,country,java.time.LocalDate.now().plusYears(1));
         mvc.perform(put("/api/v1/professional-onboarding/me").header(HttpHeaders.AUTHORIZATION,"Bearer applicant")
                 .contentType(MediaType.APPLICATION_JSON).content(changed)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.identityFrontUploaded").value(false))
