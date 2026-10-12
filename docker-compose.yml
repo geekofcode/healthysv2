@@ -5,6 +5,11 @@ services:
     env_file: .env
     environment:
       SERVER_PORT: 8080
+      FCM_SERVICE_ACCOUNT_FILE: ${FCM_SERVICE_ACCOUNT_FILE}
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: DEBUG
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY_OAUTH2: TRACE
+    volumes:
+      - /Volumes/SSD_DEV/projects/jee/config/healthys-63579014-firebase-adminsdk-fjczq-c0b02ed3c0.json:${FCM_SERVICE_ACCOUNT_FILE}:ro
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     networks: [healthys]
