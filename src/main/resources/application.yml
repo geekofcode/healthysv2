@@ -55,3 +55,10 @@ healthys:
     fcm-project-id: ${FCM_PROJECT_ID:}
     service-account-file: ${FCM_SERVICE_ACCOUNT_FILE:}
     poll-interval-ms: ${PUSH_POLL_INTERVAL_MS:10000}
+  professional-role-sync:
+    enabled: ${PROFESSIONAL_ROLE_SYNC_ENABLED:false}
+    admin-server-url: ${KEYCLOAK_ADMIN_SERVER_URL:}
+    realm: ${KEYCLOAK_ADMIN_REALM:healthys}
+    client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:}
+    client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:}
+    poll-interval-ms: ${PROFESSIONAL_ROLE_SYNC_POLL_INTERVAL_MS:10000}

@@ -1,10 +1,21 @@
-import {FormEvent,useState} from 'react';
-import {useQuery} from '@tanstack/react-query';
+import {useState} from 'react';
+import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
 import {useTranslation} from 'react-i18next';
-import {listProfessionals,professionalKeys} from '../api/professionals';
+import {listProfessionals,deleteProfessional,professionalKeys} from '../api/professionals';
 import {ApiErrorMessage} from '../components/ApiErrorMessage';
+import {ResourceTable} from '../components/ResourceTable';
 import {useAuth} from '../auth/AuthContext';
-
-export function ProfessionalsPage(){const {t}=useTranslation();const auth=useAuth();const [input,setInput]=useState('');const [query,setQuery]=useState('');const result=useQuery({queryKey:professionalKeys.list(query),queryFn:()=>listProfessionals(query)});const submit=(e:FormEvent)=>{e.preventDefault();setQuery(input.trim())};const canWrite=auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN');
- return <section><div className="page-heading"><h1>{t('professionals.title')}</h1>{canWrite&&<Link className="button" to="/professionals/new">{t('professionals.new')}</Link>}</div><form className="search-form" onSubmit={submit}><input aria-label={t('professionals.search')} placeholder={t('professionals.searchPlaceholder')} value={input} onChange={e=>setInput(e.target.value)}/><button>{t('professionals.search')}</button></form>{result.isPending?<p>{t('common.loading')}</p>:result.isError?<ApiErrorMessage error={result.error}/>:result.data.content.length===0?<p>{t('professionals.empty')}</p>:<table><thead><tr><th>{t('professionals.number')}</th><th>{t('professionals.type')}</th><th>{t('professionals.personId')}</th><th>{t('professionals.status')}</th></tr></thead><tbody>{result.data.content.map(p=><tr key={p.id}><td><Link to={`/professionals/${p.id}`}>{p.professionalNumber}</Link></td><td>{p.professionalType}</td><td>{p.personId}</td><td>{t(`status.${p.status}`,p.status)}</td></tr>)}</tbody></table>}</section>}
+export function ProfessionalsPage(){
+ const {t,i18n}=useTranslation();const fr=i18n.language.startsWith('fr');const auth=useAuth();const client=useQueryClient();
+ const [search,setSearch]=useState('');const [page,setPage]=useState(0);const [removeId,setRemoveId]=useState('');
+ const result=useQuery({queryKey:[...professionalKeys.all,'list',search,page],queryFn:()=>listProfessionals(search,page,20)});
+ const removal=useMutation({mutationFn:deleteProfessional,onSuccess:async()=>{setRemoveId('');await client.invalidateQueries({queryKey:professionalKeys.all});}});
+ const canWrite=auth.hasAnyRole('PLATFORM_ADMIN');
+ return <section><div className="page-heading"><h1>{t('professionals.title')}</h1>{canWrite&&<Link className="button" to="/professionals/new">+ {t('professionals.new')}</Link>}</div>
+ <div className="table-filters"><label>{t('common.search')}<input type="search" placeholder={t('professionals.searchPlaceholder')} value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}}/></label></div>
+ {result.isPending&&<p>{t('common.loading')}</p>}{result.isError&&<ApiErrorMessage error={result.error}/>}{removal.isError&&<ApiErrorMessage error={removal.error}/>}
+ {removeId&&<div className="delete-confirmation" role="alert"><p>{fr?'Confirmer la suppression de cette fiche ?':'Confirm deletion of this record?'}</p><button className="danger" disabled={removal.isPending} onClick={()=>removal.mutate(removeId)}>{t('common.delete')}</button><button className="secondary" onClick={()=>setRemoveId('')}>{t('common.cancel')}</button></div>}
+ {result.data&&<ResourceTable data={result.data} page={page} onPageChange={setPage} empty={t('professionals.empty')} columns={[{label:t('professionals.number'),render:row=><Link to={`/professionals/${row.id}`}>{row.professionalNumber}</Link>},{label:t('professionals.type'),render:row=>t(`professionalTypes.${row.professionalType}`,row.professionalType)},{label:t('professionals.status'),render:row=><span className={`status-badge status-${row.status.toLowerCase()}`}>{t(`status.${row.status}`,row.status)}</span>}]} actions={row=><><Link className="table-action" to={`/professionals/${row.id}`}>{fr?'Voir':'View'}</Link>{canWrite&&<><Link className="table-action" to={`/professionals/${row.id}/edit`}>{t('common.edit')}</Link><button className="table-action danger" onClick={()=>setRemoveId(row.id)}>{t('common.delete')}</button></>}</>}/>}
+ </section>;
+}

@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional
 public class NotificationService {
+    private final org.novasos.healthysv2.identity.api.IdentityProvisioningService identities;
     private final JdbcTemplate jdbc;
     private final NotificationRepository repository;
     private final PushDevices devices;
@@ -34,7 +35,9 @@ public class NotificationService {
             JdbcTemplate jdbc,
             NotificationRepository repository,
             PushDevices devices,
-            SimpMessagingTemplate broker) {
+            SimpMessagingTemplate broker,
+            org.novasos.healthysv2.identity.api.IdentityProvisioningService identities) {
+        this.identities = identities;
         this.jdbc = jdbc;
         this.repository = repository;
         this.devices = devices;
@@ -88,12 +91,10 @@ public class NotificationService {
         }).toList();
     }
 
-    @Transactional(readOnly = true)
     public PageResponse<NotificationResponse> list(boolean unreadOnly, String type, Pageable pageable) {
         return repository.findForRecipient(requireCurrentPerson(), unreadOnly, type, pageable);
     }
 
-    @Transactional(readOnly = true)
     public UnreadCountResponse unreadCount() {
         return new UnreadCountResponse(repository.unreadCount(requireCurrentPerson()));
     }
@@ -120,7 +121,6 @@ public class NotificationService {
         return new MarkAllReadResponse(changed);
     }
 
-    @Transactional(readOnly = true)
     public NotificationPreferencesResponse preferences() {
         return repository.preferences(requireCurrentPerson());
     }
@@ -179,16 +179,49 @@ public class NotificationService {
                 rs -> rs.next() ? (UUID) rs.getObject(1) : null,
                 subject);
         if (person == null) {
-            throw new AccessDeniedException("PERSON_CONTEXT_MISSING");
+            var token = jwt.getToken();
+            person = identities.provisionIdentity(subject,
+                    token.getClaimAsString("given_name"),
+                    token.getClaimAsString("family_name"),
+                    token.getClaimAsString("email"),
+                    Boolean.TRUE.equals(token.getClaimAsBoolean("email_verified"))).id();
+            requirePerson(person);
         }
+        synchronizeAdministratorAudience(authentication, person);
         return person;
+    }
+
+    private void synchronizeAdministratorAudience(Authentication authentication, UUID person) {
+        boolean admin = authentication.getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_PLATFORM_ADMIN".equals(authority.getAuthority()));
+        if (admin) {
+            jdbc.update("""
+                with recipients as (
+                    insert into notification.notification_recipient(notification_id,person_id)
+                    select audience.notification_id,? from notification.notification_audience audience
+                    join notification.notification n on n.id=audience.notification_id
+                    where n.expires_at is null or n.expires_at>now()
+                    on conflict(notification_id,person_id) do nothing
+                    returning notification_id,person_id
+                )
+                insert into notification.notification_delivery(notification_id,person_id,channel,provider,sent_at,delivered_at,status)
+                select notification_id,person_id,'IN_APP','HEALTHYS',now(),now(),'DELIVERED' from recipients
+                where coalesce((select in_app_enabled from notification.notification_preference where person_id=?),true)
+                """, person, person);
+        } else {
+            // A demoted administrator must no longer retrieve privileged announcements.
+            jdbc.update("""
+                delete from notification.notification_recipient recipient
+                using notification.notification_audience audience
+                where recipient.notification_id=audience.notification_id and recipient.person_id=?
+                """, person);
+        }
     }
 
     private UUID requireCurrentPerson() {
         return personId(SecurityContextHolder.getContext().getAuthentication());
     }
 
-    @Transactional(readOnly = true)
     public NotificationResponse find(UUID id) {
         NotificationResponse response = repository.findForRecipient(id, requireCurrentPerson())
                 .orElseThrow(() -> new ResourceNotFoundException("Notification", id));

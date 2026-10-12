@@ -7,15 +7,16 @@ import java.util.UUID;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.PastOrPresent;
 
 public record CreatePersonRequest(
-        @NotBlank @Size(max = 50) String personNumber,
+        @Size(max = 50) String personNumber,
         UUID keycloakUserId,
         @NotBlank @Size(max = 120) String firstName,
         @Size(max = 120) String middleName,
         @NotBlank @Size(max = 120) String lastName,
         @Size(max = 30) String gender,
-        LocalDate birthDate,
+        @PastOrPresent LocalDate birthDate,
         UUID preferredLanguageId,
         List<@Valid PersonAddressRequest> addresses,
         List<@Valid PersonContactRequest> contacts,

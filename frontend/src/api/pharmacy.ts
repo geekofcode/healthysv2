@@ -18,7 +18,7 @@ export type PrescriptionFilters={patientId?:string;organizationId?:string;status
 
 export const pharmacyKeys={prescriptions:(filters:PrescriptionFilters)=>['pharmacy','prescriptions',filters] as const,prescription:(id:string)=>['pharmacy','prescriptions',id] as const,catalog:(query:string)=>['pharmacy','catalog',query] as const,stocks:(organizationId:string,medicationCatalogId:string)=>['pharmacy','stocks',organizationId,medicationCatalogId] as const};
 const queryString=(values:Record<string,string|undefined>)=>{const query=new URLSearchParams();Object.entries(values).forEach(([key,value])=>{if(value?.trim())query.set(key,value.trim())});const suffix=query.toString();return suffix?`?${suffix}`:''};
-export const listPrescriptions=(filters:PrescriptionFilters)=>apiRequest<Page<PrescriptionSummary>>(`/prescriptions${queryString({...filters,size:'50',sort:'prescribedAt,desc'})}`);
+export const listPrescriptions=(filters:PrescriptionFilters,page=0)=>apiRequest<Page<PrescriptionSummary>>(`/prescriptions${queryString({...filters,size:'20',page:String(page),sort:'prescribedAt,desc'})}`);
 export const listDispenses=(id:string)=>apiRequest<Dispense[]>(`/prescriptions/${id}/dispenses`);
 export const getPrescription=async(id:string):Promise<Prescription>=>{const [prescription,dispenses]=await Promise.all([apiRequest<PrescriptionRecord>(`/prescriptions/${id}`),listDispenses(id)]);return {...prescription,dispenses}};
 export const createPrescription=(input:PrescriptionInput)=>apiRequest<PrescriptionRecord>('/prescriptions',{method:'POST',body:JSON.stringify(input)});

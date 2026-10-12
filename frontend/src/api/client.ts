@@ -1,4 +1,5 @@
-import {validAccessToken} from '../auth/keycloak';
+import {selectedOrganization} from '../auth/organizationContext';
+import {keycloak,validAccessToken} from '../auth/keycloak';
 import i18n from '../i18n';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -26,6 +27,8 @@ export async function apiRequest<T>(
   const headers = new Headers(init.headers);
   headers.set('Authorization', `Bearer ${token}`);
   headers.set('Accept', 'application/json');
+  const organizationId=selectedOrganization(keycloak?.tokenParsed?.sub);
+  if(organizationId)headers.set('X-Organization-ID',organizationId);
   headers.set('Accept-Language', i18n.resolvedLanguage ?? 'en');
 
   if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {

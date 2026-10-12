@@ -11,7 +11,7 @@ class CareRelationship {
     @Id @GeneratedValue(strategy = GenerationType.UUID) private UUID id;
     @Column(name = "patient_id", nullable = false) private UUID patientId;
     @Column(name = "professional_id", nullable = false) private UUID professionalId;
-    @Column(name = "organization_id", nullable = false) private UUID organizationId;
+    @Column(name = "organization_id") private UUID organizationId;
     @Column(name = "relationship_type", nullable = false, length = 50) private String relationshipType;
     @Column(name = "start_date", nullable = false) private Instant startDate;
     @Column(name = "end_date") private Instant endDate;
@@ -25,7 +25,7 @@ class CareRelationship {
         var relationship = new CareRelationship();
         relationship.patientId = Objects.requireNonNull(patientId);
         relationship.professionalId = Objects.requireNonNull(professionalId);
-        relationship.organizationId = Objects.requireNonNull(organizationId);
+        relationship.organizationId = organizationId;
         relationship.relationshipType = required(type).toUpperCase();
         relationship.startDate = startDate == null ? Instant.now() : startDate;
         relationship.endDate = endDate;

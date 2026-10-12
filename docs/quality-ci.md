@@ -27,3 +27,5 @@ results are uploaded as the `backend-test-coverage` artifact even when a test fa
 To enable Sonar analysis in the Maven job, configure repository secret `SONAR_TOKEN` and repository
 variables `SONAR_PROJECT_KEY` and `SONAR_ORGANIZATION`. Without these values the Sonar step is skipped;
 tests, coverage and Docker builds still run. The Sonar step reads `target/site/jacoco/jacoco.xml`.
+
+Docker image checks use the official Docker image namespace on ECR Public through the `DOCKER_LIBRARY` build argument, avoiding shared-runner Docker Hub rate limits. Local and production builds continue to default to `docker.io/library`. The image names and version tags are unchanged.

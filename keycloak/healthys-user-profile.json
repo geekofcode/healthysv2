@@ -1,0 +1,130 @@
+{
+  "attributes": [
+    {
+      "name": "username",
+      "displayName": "${username}",
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "multivalued": false,
+      "validations": {
+        "length": {
+          "min": 3,
+          "max": 255
+        },
+        "username-prohibited-characters": {}
+      },
+      "required": {
+        "roles": [
+          "user"
+        ]
+      }
+    },
+    {
+      "name": "email",
+      "displayName": "${email}",
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "multivalued": false,
+      "validations": {
+        "email": {},
+        "length": {
+          "max": 255
+        }
+      },
+      "required": {
+        "roles": [
+          "user"
+        ]
+      },
+      "annotations": {
+        "inputType": "html5-email"
+      }
+    },
+    {
+      "name": "firstName",
+      "displayName": "${firstName}",
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "multivalued": false,
+      "validations": {
+        "length": {
+          "max": 120
+        }
+      },
+      "required": {
+        "roles": [
+          "user"
+        ]
+      }
+    },
+    {
+      "name": "lastName",
+      "displayName": "${lastName}",
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "multivalued": false,
+      "validations": {
+        "length": {
+          "max": 120
+        }
+      },
+      "required": {
+        "roles": [
+          "user"
+        ]
+      }
+    },
+    {
+      "name": "healthys_organization_id",
+      "displayName": "Organization ID",
+      "permissions": {
+        "view": [
+          "admin"
+        ],
+        "edit": [
+          "admin"
+        ]
+      },
+      "multivalued": false,
+      "validations": {
+        "length": {
+          "max": 36
+        }
+      }
+    }
+  ],
+  "groups": [],
+  "unmanagedAttributePolicy": "ADMIN_EDIT"
+}

@@ -1,3 +1,9 @@
+import {MyPatientAccessPage} from './pages/MyPatientAccessPage';
+import {ProfessionalOnboardingPage} from './pages/ProfessionalOnboardingPage';
+import {ConsultationsPage} from './pages/ConsultationsPage';
+import {RegistrationOptionsPage} from './pages/RegistrationOptionsPage';
+import {ProfessionalReviewPage} from './pages/ProfessionalReviewPage';
+import {ProfessionalInvitationPage} from './pages/ProfessionalInvitationPage';
 import {createBrowserRouter} from 'react-router-dom';
 import {lazy,Suspense} from 'react';
 
@@ -53,6 +59,11 @@ export const router = createBrowserRouter([
         children: [
           {path: '/', element: <DashboardPage />},
           {path: '/me', element: <MePage />},
+          {path: '/me/access', element: <MyPatientAccessPage />},
+          {path: '/professional-onboarding', element: <ProfessionalOnboardingPage />},
+          {path: '/professional-invitation', element: <ProfessionalInvitationPage />},
+          {path: '/admin/registration-options', element: <RegistrationOptionsPage />},
+          {path: '/admin/professional-requests', element: <ProfessionalReviewPage />},
           {path: '/organizations', element: <OrganizationsPage />},
           {path: '/organizations/new', element: <OrganizationFormPage />},
           {path: '/organizations/:id', element: <OrganizationDetailPage />},
@@ -60,11 +71,14 @@ export const router = createBrowserRouter([
           {path: '/professionals', element: <ProfessionalsPage />},
           {path: '/professionals/new', element: <ProfessionalFormPage />},
           {path: '/professionals/:id', element: <ProfessionalDetailPage />},
+          {path: '/professionals/:id/edit', element: <ProfessionalFormPage />},
           {path: '/patients', element: <PatientsPage />},
           {path: '/patients/new', element: <PatientFormPage />},
           {path: '/patients/:id', element: <PatientDetailPage />},
+          {path: '/patients/:id/edit', element: <PatientFormPage />},
           {path: '/patients/:id/access', element: <PatientAccessPage />},
           {path: '/agenda', element: <AgendaPage />},
+          {path: '/consultations', element: <ConsultationsPage />},
           {path: '/consultations/new', element: <ConsultationStartPage />},
           {path: '/consultations/:id', element: <ConsultationPage />},
           {path: '/laboratory/orders', element: <LaboratoryOrdersPage />},

@@ -30,6 +30,21 @@ class OrganizationApiIntegrationTests {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.number").value("ORG-API"));
     }
 
+    @Test void organizationFiltersApplyBeforePagination() throws Exception {
+        for(int i=0;i<3;i++) mockMvc.perform(post("/api/v1/organizations")
+                .header(HttpHeaders.AUTHORIZATION,"Bearer admin").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"number\":\"FILTER-"+i+"\",\"name\":\"Clinic "+i+"\",\"status\":\"ACTIVE\"}"))
+                .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/v1/organizations").header(HttpHeaders.AUTHORIZATION,"Bearer admin")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"number\":\"FILTER-INACTIVE\",\"name\":\"Clinic inactive\",\"status\":\"INACTIVE\"}"))
+                .andExpect(status().isCreated());
+        mockMvc.perform(get("/api/v1/organizations").param("query","FILTER-").param("status","ACTIVE")
+                .param("size","2").param("page","1").param("sort","name,asc")
+                .header(HttpHeaders.AUTHORIZATION,"Bearer admin"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.page.totalElements").value(3))
+                .andExpect(jsonPath("$.content.length()").value(1)).andExpect(jsonPath("$.content[0].number").value("FILTER-2"));
+    }
+
     @Test void hierarchyRejectsDepartmentFromAnotherOrganization() throws Exception {
         UUID first=create("ORG-A"); UUID second=create("ORG-B"); UUID foreignDepartment=addDepartment(second,"ER");
         mockMvc.perform(post("/api/v1/organizations/{id}/rooms",first).header(HttpHeaders.AUTHORIZATION,"Bearer admin").contentType(MediaType.APPLICATION_JSON).content("""

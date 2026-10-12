@@ -11,7 +11,7 @@ export type Professional=ProfessionalSummary&{createdAt:string;updatedAt:string;
 export type ProfessionalInput={personId:string;professionalNumber:string;professionalType:string;status?:string};
 export type SpecialityCatalog={id:string;code:string;name:string};
 export const professionalKeys={all:['professionals'] as const,list:(query:string)=>['professionals','list',query] as const,detail:(id:string)=>['professionals',id] as const,specialities:['professional-specialities'] as const};
-export const listProfessionals=(query='')=>apiRequest<Page<ProfessionalSummary>>(`/professionals?size=100&sort=number,asc&query=${encodeURIComponent(query)}`);
+export const listProfessionals=(query='',page=0,size=100)=>apiRequest<Page<ProfessionalSummary>>(`/professionals?size=${size}&page=${page}&sort=number,asc&query=${encodeURIComponent(query)}`);
 export const getProfessional=(id:string)=>apiRequest<Professional>(`/professionals/${id}`);
 export const createProfessional=(input:ProfessionalInput)=>apiRequest<Professional>('/professionals',{method:'POST',body:JSON.stringify(input)});
 export const updateProfessional=(id:string,input:Pick<ProfessionalInput,'professionalType'|'status'>)=>apiRequest<Professional>(`/professionals/${id}`,{method:'PUT',body:JSON.stringify(input)});
@@ -21,3 +21,5 @@ export const addSpeciality=(p:string,input:{specialityCatalogId:string;primary:b
 export const addAssignment=(p:string,input:Omit<Assignment,'id'|'schedules'|'availabilities'>)=>apiRequest<Assignment>(`/professionals/${p}/assignments`,{method:'POST',body:JSON.stringify(input)});
 export const addSchedule=(p:string,a:string,input:Omit<Schedule,'id'>)=>apiRequest<Schedule>(`/professionals/${p}/assignments/${a}/schedules`,{method:'POST',body:JSON.stringify(input)});
 export const addAvailability=(p:string,a:string,input:Omit<Availability,'id'>)=>apiRequest<Availability>(`/professionals/${p}/assignments/${a}/availabilities`,{method:'POST',body:JSON.stringify(input)});
+
+export const deleteProfessional=(id:string)=>apiRequest<void>(`/professionals/${id}`,{method:"DELETE"});

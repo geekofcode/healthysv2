@@ -171,6 +171,25 @@ public class Person extends AuditableEntity {
         return contact;
     }
 
+    void updateProfile(String firstName, String middleName, String lastName, String gender,
+            LocalDate birthDate, UUID preferredLanguageId) {
+        this.firstName = required(firstName, "firstName");
+        this.middleName = optional(middleName);
+        this.lastName = required(lastName, "lastName");
+        this.gender = optional(gender);
+        this.birthDate = birthDate;
+        this.preferredLanguageId = preferredLanguageId;
+    }
+
+    void replaceProfileContacts() {
+        contacts.clear();
+        emergencyContacts.clear();
+    }
+
+    void removeHomeAddresses() {
+        addresses.removeIf(address -> "HOME".equals(address.getAddressType()));
+    }
+
     public UUID getId() {
         return id;
     }

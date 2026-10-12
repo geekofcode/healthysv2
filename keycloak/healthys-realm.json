@@ -1,6 +1,6 @@
 {
   "realm": "healthys",
-  "displayName": "HEALTHYS",
+  "displayName": "HEALTH’YS",
   "enabled": true,
   "sslRequired": "external",
   "registrationAllowed": true,
@@ -9,19 +9,43 @@
   "rememberMe": true,
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
-  "defaultRoles": ["PATIENT"],
+  "defaultRoles": [
+    "patient"
+  ],
   "roles": {
     "realm": [
-      {"name": "PATIENT", "description": "Patient HEALTHYS"},
-      {"name": "DOCTOR", "description": "Médecin"},
-      {"name": "NURSE", "description": "Infirmier ou infirmière"},
-      {"name": "HOSPITAL_ADMIN", "description": "Administrateur d'établissement"},
-      {"name": "HOSPITAL_AGENT", "description": "Agent d'établissement"},
-      {"name": "PHARMACIST", "description": "Pharmacien"},
-      {"name": "LAB_TECHNICIAN", "description": "Personnel de laboratoire"},
-      {"name": "CASHIER", "description": "Caissier ou caissière"},
-      {"name": "ACCOUNTANT", "description": "Comptable"},
-      {"name": "PLATFORM_ADMIN", "description": "Administrateur de la plateforme"}
+      {
+        "name": "admin",
+        "description": "Administration globale HEALTH’YS"
+      },
+      {
+        "name": "comptable",
+        "description": "Finances et relevés financiers"
+      },
+      {
+        "name": "gestionnaire",
+        "description": "Lecture des informations de son établissement"
+      },
+      {
+        "name": "hopital",
+        "description": "Administration de son établissement"
+      },
+      {
+        "name": "laboratoire",
+        "description": "Analyses et résultats"
+      },
+      {
+        "name": "medecin",
+        "description": "Activités médicales"
+      },
+      {
+        "name": "nurse",
+        "description": "Soins et suivi infirmier"
+      },
+      {
+        "name": "patient",
+        "description": "Espace patient"
+      }
     ]
   },
   "clients": [
@@ -45,14 +69,16 @@
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "redirectUris": [
-        "http://localhost:5173/*"
+        "http://localhost:5173/*",
+        "http://localhost:3000/*"
       ],
       "webOrigins": [
-        "http://localhost:5173"
+        "http://localhost:5173",
+        "http://localhost:3000"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:5173/*"
+        "post.logout.redirect.uris": "http://localhost:5173/*##http://localhost:3000/*"
       },
       "defaultClientScopes": [
         "web-origins",
@@ -143,5 +169,13 @@
         }
       ]
     }
-  ]
+  ],
+  "loginTheme": "healthys",
+  "internationalizationEnabled": true,
+  "supportedLocales": [
+    "fr",
+    "en"
+  ],
+  "defaultLocale": "fr",
+  "clientScopes": []
 }

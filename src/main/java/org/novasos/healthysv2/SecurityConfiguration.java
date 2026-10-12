@@ -76,10 +76,16 @@ class SecurityConfiguration {
 
     @Bean
     JwtAuthenticationConverter jwtAuthenticationConverter(
-            SecurityProperties properties) {
+            SecurityProperties properties, KeycloakProfessionalAccess professionalAccess) {
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
         converter.setJwtGrantedAuthoritiesConverter(
-                keycloakAuthorities(properties.apiClientId()));
+                jwt -> professionalAccess.filter(jwt.getSubject(), keycloakAuthorities(properties.apiClientId()).convert(jwt)));
+        return converter;
+    }
+
+    JwtAuthenticationConverter unfilteredJwtAuthenticationConverter(SecurityProperties properties) {
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(keycloakAuthorities(properties.apiClientId()));
         return converter;
     }
 
@@ -100,7 +106,8 @@ class SecurityConfiguration {
                 HttpHeaders.CONTENT_TYPE,
                 HttpHeaders.ACCEPT,
                 HttpHeaders.ACCEPT_LANGUAGE,
-                "X-Correlation-ID"));
+                "X-Correlation-ID",
+                "X-Organization-ID"));
         configuration.setExposedHeaders(List.of(
                 HttpHeaders.LOCATION,
                 "X-Correlation-ID"));
@@ -163,6 +170,9 @@ class SecurityConfiguration {
             Collection<GrantedAuthority> authorities,
             Collection<String> roles) {
         roles.stream()
+                .map(KeycloakRoleMapping::canonicalRole)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
                 .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
                 .forEach(authorities::add);
     }

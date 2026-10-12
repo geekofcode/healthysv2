@@ -5,7 +5,7 @@ import java.net.URI;import java.time.Instant;import java.util.*;import jakarta.v
 class AppointmentController{
  private static final String STAFF="hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','DOCTOR','NURSE')";private final AppointmentService service;AppointmentController(AppointmentService service){this.service=service;}
  @GetMapping @PreAuthorize(STAFF) PageResponse<AppointmentSummary> search(@RequestParam(required=false)UUID patientId,@RequestParam(required=false)UUID professionalId,@RequestParam(required=false)String status,@RequestParam(required=false)Instant from,@RequestParam(required=false)Instant to,Pageable pageable){return service.search(patientId,professionalId,status,from,to,pageable);}
- @GetMapping("/me") PageResponse<AppointmentSummary> mine(@RequestParam(required=false)Instant from,@RequestParam(required=false)Instant to,Pageable pageable){return service.mine(from,to,pageable);}
+ @GetMapping("/me") PageResponse<AppointmentSummary> mine(@RequestParam(required=false)Instant from,@RequestParam(required=false)Instant to,@RequestParam(required=false)String status,Pageable pageable){return service.mine(from,to,status,pageable);}
  @GetMapping("/{id}") AppointmentResponse find(@PathVariable UUID id){return service.find(id);}
  @PostMapping ResponseEntity<AppointmentResponse> create(@Valid @RequestBody AppointmentRequest r){var out=service.create(r);return ResponseEntity.created(URI.create(ApiPaths.V1+"/appointments/"+out.id())).body(out);}
  @PutMapping("/{id}") AppointmentResponse update(@PathVariable UUID id,@Valid @RequestBody AppointmentUpdateRequest r){return service.update(id,r);}

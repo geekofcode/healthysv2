@@ -10,8 +10,8 @@ export type LabOrder=LabOrderSummary&{consultationId?:string;orderingProfessiona
 export type CreateLabOrderInput={patientId:string;consultationId?:string;orderingProfessionalId:string;laboratoryOrganizationId?:string;priority:string;items:{labExamCatalogId:string;instructions?:string}[]};
 
 export const laboratoryKeys={orders:(filters:Record<string,string>)=>['laboratory','orders',filters] as const,order:(id:string)=>['laboratory','orders',id] as const};
-const qs=(values:Record<string,string>)=>{const p=new URLSearchParams();Object.entries(values).forEach(([k,v])=>v.trim()&&p.set(k,v.trim()));p.set('size','50');p.set('sort','orderedAt,desc');return p};
-export const listLabOrders=(filters:Record<string,string>)=>apiRequest<Page<LabOrderSummary>>(`/lab-orders?${qs(filters)}`);
+const qs=(values:Record<string,string>)=>{const p=new URLSearchParams();Object.entries(values).forEach(([k,v])=>v.trim()&&p.set(k,v.trim()));p.set('size','20');p.set('sort','orderedAt,desc');return p};
+export const listLabOrders=(filters:Record<string,string>,page=0)=>apiRequest<Page<LabOrderSummary>>(`/lab-orders?${qs({...filters,page:String(page)})}`);
 export const getLabOrder=(id:string)=>apiRequest<LabOrder>(`/lab-orders/${id}`);
 export const createLabOrder=(input:CreateLabOrderInput)=>apiRequest<LabOrder>('/lab-orders',{method:'POST',body:JSON.stringify(input)});
 const post=<T>(path:string,input?:unknown)=>apiRequest<T>(path,{method:'POST',...(input===undefined?{}:{body:JSON.stringify(input)})});
@@ -24,3 +24,5 @@ export const addLabResultItem=(order:string,result:string,input:Record<string,un
 export const validateLabResult=(order:string,result:string,validatedBy:string)=>post<LabResult>(`/lab-orders/${order}/results/${result}/validate`,{validatedBy});
 export const cancelLabOrder=(id:string)=>post<LabOrder>(`/lab-orders/${id}/cancel`);
 export const validReferenceRange=(min?:number,max?:number)=>min===undefined||max===undefined||max>=min;
+
+export const listLabExams=(query='',page=0)=>apiRequest<Page<{id:string;code:string;name:string;specimenType?:string}>>(`/lab-exams?query=${encodeURIComponent(query)}&page=${page}&size=20`);

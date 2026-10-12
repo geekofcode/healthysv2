@@ -28,7 +28,7 @@ class PersonServiceTests {
     void setUp() {
         repository = Mockito.mock(PersonRepository.class);
         mapper = Mockito.mock(PersonMapper.class);
-        service = new PersonService(repository, mapper);
+        service = new PersonService(repository, mapper, org.mockito.Mockito.mock(org.springframework.jdbc.core.JdbcTemplate.class));
     }
 
     @Test

@@ -14,7 +14,7 @@ export type PaymentInput={amount:number;currency:string;paymentMethod:string;pro
 
 const query=(values:Record<string,string|undefined>)=>{const params=new URLSearchParams();Object.entries(values).forEach(([key,value])=>{if(value?.trim())params.set(key,value.trim())});return params.size?`?${params}`:''};
 export const billingKeys={invoices:(filters:InvoiceFilters)=>['billing','invoices',filters] as const,invoice:(id:string)=>['billing','invoice',id] as const};
-export const listInvoices=(filters:InvoiceFilters)=>apiRequest<Page<InvoiceSummary>>(`/invoices${query({...filters,size:'50',sort:'issuedAt,desc'})}`);
+export const listInvoices=(filters:InvoiceFilters,page=0)=>apiRequest<Page<InvoiceSummary>>(`/invoices${query({...filters,size:'20',page:String(page),sort:'issuedAt,desc'})}`);
 export const getInvoice=(id:string)=>apiRequest<Invoice>(`/invoices/${id}`);
 export const createInvoice=(input:InvoiceInput)=>apiRequest<Invoice>('/invoices',{method:'POST',body:JSON.stringify(input)});
 export const issueInvoice=(id:string)=>apiRequest<Invoice>(`/invoices/${id}/issue`,{method:'POST'});

@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
@@ -97,6 +98,43 @@ class SecurityIntegrationTests {
     }
 
     @Test
+    void mapsDeployedKeycloakRolesAndKeepsGestionnaireReadOnly() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/security-test")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer role-admin")).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/private/patient-test")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer role-patient")).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/private/laboratory-test")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer role-laboratoire")).andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/organizations")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer role-gestionnaire")
+                .contentType("application/json").content("{\"number\":\"ORG-READONLY\",\"name\":\"Read only test\"}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/admin/security-test")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer role-gestionnaire"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void registrationReferencesAreReadableBeforeProfessionalApprovalButAdministeredByPlatformOnly() throws Exception {
+        mockMvc.perform(get("/api/v1/registration-options")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer patient"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.countries").isArray())
+                .andExpect(jsonPath("$.specialities").isArray());
+        mockMvc.perform(post("/api/v1/admin/registration-options/countries")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer patient")
+                        .contentType("application/json")
+                        .content("{\"iso2\":\"ZZ\",\"name\":\"Reference test\"}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/admin/registration-options/countries")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer admin")
+                        .contentType("application/json")
+                        .content("{\"iso2\":\"ZZ\",\"name\":\"Reference test\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.iso2").value("ZZ"));
+    }
+
+    @Test
     void allowsConfiguredCorsOrigin() throws Exception {
         mockMvc.perform(options("/api/v1/private/security-test")
                         .header(HttpHeaders.ORIGIN, "http://localhost:5173")
@@ -134,7 +172,8 @@ class SecurityIntegrationTests {
 
             var professional = mockMvc.perform(get("/api/v1/professionals")
                     .header(HttpHeaders.AUTHORIZATION, "Bearer role-" + role));
-            if (List.of("PATIENT", "CASHIER", "ACCOUNTANT").contains(role))
+            // Hospital administrators need an explicit organization context, even with a valid role.
+            if (List.of("PATIENT", "CASHIER", "ACCOUNTANT", "HOSPITAL_ADMIN").contains(role))
                 professional.andExpect(status().isForbidden());
             else professional.andExpect(status().isOk());
 
@@ -147,6 +186,17 @@ class SecurityIntegrationTests {
                 create.andExpect(status().isCreated());
             else create.andExpect(status().isForbidden());
         }
+    }
+
+    @Test
+    void hospitalAdministratorCanReadProfessionalsOnlyInItsSelectedOrganization() throws Exception {
+        mockMvc.perform(get("/api/v1/professionals")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer hospital-scoped"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/professionals")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer hospital-scoped")
+                        .header("X-Organization-ID", "00000000-0000-0000-0000-000000000099"))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -205,6 +255,12 @@ class SecurityIntegrationTests {
         JwtDecoder jwtDecoder() {
             return token -> {
                 if (token.equals("expired")) throw new BadJwtException("JWT expired");
+                if (token.equals("hospital-scoped")) {
+                    Jwt base = jwt(token, Map.of("roles", List.of("HOSPITAL_ADMIN")), Map.of());
+                    return Jwt.withTokenValue(token).headers(headers -> headers.putAll(base.getHeaders()))
+                            .claims(claims -> claims.putAll(base.getClaims()))
+                            .claim("healthys_organization_id", "00000000-0000-0000-0000-000000000098").build();
+                }
                 if (token.startsWith("role-")) return jwt(token, Map.of("roles", List.of(token.substring(5))), Map.of());
                 return switch (token) {
                 case "patient" -> jwt(

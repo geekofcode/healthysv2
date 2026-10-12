@@ -9,7 +9,7 @@ import org.novasos.healthysv2.shared.api.ApiPaths; import org.springframework.ht
 @Tag(name="Patient authorization",description="Care relationships, consent lifecycle and access decisions")
 @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','PATIENT','DOCTOR','NURSE','PHARMACIST','LAB_TECHNICIAN')")
 class PatientAuthorizationController {
- private static final String ADMIN="hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN')";private final PatientAuthorizationService service;private final PatientAccessService access;
+ private static final String ADMIN="hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','PATIENT')";private final PatientAuthorizationService service;private final PatientAccessService access;
  PatientAuthorizationController(PatientAuthorizationService service,PatientAccessService access){this.service=service;this.access=access;}
  @GetMapping("/care-relationships") @PreAuthorize(ADMIN) List<CareRelationshipResponse> relationships(@PathVariable UUID patient){return service.relationships(patient);}
  @PostMapping("/care-relationships") @PreAuthorize(ADMIN) ResponseEntity<CareRelationshipResponse> createRelationship(@PathVariable UUID patient,@Valid @RequestBody CareRelationshipRequest r){return ResponseEntity.status(201).body(service.createRelationship(patient,r));}

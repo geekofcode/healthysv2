@@ -16,12 +16,18 @@ import org.novasos.healthysv2.shared.api.dto.PageResponse;
 @RestController
 @RequestMapping(ApiPaths.V1 + "/organizations")
 @Tag(name="Organizations", description="Organizations, departments, services, rooms and beds")
-@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','PROFESSIONAL')")
+@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','HOSPITAL_VIEWER','PROFESSIONAL','DOCTOR','NURSE','LAB_TECHNICIAN')")
 class OrganizationController {
     private static final String WRITE = "hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN')";
     private final OrganizationService service;
-    OrganizationController(OrganizationService service) { this.service = service; }
-    @GetMapping @Operation(summary="List organizations") PageResponse<OrganizationSummary> list(Pageable pageable) { return service.findAll(pageable); }
+    OrganizationController(OrganizationService service, org.springframework.jdbc.core.JdbcTemplate jdbc) { this.service = service; this.jdbc=jdbc; }
+    @GetMapping @Operation(summary="List organizations") PageResponse<OrganizationSummary> list(@RequestParam(defaultValue="") String query, @RequestParam(defaultValue="") String status, Pageable pageable) { return service.findAll(query,status,pageable); }
+    @GetMapping("/types") java.util.List<OrganizationTypeOption> types() { return organizationTypes(); }
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
+    record OrganizationTypeOption(UUID id, String code, String label) {}
+    private java.util.List<OrganizationTypeOption> organizationTypes() {
+        return jdbc.query("select id,code,label from catalog.organization_type where active=true order by label", (rs,n)->new OrganizationTypeOption(rs.getObject("id",UUID.class),rs.getString("code"),rs.getString("label")));
+    }
     @GetMapping("/{id}") @Operation(summary="Get an organization and its structure") OrganizationResponse get(@PathVariable UUID id) { return service.find(id); }
     @PostMapping @PreAuthorize(WRITE) @Operation(summary="Create an organization") ResponseEntity<OrganizationResponse> create(@Valid @RequestBody OrganizationRequest request) { var result=service.create(request); return ResponseEntity.created(URI.create(ApiPaths.V1+"/organizations/"+result.id())).body(result); }
     @PutMapping("/{id}") @PreAuthorize(WRITE) @Operation(summary="Update an organization") OrganizationResponse update(@PathVariable UUID id,@Valid @RequestBody OrganizationUpdateRequest request){return service.update(id,request);}

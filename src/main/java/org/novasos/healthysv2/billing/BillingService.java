@@ -92,7 +92,7 @@ class BillingService {
     }
     private void authorizeRead(Invoice invoice) {
         var user=users.current(); if(user.has("PLATFORM_ADMIN"))return;
-        if(user.hasAny(BILLING_ROLES)&&Objects.equals(user.organizationId(),invoice.getOrganizationId()))return;
+        if(user.hasAny(BILLING_ROLES)&&user.organizationId()!=null&&Objects.equals(user.organizationId(),invoice.getOrganizationId()))return;
         if(user.has("PATIENT")&&user.personId()!=null&&exists("select count(*) from patient.patient where id=? and person_id=?",invoice.getPatientId(),user.personId()))return;
         throw new AccessDeniedException("BILLING_READ_DENIED");
     }

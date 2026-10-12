@@ -14,6 +14,8 @@ import {
   validAccessToken,
 } from './keycloak';
 
+import {applicationRoles} from './roles';
+
 type AuthContextValue = {
   initialized: boolean;
   authenticated: boolean;
@@ -95,7 +97,7 @@ export function AuthProvider({children}: {children: ReactNode}) {
 
   const value = useMemo<AuthContextValue>(
     () => {
-      const roles = keycloak.tokenParsed?.realm_access?.roles ?? [];
+      const roles = applicationRoles(keycloak.tokenParsed?.realm_access?.roles ?? []);
       return ({
       initialized,
       authenticated,

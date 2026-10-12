@@ -13,6 +13,7 @@ import org.novasos.healthysv2.shared.api.error.ResourceNotFoundException;
 @Service
 @Transactional
 class OrganizationService {
+    private final org.novasos.healthysv2.patient.CurrentUserContext users;
     private final OrganizationRepository organizations;
     private final DepartmentRepository departments;
     private final CareServiceRepository services;
@@ -20,7 +21,9 @@ class OrganizationService {
     private final BedRepository beds;
 
     OrganizationService(OrganizationRepository organizations, DepartmentRepository departments,
-            CareServiceRepository services, RoomRepository rooms, BedRepository beds) {
+            CareServiceRepository services, RoomRepository rooms, BedRepository beds,
+            org.novasos.healthysv2.patient.CurrentUserContext users) {
+        this.users = users;
         this.organizations = organizations; this.departments = departments;
         this.services = services; this.rooms = rooms; this.beds = beds;
     }
@@ -30,10 +33,16 @@ class OrganizationService {
         return response(organizations.save(Organization.create(request.number(), request.name(), request.legalName(),
                 request.organizationTypeId(), request.phone(), request.email(), request.website(), request.status())));
     }
-    @Transactional(readOnly=true) PageResponse<OrganizationSummary> findAll(Pageable pageable) {
-        return PageResponse.from(organizations.findAll(pageable).map(this::summary));
+    @Transactional(readOnly=true) PageResponse<OrganizationSummary> findAll(String query, String status, Pageable pageable) {
+        var viewer = viewerOrganization();
+        var page = organizations.search(viewer, query.trim(), status.trim(), pageable);
+        return PageResponse.from(page.map(this::summary));
     }
-    @Transactional(readOnly=true) OrganizationResponse find(UUID id) { return response(organization(id)); }
+    @Transactional(readOnly=true) OrganizationResponse find(UUID id) {
+        UUID scope = viewerOrganization();
+        if (scope != null && !scope.equals(id)) throw new org.springframework.security.access.AccessDeniedException("Organization outside viewer scope");
+        return response(organization(id));
+    }
     OrganizationResponse update(UUID id, OrganizationUpdateRequest request) {
         Organization item = organization(id); item.update(request.name(), request.legalName(), request.organizationTypeId(), request.phone(), request.email(), request.website(), request.status()); return response(item);
     }
@@ -93,6 +102,13 @@ class OrganizationService {
     void deleteBed(UUID organizationId, UUID roomId, UUID id) {
         Room parent = roomEntity(organizationId, roomId);
         Bed item = beds.findByIdAndRoomId(id, roomId).orElseThrow(() -> notFound("Bed", id)); parent.removeBed(item);
+    }
+
+    private UUID viewerOrganization() {
+        var user = users.current();
+        if (!user.has("HOSPITAL_VIEWER") || user.has("PLATFORM_ADMIN")) return null;
+        if (user.organizationId() == null) throw new org.springframework.security.access.AccessDeniedException("Organization context required for gestionnaire");
+        return user.organizationId();
     }
 
     private Organization organization(UUID id) { return organizations.findById(id).orElseThrow(() -> notFound("Organization", id)); }
