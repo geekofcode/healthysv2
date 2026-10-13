@@ -62,4 +62,21 @@ class IndependentPatientAccessTests {
         when(jdbc.queryForObject(contains("patient.access_grant"),eq(Integer.class),eq(patient),eq(person),eq(org),eq("DOCUMENT"))).thenReturn(1);
         assertThat(service.requireAccess(patient,"DOCUMENTS","READ").reason()).isEqualTo("TEMPORARY_GRANT");
     }
+    @Test void backgroundActorDoesNotBorrowInteractiveMembership() {
+        UUID org=UUID.randomUUID();context(Set.of("DOCTOR"),org);
+        assertThatThrownBy(()->service.requireAccessForActor(new CurrentUserContext.UserContext(person,org,Set.of("DOCTOR")),patient,"MEDICAL_RECORD","READ"))
+                .isInstanceOf(AccessDeniedException.class).hasMessage("ORGANIZATION_LICENSE_OR_MEMBERSHIP_REQUIRED");
+        verifyNoInteractions(users,licensing);
+    }
+    @Test void backgroundActorRechecksPatientRevocationAndAuditsDenial() {
+        UUID org=UUID.randomUUID();context(Set.of("DOCTOR"),org);
+        when(jdbc.queryForObject(contains("licensing.member"),eq(Integer.class),eq(org),eq(person))).thenReturn(1);
+        when(jdbc.queryForObject(contains("patient.access_revocation"),eq(Integer.class),eq(patient),eq(person),eq(org))).thenReturn(1);
+        assertThatThrownBy(()->service.requireAccessForActor(new CurrentUserContext.UserContext(person,org,Set.of("DOCTOR")),patient,"MEDICAL_RECORD","READ"))
+                .isInstanceOf(AccessDeniedException.class).hasMessage("PATIENT_REVOKED_ACCESS");
+        verifyNoInteractions(users);
+        verify(licensing).requireActive(org);
+        verify(licensing,never()).requireMember(any());
+        verify(audit).access(eq(person),eq(patient),eq(org),eq("MEDICAL_RECORD"),eq(patient),eq("DENIED"),eq("PATIENT_REVOKED_ACCESS"),any());
+    }
 }

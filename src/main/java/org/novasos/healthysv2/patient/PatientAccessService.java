@@ -28,7 +28,18 @@ public class PatientAccessService {
             auditContextDenied(patientId, scope, exception.getMessage());
             throw exception;
         }
-        AccessDecision decision = decide(user, patientId, normalize(scope), normalize(action));
+        return authorize(user, patientId, scope, action, false);
+    }
+
+    /** Internal background work must recheck the persisted actor's rights, without a fabricated JWT. */
+    @Transactional(readOnly = true)
+    public AccessDecision requireAccessForActor(CurrentUserContext.UserContext user, UUID patientId, String scope, String action) {
+        Objects.requireNonNull(user, "Actor is required");
+        return authorize(user, patientId, scope, action, true);
+    }
+
+    private AccessDecision authorize(CurrentUserContext.UserContext user, UUID patientId, String scope, String action, boolean background) {
+        AccessDecision decision = decide(user, patientId, normalize(scope), normalize(action), background);
         audit.access(user.personId(), "PATIENT_NOT_FOUND".equals(decision.reason())?null:patientId, user.organizationId(), scope, patientId,
                 decision.allowed() ? action : "DENIED", decision.reason(),
                 Map.of("allowed", decision.allowed(), "decision", decision.reason(), "roles", user.roles()));
@@ -52,12 +63,18 @@ public class PatientAccessService {
                 Map.of("allowed", false, "decision", reason));
     }
 
-    private AccessDecision decide(CurrentUserContext.UserContext user, UUID patientId, String scope, String action) {
+    private AccessDecision decide(CurrentUserContext.UserContext user, UUID patientId, String scope, String action, boolean background) {
         if (!exists("select count(*) from patient.patient where id=?", patientId)) return denied("PATIENT_NOT_FOUND");
         if (user.personId()!=null && exists("select count(*) from patient.patient where id=? and person_id=?",patientId,user.personId())) return allowed("PATIENT_SELF");
         if (!user.hasAny("DOCTOR","NURSE","HOSPITAL_ADMIN")) return denied("ROLE_NOT_AUTHORIZED");
         if (user.personId()==null || user.organizationId()==null) return denied("LICENSED_ORGANIZATION_REQUIRED");
-        try { licensing.requireMember(user.organizationId()); licensing.requireActive(user.organizationId()); }
+        try {
+            if (background) {
+                if (!exists("select count(*) from licensing.member where organization_id=? and person_id=? and status='ACTIVE'", user.organizationId(), user.personId()))
+                    return denied("ORGANIZATION_LICENSE_OR_MEMBERSHIP_REQUIRED");
+            } else licensing.requireMember(user.organizationId());
+            licensing.requireActive(user.organizationId());
+        }
         catch(AccessDeniedException e) {return denied("ORGANIZATION_LICENSE_OR_MEMBERSHIP_REQUIRED");}
         if (exists("select count(*) from patient.access_grant where patient_id=? and person_id=? and organization_id=? and revoked_at is null and granted_at<=clock_timestamp() and expires_at>clock_timestamp() and (scope=? or scope='FULL_RECORD')",patientId,user.personId(),user.organizationId(),scope)) {
             if (!exists("select count(*) from patient.access_revocation where patient_id=? and person_id=? and organization_id=?",patientId,user.personId(),user.organizationId()) || exists("select count(*) from patient.access_grant where patient_id=? and person_id=? and organization_id=? and source='EMERGENCY' and revoked_at is null and expires_at>clock_timestamp()",patientId,user.personId(),user.organizationId())) return allowed("TEMPORARY_GRANT");

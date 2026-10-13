@@ -10,6 +10,7 @@ export type ReportRevision = ReportFields & {
   revision: number;
   validatedAt?: string;
   correctionReason?: string;
+  aiJobId?: string;
 };
 export type VisitReport = ReportFields & {
   visitId: string;
@@ -23,6 +24,7 @@ export type VisitReport = ReportFields & {
   revision: number;
   status: "DRAFT" | "VALIDATED";
   correctionReason?: string;
+  aiJobId?: string;
   revisions: ReportRevision[];
 };
 export const startCareVisit = (id: string, version: number) =>
@@ -36,10 +38,15 @@ export const saveVisitReport = (
   id: string,
   version: number,
   input: ReportFields,
+  aiJobId?: string,
 ) =>
   apiRequest<VisitReport>(`/care/visits/${id}/report`, {
     method: "PUT",
-    body: JSON.stringify({ version, ...input }),
+    body: JSON.stringify({
+      version,
+      ...input,
+      ...(aiJobId ? { aiJobId } : {}),
+    }),
   });
 export const finalizeVisitReport = (id: string, version: number) =>
   apiRequest<VisitReport>(`/care/visits/${id}/report/finalize`, {

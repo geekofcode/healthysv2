@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth/AuthContext";
 import { ApiErrorMessage } from "../components/ApiErrorMessage";
+import { CareAiAssistant } from "../components/CareAiAssistant";
 import { VisitPrescription } from "../components/VisitPrescription";
 import { getPatient } from "../api/patients";
 import { getCareEpisode, getVisitIntake } from "../api/careEpisodes";
@@ -79,6 +80,7 @@ function VisitWorkspace({
     treatment: value.treatment ?? "",
     followUp: value.followUp ?? "",
   });
+  const [aiJobId, setAiJobId] = useState<string | undefined>(value.aiJobId);
   const [correctionReason, setCorrectionReason] = useState("");
   const patient = useQuery({
     queryKey: ["patients", value.patientId],
@@ -107,7 +109,10 @@ function VisitWorkspace({
     onSuccess: refresh,
   });
   const save = useMutation({
-    mutationFn: () => saveVisitReport(id, value.version, draft),
+    mutationFn: () =>
+      aiJobId
+        ? saveVisitReport(id, value.version, draft, aiJobId)
+        : saveVisitReport(id, value.version, draft),
     onSuccess: refresh,
   });
   const finalize = useMutation({
@@ -118,9 +123,11 @@ function VisitWorkspace({
     mutationFn: () => correctVisitReport(id, value.version, correctionReason),
     onSuccess: refresh,
   });
-  const dirty = (Object.keys(fields) as (keyof ReportFields)[]).some(
-    (field) => draft[field] !== (value[field] ?? ""),
-  );
+  const dirty =
+    aiJobId !== value.aiJobId ||
+    (Object.keys(fields) as (keyof ReportFields)[]).some(
+      (field) => draft[field] !== (value[field] ?? ""),
+    );
   const busy =
     start.isPending ||
     save.isPending ||
@@ -199,6 +206,25 @@ function VisitWorkspace({
       )}
       {intake.error && <ApiErrorMessage error={intake.error} />}
       {episode.error && <ApiErrorMessage error={episode.error} />}
+      <CareAiAssistant
+        visitId={id}
+        organizationId={value.organizationId}
+        professionalId={value.professionalId}
+        canWrite={canWrite}
+        editable={editable}
+        fr={fr}
+        onApply={(proposal, jobId) => {
+          setDraft(proposal);
+          setAiJobId(jobId);
+        }}
+      />
+      {aiJobId && (
+        <p>
+          {fr
+            ? "Rapport issu d’une proposition IA, soumis à validation médicale."
+            : "Report based on an AI proposal, subject to medical validation."}
+        </p>
+      )}
       <form
         className="entity-form"
         onSubmit={(event) => {
@@ -292,6 +318,13 @@ function VisitWorkspace({
                 new Date(revision.validatedAt).toLocaleString()}{" "}
               · {revision.correctionReason}
             </p>
+            {revision.aiJobId && (
+              <p>
+                {fr
+                  ? "Rapport préparé avec assistance IA et validé par le médecin."
+                  : "Report prepared with AI assistance and validated by the doctor."}
+              </p>
+            )}
             {(Object.keys(fields) as (keyof ReportFields)[]).map((field) => (
               <p key={field}>
                 <strong>{fields[field][fr ? 0 : 1]}: </strong>

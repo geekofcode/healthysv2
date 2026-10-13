@@ -25,6 +25,10 @@ public class EncounterService implements VisitReportReader {
     private final AuditTrail audit;
     private final CarePolicy policy;
     private final Duration inProgressDuration;
+    private AiJobService aiJobs;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void setAiJobs(AiJobService aiJobs) { this.aiJobs=aiJobs; }
     EncounterService(CareVisitRepository visits, CurrentUserContext users, LicensingAccess licensing,
             PatientAccessService access, JdbcTemplate jdbc, AuditTrail audit, CarePolicy policy,
             @org.springframework.beans.factory.annotation.Value("${healthys.access.in-progress-duration:PT4H}") Duration inProgressDuration) {
@@ -63,6 +67,10 @@ public class EncounterService implements VisitReportReader {
         var draft=state(id);
         checkVersion(draft.version(),request.version());
         if(draft.status().equals("VALIDATED")) throw rule("REPORT_VALIDATED","Open a traced correction before editing a validated report");
+        UUID provenance=draft.aiJobId();
+        if(request.aiJobId()!=null && !request.aiJobId().equals(provenance)) {
+            provenance=aiJobs.requireReportProvenance(id,request.aiJobId());
+        }
         Instant now=Instant.now();
         if(draft.persisted()) {
             jdbc.update("""
@@ -77,6 +85,7 @@ public class EncounterService implements VisitReportReader {
                     """,id,request.reason().trim(),text(request.observations()),text(request.diagnosis()),text(request.treatment()),text(request.followUp()),
                     Timestamp.from(now),users.current().personId(),retention(now));
         }
+        if (provenance!=null) jdbc.update("update care.visit_report set ai_job_id=? where visit_id=?",provenance,id);
         auditReport(visit,"SAVE_DRAFT",draft.revision());
         return response(visit,state(id));
     }
@@ -92,10 +101,10 @@ public class EncounterService implements VisitReportReader {
                 rs->rs.next()?rs.getObject(1,UUID.class):null,id);
         jdbc.update("""
                 insert into care.visit_report_revision(id,visit_id,revision,reason,observations,diagnosis,treatment,follow_up,
-                    validated_at,validated_by,correction_reason,previous_revision_id,retention_expires_at)
-                values(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    validated_at,validated_by,correction_reason,previous_revision_id,retention_expires_at,ai_job_id)
+                values(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,UUID.randomUUID(),id,draft.revision(),draft.reason(),draft.observations(),draft.diagnosis(),draft.treatment(),draft.followUp(),
-                Timestamp.from(now),users.current().personId(),draft.correctionReason(),previous,retention(now));
+                Timestamp.from(now),users.current().personId(),draft.correctionReason(),previous,retention(now),draft.aiJobId());
         jdbc.update("update care.visit_report set status='VALIDATED',version=version+1,updated_at=?,updated_by=? where visit_id=?",
                 Timestamp.from(now),users.current().personId(),id);
         if(visit.getStatus()==CareVisit.Status.IN_PROGRESS) { visit.complete(now); visits.flush(); }
@@ -195,13 +204,13 @@ public class EncounterService implements VisitReportReader {
     }
     private DraftState state(UUID id) {
         return jdbc.query("select * from care.visit_report where visit_id=?",rs->rs.next()?new DraftState(true,rs.getLong("version"),rs.getInt("current_revision"),
-                rs.getString("status"),rs.getString("reason"),rs.getString("observations"),rs.getString("diagnosis"),rs.getString("treatment"),rs.getString("follow_up"),rs.getString("correction_reason")):
-                new DraftState(false,0,1,"DRAFT","","","","","",null),id);
+                rs.getString("status"),rs.getString("reason"),rs.getString("observations"),rs.getString("diagnosis"),rs.getString("treatment"),rs.getString("follow_up"),rs.getString("correction_reason"),rs.getObject("ai_job_id",UUID.class)):
+                new DraftState(false,0,1,"DRAFT","","","","","",null,null),id);
     }
     private EncounterDtos.Report response(CareVisit visit,DraftState draft) {
         var episode=visit.episode();
         return new EncounterDtos.Report(visit.getId(),episode.getId(),episode.getPatientId(),episode.getOrganizationId(),visit.getProfessionalId(),visit.getStatus().name(),visit.getVersion(),
-                draft.version(),draft.revision(),draft.status(),draft.persisted()?draft.reason():visit.getReason(),draft.observations(),draft.diagnosis(),draft.treatment(),draft.followUp(),draft.correctionReason(),revisions(visit));
+                draft.version(),draft.revision(),draft.status(),draft.persisted()?draft.reason():visit.getReason(),draft.observations(),draft.diagnosis(),draft.treatment(),draft.followUp(),draft.correctionReason(),revisions(visit),draft.aiJobId());
     }
     private List<ValidatedVisitReport> revisions(CareVisit visit) {
         var episode=visit.episode();
@@ -210,7 +219,7 @@ public class EncounterService implements VisitReportReader {
                 join identity.person p on p.id=r.validated_by where r.visit_id=? order by r.revision
                 """,(rs,n)->new ValidatedVisitReport(visit.getId(),episode.getId(),episode.getPatientId(),episode.getOrganizationId(),visit.getProfessionalId(),
                 rs.getString("doctor_name"),rs.getInt("revision"),rs.getObject("id",UUID.class),rs.getTimestamp("validated_at").toInstant(),
-                rs.getString("reason"),rs.getString("observations"),rs.getString("diagnosis"),rs.getString("treatment"),rs.getString("follow_up")),visit.getId());
+                rs.getString("reason"),rs.getString("observations"),rs.getString("diagnosis"),rs.getString("treatment"),rs.getString("follow_up"),rs.getObject("ai_job_id",UUID.class)),visit.getId());
     }
     private void auditReport(CareVisit visit,String action,int revision) {
         audit.change(users.current().personId(),visit.episode().getOrganizationId(),"CARE","VisitReport",visit.getId(),action,null,Map.of("revision",revision));
@@ -218,5 +227,5 @@ public class EncounterService implements VisitReportReader {
     private Timestamp retention(Instant now) { return Timestamp.from(now.atZone(ZoneOffset.UTC).plusYears(policy.retentionYears()).toInstant()); }
     private static String text(String value) { return value==null?"":value.trim(); }
     private static BusinessRuleException rule(String code,String message) { return new BusinessRuleException(code,message); }
-    private record DraftState(boolean persisted,long version,int revision,String status,String reason,String observations,String diagnosis,String treatment,String followUp,String correctionReason) {}
+    private record DraftState(boolean persisted,long version,int revision,String status,String reason,String observations,String diagnosis,String treatment,String followUp,String correctionReason,UUID aiJobId) {}
 }

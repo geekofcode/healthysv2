@@ -50,12 +50,34 @@ vi.mock("../api/patients", () => ({
 }));
 vi.mock("../api/careEpisodes", () => ({
   getCareEpisode: vi.fn().mockResolvedValue({}),
-  getVisitIntake: vi
-    .fn()
-    .mockResolvedValue({
-      observations: "Constantes accueil",
-      vitals: { temperatureC: 38 },
-    }),
+  getVisitIntake: vi.fn().mockResolvedValue({
+    observations: "Constantes accueil",
+    vitals: { temperatureC: 38 },
+  }),
+}));
+vi.mock("../components/CareAiAssistant", () => ({
+  CareAiAssistant: ({
+    onApply,
+  }: {
+    onApply: (fields: object, jobId: string) => void;
+  }) => (
+    <button
+      onClick={() =>
+        onApply(
+          {
+            reason: "Motif IA",
+            observations: "Notes IA",
+            diagnosis: "Diagnostic IA",
+            treatment: "Traitement IA",
+            followUp: "Suivi IA",
+          },
+          "job-ai",
+        )
+      }
+    >
+      Copier une proposition IA
+    </button>
+  ),
 }));
 vi.mock("../components/VisitPrescription", () => ({
   VisitPrescription: () => null,
@@ -118,6 +140,37 @@ it("requires saving edited report before validation and sends report version", a
       "v",
       2,
       expect.objectContaining({ observations: "Nouvelles observations" }),
+    ),
+  );
+  expect(mock.finalize).not.toHaveBeenCalled();
+});
+
+it("keeps AI provenance when the copied proposal is corrected and saved", async () => {
+  mock.report.visitStatus = "IN_PROGRESS";
+  show();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Copier une proposition IA" }),
+  );
+  fireEvent.change(screen.getByLabelText("Diagnostic"), {
+    target: { value: "Diagnostic corrigé" },
+  });
+  expect(
+    screen.getByRole("button", {
+      name: "Valider le rapport et terminer la visite",
+    }),
+  ).toHaveProperty("disabled", true);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Enregistrer le brouillon" }),
+  );
+  await waitFor(() =>
+    expect(mock.save).toHaveBeenCalledWith(
+      "v",
+      2,
+      expect.objectContaining({
+        diagnosis: "Diagnostic corrigé",
+        reason: "Motif IA",
+      }),
+      "job-ai",
     ),
   );
   expect(mock.finalize).not.toHaveBeenCalled();

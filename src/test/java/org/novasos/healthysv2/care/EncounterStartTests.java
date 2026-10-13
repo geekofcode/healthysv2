@@ -92,6 +92,22 @@ class EncounterStartTests {
         assertEquals(CareVisit.Status.IN_PROGRESS,visit.getStatus());
         verify(jdbc,never()).update(contains("insert into care.visit_report_revision"),any(Object[].class));
     }
+    @Test void unownedAiProposalCannotBeRecordedAsReportProvenance() throws Exception {
+        var visit=visit();service.start(visit.getId(),0);reportState(visit,"DRAFT","Existing diagnosis");
+        var ai=mock(AiJobService.class);service.setAiJobs(ai);UUID job=UUID.randomUUID();
+        doThrow(new AccessDeniedException("ASSIGNED_DOCTOR_REQUIRED")).when(ai).requireReportProvenance(visit.getId(),job);
+        assertThrows(AccessDeniedException.class,()->service.save(visit.getId(),new EncounterDtos.Draft(4,"Fever","Exam","Diagnosis","","",job)));
+        verify(jdbc,never()).update(contains("update care.visit_report"),any(Object[].class));
+    }
+    @Test void editedAiDraftKeepsItsSourceJobWithoutAutomaticValidation() throws Exception {
+        var visit=visit();service.start(visit.getId(),0);reportState(visit,"DRAFT","Existing diagnosis");
+        var ai=mock(AiJobService.class);service.setAiJobs(ai);UUID job=UUID.randomUUID();
+        when(ai.requireReportProvenance(visit.getId(),job)).thenReturn(job);
+        service.save(visit.getId(),new EncounterDtos.Draft(4,"Edited reason","Doctor corrected examination","Doctor diagnosis","","",job));
+        verify(jdbc).update(eq("update care.visit_report set ai_job_id=? where visit_id=?"),eq(job),eq(visit.getId()));
+        verify(jdbc,never()).update(contains("insert into care.visit_report_revision"),any(Object[].class));
+        assertEquals(CareVisit.Status.IN_PROGRESS,visit.getStatus());
+    }
 
     @Test void patientWithGlobalDoctorRoleCannotReadDraftWithoutClinicalOrganization() {
         when(users.current()).thenReturn(new CurrentUserContext.UserContext(person,null,Set.of("PATIENT","DOCTOR")));

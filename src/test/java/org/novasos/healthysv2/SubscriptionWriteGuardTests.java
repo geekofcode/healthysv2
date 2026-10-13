@@ -32,6 +32,13 @@ class SubscriptionWriteGuardTests {
         assertThatThrownBy(()->guard.preHandle(new MockHttpServletRequest("POST","/api/v1/visits/visit/ai-jobs"),new MockHttpServletResponse(),new Object())).isInstanceOf(AccessDeniedException.class);
         verify(licensing).requireActive(org);
     }
+    @Test void dictationRequiresAiEntitlementBeforeReadingUpload() {
+        UUID org=UUID.randomUUID();
+        when(users.current()).thenReturn(new CurrentUserContext.UserContext(UUID.randomUUID(),org,Set.of("DOCTOR")));
+        doThrow(new AccessDeniedException("AI_NOT_INCLUDED")).when(licensing).requireAi(org);
+        assertThatThrownBy(()->guard.preHandle(new MockHttpServletRequest("POST","/api/v1/care/visits/"+UUID.randomUUID()+"/ai/dictation"),new MockHttpServletResponse(),new Object()))
+            .isInstanceOf(AccessDeniedException.class).hasMessage("AI_NOT_INCLUDED");
+    }
     @Test void patientCanRevokeOwnAccessWithoutAnOrganizationSubscription() {
         UUID patient=UUID.randomUUID();
         when(users.current()).thenReturn(new CurrentUserContext.UserContext(UUID.randomUUID(),null,Set.of("PATIENT")));

@@ -38,7 +38,7 @@ class SubscriptionWebConfiguration implements WebMvcConfigurer {
                 if (user.organizationId()==null) throw new AccessDeniedException("ORGANIZATION_CONTEXT_REQUIRED");
                 licensing.requireMember(user.organizationId());
                 licensing.requireActive(user.organizationId());
-                if (request.getRequestURI().contains("/ai-jobs")) licensing.requireAi(user.organizationId());
+                if (uri.contains("/ai-jobs") || uri.matches("/api/v1/care/visits/[0-9a-fA-F-]{36}/ai/.*")) licensing.requireAi(user.organizationId());
                 return true;
             }
     }
