@@ -27,7 +27,7 @@ public final class BillingDtos {
     public record InvoiceResponse(UUID id,String invoiceNumber,UUID patientId,UUID organizationId,UUID encounterId,
                                   String currency,BigDecimal subtotal,BigDecimal taxAmount,BigDecimal totalAmount,
                                   BigDecimal amountPaid,BigDecimal balance,Instant issuedAt,Instant dueAt,String status,
-                                  List<InvoiceItemResponse> items,List<PaymentResponse> payments) {}
+                                  List<InvoiceItemResponse> items,List<PaymentResponse> payments,UUID careEpisodeId) {}
     public record InvoiceItemResponse(UUID id,String itemType,UUID referenceId,String description,BigDecimal quantity,
                                       BigDecimal unitPrice,BigDecimal taxAmount,BigDecimal totalAmount) {}
     public record PaymentResponse(UUID id,String paymentNumber,UUID invoiceId,BigDecimal amount,String currency,

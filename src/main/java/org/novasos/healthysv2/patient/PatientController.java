@@ -30,15 +30,15 @@ class PatientController {
     @GetMapping @Operation(summary = "Search patients")
     PageResponse<PatientSummary> list(@RequestParam(defaultValue = "") String query, Pageable pageable) { return service.search(query, pageable); }
     @GetMapping("/{id}") PatientResponse get(@PathVariable UUID id) { access.requireAccess(id,"MEDICAL_RECORD","READ"); return service.find(id); }
-    @PostMapping @PreAuthorize(ADMIN_WRITE)
+    @PostMapping @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','NURSE')")
     ResponseEntity<PatientResponse> create(@Valid @RequestBody PatientRequest request) {
         var result = service.create(request);
         return ResponseEntity.created(URI.create(ApiPaths.V1 + "/patients/" + result.id())).body(result);
     }
-    @PutMapping("/{id}") @PreAuthorize(ADMIN_WRITE) PatientResponse update(@PathVariable UUID id, @Valid @RequestBody PatientUpdateRequest request) { return service.update(id, request); }
-    @DeleteMapping("/{id}") @PreAuthorize(ADMIN_WRITE) ResponseEntity<Void> delete(@PathVariable UUID id) { service.delete(id); return ResponseEntity.noContent().build(); }
+    @PutMapping("/{id}") @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','NURSE')") PatientResponse update(@PathVariable UUID id, @Valid @RequestBody PatientUpdateRequest request) { access.requireAccess(id,"MEDICAL_RECORD","WRITE"); return service.update(id, request); }
+    @DeleteMapping("/{id}") @PreAuthorize(ADMIN_WRITE) ResponseEntity<Void> delete(@PathVariable UUID id) { access.requireAccess(id,"MEDICAL_RECORD","WRITE"); service.delete(id); return ResponseEntity.noContent().build(); }
 
-    @PostMapping("/{patient}/identifiers") @PreAuthorize(ADMIN_WRITE) ResponseEntity<IdentifierResponse> addIdentifier(@PathVariable UUID patient, @Valid @RequestBody IdentifierRequest r) { return created(service.addIdentifier(patient, r)); }
+    @PostMapping("/{patient}/identifiers") @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','NURSE')") ResponseEntity<IdentifierResponse> addIdentifier(@PathVariable UUID patient, @Valid @RequestBody IdentifierRequest r) { return created(service.addIdentifier(patient, r)); }
     @PutMapping("/{patient}/identifiers/{id}") @PreAuthorize(ADMIN_WRITE) IdentifierResponse updateIdentifier(@PathVariable UUID patient, @PathVariable UUID id, @Valid @RequestBody IdentifierRequest r) { return service.updateIdentifier(patient, id, r); }
     @DeleteMapping("/{patient}/identifiers/{id}") @PreAuthorize(ADMIN_WRITE) ResponseEntity<Void> deleteIdentifier(@PathVariable UUID patient, @PathVariable UUID id) { service.deleteIdentifier(patient, id); return noContent(); }
     @PostMapping("/{patient}/insurances") @PreAuthorize(ADMIN_WRITE) ResponseEntity<InsuranceResponse> addInsurance(@PathVariable UUID patient, @Valid @RequestBody InsuranceRequest r) { return created(service.addInsurance(patient, r)); }

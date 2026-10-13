@@ -61,7 +61,7 @@ class SecurityConfiguration {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.OPTIONS, "/**")
                         .permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/notifications/devices/revoke").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/notifications/devices/revoke", "/api/v1/licensing/stripe/webhook").permitAll()
                         .requestMatchers(PUBLIC_ENDPOINTS)
                         .permitAll()
                         .requestMatchers("/api/v1/admin/**")
@@ -76,10 +76,10 @@ class SecurityConfiguration {
 
     @Bean
     JwtAuthenticationConverter jwtAuthenticationConverter(
-            SecurityProperties properties, KeycloakProfessionalAccess professionalAccess) {
+            SecurityProperties properties, KeycloakProfessionalAccess professionalAccess, OrganizationAuthorities organizations) {
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
         converter.setJwtGrantedAuthoritiesConverter(
-                jwt -> professionalAccess.filter(jwt.getSubject(), keycloakAuthorities(properties.apiClientId()).convert(jwt)));
+                jwt -> professionalAccess.filter(jwt.getSubject(), organizations.augment(jwt, keycloakAuthorities(properties.apiClientId()).convert(jwt))));
         return converter;
     }
 
@@ -107,7 +107,9 @@ class SecurityConfiguration {
                 HttpHeaders.ACCEPT,
                 HttpHeaders.ACCEPT_LANGUAGE,
                 "X-Correlation-ID",
-                "X-Organization-ID"));
+                "X-Organization-ID",
+                "Idempotency-Key",
+                "If-Match"));
         configuration.setExposedHeaders(List.of(
                 HttpHeaders.LOCATION,
                 "X-Correlation-ID"));

@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping(ApiPaths.V1+"/invoices")
 @Tag(name="Billing",description="Invoice lifecycle, balances and payments")
-@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','CASHIER','ACCOUNTANT','PATIENT')")
+@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','CASHIER','ACCOUNTANT','NURSE','PATIENT')")
 class BillingController {
     private static final String WRITE="hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','CASHIER','ACCOUNTANT')";
     private final BillingService service;

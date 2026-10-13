@@ -4,15 +4,18 @@ import java.util.Map;
 
 /** Explicit bridge from the deployed Keycloak realm to existing domain policies. */
 final class KeycloakRoleMapping {
-    private static final Map<String, String> ROLES = Map.of(
-            "admin", "PLATFORM_ADMIN",
-            "comptable", "ACCOUNTANT",
-            "gestionnaire", "HOSPITAL_VIEWER",
-            "hopital", "HOSPITAL_ADMIN",
-            "laboratoire", "LAB_TECHNICIAN",
-            "medecin", "DOCTOR",
-            "nurse", "NURSE",
-            "patient", "PATIENT");
+    private static final Map<String, String> ROLES = Map.ofEntries(
+            Map.entry("admin", "PLATFORM_ADMIN"),
+            Map.entry("comptable", "ACCOUNTANT"),
+            Map.entry("gestionnaire", "HOSPITAL_VIEWER"),
+            Map.entry("hopital", "HOSPITAL_ADMIN"),
+            Map.entry("laboratoire", "LAB_TECHNICIAN"),
+            Map.entry("medecin", "DOCTOR"),
+            Map.entry("nurse", "NURSE"),
+            Map.entry("patient", "PATIENT"),
+            Map.entry("caissier", "CASHIER"),
+            Map.entry("cashier", "CASHIER"),
+            Map.entry("hospital_agent", "HOSPITAL_AGENT"));
 
     private KeycloakRoleMapping() {}
 

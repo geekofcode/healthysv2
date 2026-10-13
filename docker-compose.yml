@@ -1,4 +1,28 @@
 services:
+  ai:
+    profiles: [ai]
+    build:
+      context: ai-service
+    environment:
+      HEALTHYS_AI_SERVICE_TOKEN: ${HEALTHYS_AI_SERVICE_TOKEN:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_TEXT_MODEL: ${OPENAI_TEXT_MODEL:-gpt-4.1-mini}
+      OPENAI_TRANSCRIPTION_MODEL: ${OPENAI_TRANSCRIPTION_MODEL:-gpt-4o-mini-transcribe}
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-50}
+      AI_MAX_AUDIO_BYTES: ${AI_MAX_AUDIO_BYTES:-10485760}
+      AI_MAX_SNAPSHOT_BYTES: ${AI_MAX_SNAPSHOT_BYTES:-180000}
+      AI_MAX_NOTES_CHARS: ${AI_MAX_NOTES_CHARS:-30000}
+      AI_MAX_OUTPUT_CHARS: ${AI_MAX_OUTPUT_CHARS:-50000}
+      AI_MAX_OUTPUT_TOKENS: ${AI_MAX_OUTPUT_TOKENS:-6000}
+      AI_MAX_CONCURRENCY: ${AI_MAX_CONCURRENCY:-4}
+    networks: [healthys]
+    # Private service: no published host port and no frontend route.
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+
   backend:
     build:
       context: .

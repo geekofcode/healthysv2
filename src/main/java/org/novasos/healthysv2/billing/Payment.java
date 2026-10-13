@@ -33,9 +33,9 @@ class Payment {
         payment.transactions.add(PaymentTransaction.capture(payment, payment.amount, provider, externalReference));
         return payment;
     }
-    private static String normalizeMethod(String value) {
+    static String normalizeMethod(String value) {
         String method = value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
-        if (!Set.of("CASH","CARD","MOBILE_MONEY","INSURANCE","MUTUAL","THIRD_PARTY").contains(method))
+        if (!"CASH".equals(method))
             throw new IllegalArgumentException("Unsupported payment method");
         return method;
     }

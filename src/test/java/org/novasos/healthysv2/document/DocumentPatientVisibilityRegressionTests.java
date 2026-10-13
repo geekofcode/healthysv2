@@ -41,5 +41,13 @@ class DocumentPatientVisibilityRegressionTests {
         assertThatThrownBy(()->service.download(document.id())).isInstanceOf(AccessDeniedException.class);verifyNoInteractions(storage,access);
         verify(jdbc,never()).query(contains("or id="),org.mockito.ArgumentMatchers.<ResultSetExtractor<UUID>>any(),any(Object[].class));
     }
+    @Test void globalClinicalRoleDoesNotPublishThePatientsPrivateDocument() {
+        var jwt=Jwt.withTokenValue("dual-role").header("alg","RS256").subject(subject.toString()).build();
+        SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt,
+                List.of(new SimpleGrantedAuthority("ROLE_PATIENT"),new SimpleGrantedAuthority("ROLE_DOCTOR"))));
+        var document=document();when(repository.findById(document.id())).thenReturn(Optional.of(document));
+        assertThatThrownBy(()->service.find(document.id())).isInstanceOf(ResourceNotFoundException.class);
+        verifyNoInteractions(storage,access);
+    }
     private HealthDocument document(){return HealthDocument.create(patient,null,"result.pdf","private-storage-key","application/pdf",4,"checksum",person);}
 }

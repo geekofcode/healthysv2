@@ -31,4 +31,13 @@ class OrganizationTests {
         organization.removeDepartment(department);
         assertThat(room.getDepartment()).isNull();
     }
+    @Test void validatesTimezonesAndPreservesInactiveStatusWhenOmitted() {
+        var organization=Organization.create("ORG-TZ","Clinic",null,null,null,null,null,"INACTIVE");
+        organization.configure("America/Toronto",java.util.UUID.randomUUID());
+        organization.update("Clinic",null,null,null,null,null,null);
+        assertThat(organization.getTimezone()).isEqualTo("America/Toronto");
+        assertThat(organization.getStatus()).isEqualTo("INACTIVE");
+        assertThatThrownBy(()->organization.configure("not-a-zone",null)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(()->organization.changeStatus("anything")).isInstanceOf(IllegalArgumentException.class);
+    }
 }

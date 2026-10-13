@@ -15,7 +15,7 @@ import org.novasos.healthysv2.shared.api.error.ResourceNotFoundException;
 
 @Service
 @Transactional
-class PersonService implements org.novasos.healthysv2.identity.api.PersonLookup {
+class PersonService implements org.novasos.healthysv2.identity.api.PersonLookup, org.novasos.healthysv2.identity.api.ReceptionIdentityEditor {
 
     private final PersonRepository repository;
     private final PersonMapper mapper;
@@ -150,6 +150,15 @@ class PersonService implements org.novasos.healthysv2.identity.api.PersonLookup 
                 avatar_url = excluded.avatar_url, updated_at = now()
                 """, meEntity(subject).getId(), request.theme().name(), request.avatarUrl());
         return request;
+    }
+
+    @Override
+    public void updateReceptionIdentity(UUID personId, org.novasos.healthysv2.identity.api.ReceptionIdentityUpdate request) {
+        Person person = repository.findById(personId)
+                .orElseThrow(() -> new ResourceNotFoundException("Person", personId));
+        person.updateProfile(request.firstName(), request.middleName() == null ? person.getMiddleName() : request.middleName(), request.lastName(), request.gender(),
+                request.birthDate(), person.getPreferredLanguageId());
+        person.replaceReceptionContacts(request.email(), request.phone());
     }
 
     private void ensureUnique(CreatePersonRequest request) {

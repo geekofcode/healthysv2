@@ -1,4 +1,8 @@
 spring:
+  task:
+    scheduling:
+      pool:
+        size: ${SCHEDULING_POOL_SIZE:4}
   servlet:
     multipart:
       max-file-size: 25MB
@@ -50,6 +54,31 @@ logging:
     level: "%5p [correlationId=%X{correlationId:-}]"
 
 healthys:
+  ai:
+    enabled: ${HEALTHYS_AI_ENABLED:false}
+    service-url: ${HEALTHYS_AI_SERVICE_URL:http://ai:8000}
+    service-token: ${HEALTHYS_AI_SERVICE_TOKEN:}
+    timeout: ${HEALTHYS_AI_TIMEOUT:PT60S}
+    job-deadline: ${HEALTHYS_AI_JOB_DEADLINE:PT15M}
+    audio-ttl: ${HEALTHYS_AI_AUDIO_TTL:PT1H}
+    max-attempts: ${HEALTHYS_AI_MAX_ATTEMPTS:3}
+    max-audio-bytes: ${AI_MAX_AUDIO_BYTES:10485760}
+    poll-interval-ms: ${HEALTHYS_AI_POLL_INTERVAL_MS:5000}
+    audio-sweep-interval-ms: ${HEALTHYS_AI_AUDIO_SWEEP_INTERVAL_MS:60000}
+  access:
+    in-progress-duration: ${CARE_IN_PROGRESS_ACCESS_DURATION:PT4H}
+    request-duration: ${PATIENT_ACCESS_REQUEST_DURATION:PT48H}
+    emergency-duration: ${PATIENT_ACCESS_EMERGENCY_DURATION:PT1H}
+    scheduled-grace: ${PATIENT_ACCESS_SCHEDULED_GRACE:PT1H}
+  care:
+    visit-slot-minutes: ${CARE_VISIT_SLOT_MINUTES:30}
+    follow-up-duration: ${CARE_FOLLOW_UP_DURATION:PT168H}
+    retention-years: ${DATA_RETENTION_YEARS:30}
+  licensing:
+    stripe:
+      secret-key: ${STRIPE_SECRET_KEY:}
+      webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+      return-url: ${STRIPE_RETURN_URL:http://localhost:5173/licensing}
   push:
     enabled: ${PUSH_ENABLED:false}
     fcm-project-id: ${FCM_PROJECT_ID:}

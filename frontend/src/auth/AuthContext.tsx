@@ -1,3 +1,6 @@
+import {useQuery} from '@tanstack/react-query';
+import {listMyMemberships} from '../api/licensing';
+import {selectedOrganization} from './organizationContext';
 import {
   createContext,
   type ReactNode,
@@ -14,7 +17,7 @@ import {
   validAccessToken,
 } from './keycloak';
 
-import {applicationRoles} from './roles';
+import {applicationRoles,effectiveApplicationRoles} from './roles';
 
 type AuthContextValue = {
   initialized: boolean;
@@ -127,5 +130,10 @@ export function useAuth(): AuthContextValue {
   if (!context) {
     throw new Error('useAuth must be used inside AuthProvider');
   }
-  return context;
+  const subject=keycloak.tokenParsed?.sub;
+  const [organizationId,setOrganizationId]=useState(()=>selectedOrganization(subject));
+  useEffect(()=>{const update=()=>setOrganizationId(selectedOrganization(subject));update();window.addEventListener('healthys:organization-changed',update);return ()=>window.removeEventListener('healthys:organization-changed',update)},[subject]);
+  const memberships=useQuery({queryKey:['licensing','my-memberships',subject],queryFn:listMyMemberships,enabled:context.authenticated&&!!subject,refetchInterval:60000});
+  const roles=effectiveApplicationRoles(context.roles,memberships.data??[],organizationId);
+  return {...context,initialized:context.initialized&&!(context.authenticated&&subject&&memberships.isPending),roles,hasAnyRole:(...requiredRoles:string[])=>requiredRoles.some(role=>roles.includes(role))};
 }

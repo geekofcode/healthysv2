@@ -16,3 +16,16 @@ export const grantConsent=(patientId:string,input:ConsentInput)=>apiRequest<Cons
 export const revokeConsent=(patientId:string,id:string,reason:string)=>apiRequest<Consent>(`${root(patientId)}/consents/${id}/revoke`,{method:'POST',body:JSON.stringify({reason,revokedAt:new Date().toISOString()})});
 export const checkPatientAccess=(patientId:string,scope:string,action:string)=>apiRequest<AccessDecision>(`${root(patientId)}/access?${new URLSearchParams({scope,action})}`);
 export const validConsentGrantee=(person?:string,organization?:string)=>Boolean(person)!==Boolean(organization);
+export type AccessRequest={id:string;patientId:string;requesterPersonId:string;requesterName?:string;organizationId:string;organizationName?:string;reason:string;status:string;createdAt:string;expiresAt?:string};
+export type AccessGrant={id:string;patientId:string;personId:string;personName?:string;organizationId:string;organizationName?:string;source:string;reason:string;grantedAt:string;expiresAt:string;revokedAt?:string};
+const normalize = <T>(record:unknown):T=>Object.fromEntries(Object.entries(record as Record<string,unknown>).map(([k,v])=>[k.replace(/_([a-z])/g,(_,c:string)=>c.toUpperCase()),v])) as T;
+export const listAccessRequests=async(p:string)=>(await apiRequest<unknown[]>(`${root(p)}/access-requests`)).map(r=>normalize<AccessRequest>(r));
+export const listAccessGrants=async(p:string)=>(await apiRequest<unknown[]>(`${root(p)}/access-grants`)).map(r=>normalize<AccessGrant>(r));
+export const requestPatientAccess=(p:string,reason:string)=>apiRequest(`${root(p)}/access-requests`,{method:'POST',body:JSON.stringify({scope:'FULL_RECORD',reason})});
+export const acceptAccessRequest=(p:string,id:string)=>apiRequest(`${root(p)}/access-requests/${id}/accept`,{method:'POST'});
+export const revokeAccessRequest=(p:string,id:string)=>apiRequest(`${root(p)}/access-requests/${id}/revoke`,{method:'POST'});
+export const revokeAccessGrant=(p:string,id:string)=>apiRequest(`${root(p)}/access-grants/${id}`,{method:'DELETE'});
+export const emergencyPatientAccess=(p:string,reason:string)=>apiRequest(`${root(p)}/emergency-access`,{method:'POST',body:JSON.stringify({reason})});
+export const revokeDerivedAccess=(p:string,personId:string,organizationId:string)=>apiRequest(`${root(p)}/access-revocations`,{method:'POST',body:JSON.stringify({personId,organizationId})});
+export type AccessContext={personId:string;personName:string;organizationId:string;organizationName:string;expiresAt:string;revokedAt?:string};
+export const listAccessContexts=async(p:string)=>(await apiRequest<unknown[]>(`${root(p)}/access-contexts`)).map(r=>normalize<AccessContext>(r));

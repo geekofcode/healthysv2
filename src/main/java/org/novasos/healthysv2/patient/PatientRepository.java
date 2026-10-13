@@ -10,14 +10,13 @@ import org.springframework.data.repository.query.Param;
 interface PatientRepository extends JpaRepository<Patient, UUID> {
     Optional<Patient> findByPersonId(UUID personId);
     boolean existsByPersonId(UUID personId);
-    @Query("select p from Patient p where :query='' or lower(p.patientNumber) like lower(concat('%',:query,'%')) or lower(p.status) like lower(concat('%',:query,'%')) or lower(coalesce(p.bloodGroup,'')) like lower(concat('%',:query,'%')) or lower(coalesce(p.occupation,'')) like lower(concat('%',:query,'%'))")
+    @Query("select p from Patient p where :query='' or lower(p.patientNumber) like lower(concat('%',:query,'%')) or lower(p.status) like lower(concat('%',:query,'%'))")
     Page<Patient> search(@Param("query") String query, Pageable pageable);
     String SCOPED_PATIENTS = """
             from patient.patient p where
             (:query='' or lower(p.patient_number) like lower(concat('%',:query,'%'))
             or lower(p.status) like lower(concat('%',:query,'%'))
-            or lower(coalesce(p.blood_group,'')) like lower(concat('%',:query,'%'))
-            or lower(coalesce(p.occupation,'')) like lower(concat('%',:query,'%')))
+)
             and ((:clinical=false and exists(select 1 from patient.patient_registration r
                 where r.patient_id=p.id and r.organization_id=:organization and r.status='ACTIVE'))
             or (:clinical=true and exists(select 1 from professional.professional pro

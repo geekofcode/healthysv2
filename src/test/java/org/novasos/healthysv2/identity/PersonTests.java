@@ -55,6 +55,20 @@ class PersonTests {
     }
 
     @Test
+    void receptionContactChangesCannotAssertVerificationOrEraseOtherIdentityData() {
+        UUID subject = UUID.randomUUID();
+        Person person = Person.create("PER-1", subject, "Ada", null, "Lovelace", null, null, null);
+        person.addContact("EMAIL", "old@example.com", true, true);
+        person.addEmergencyContact("Charles", "Babbage", "FRIEND", "123", null);
+        person.addAddress(UUID.randomUUID(), "HOME", true);
+        person.replaceReceptionContacts("new@example.com", "555");
+        assertThat(person.getContacts()).allMatch(contact -> !contact.isVerified());
+        assertThat(person.getKeycloakUserId()).isEqualTo(subject);
+        assertThat(person.getEmergencyContacts()).hasSize(1);
+        assertThat(person.getAddresses()).hasSize(1);
+    }
+
+    @Test
     void normalizesRequiredNames() {
         Person person = Person.create(
                 " PER-1 ",

@@ -227,3 +227,14 @@ input[type="checkbox"],input[type="radio"] {width:16px;min-width:16px;height:16p
 .form-grid>button {justify-self:start}.entity-form fieldset>button {margin-top:.85rem}
 @media(max-width:600px){.entity-form {grid-template-columns:1fr;padding:1rem}.form-grid {grid-template-columns:1fr}.entity-form fieldset {padding:.85rem}.search-form>.relation-picker {min-width:100%}}
 .admin-sections {display:grid;gap:1.8rem;margin-top:2rem}.admin-section>header {margin-bottom:.9rem}.admin-section h2 {margin:0 0 .35rem}.admin-section>header p {margin:0}.admin-destinations {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:1rem}.admin-destination {display:flex;flex-direction:column;align-items:start;padding:1.4rem;border:1px solid var(--border);border-radius:10px;background:var(--surface);text-decoration:none;color:var(--text);box-shadow:0 2px 8px rgb(15 23 42 / 3%)}.admin-destination strong {font-size:1.05rem}.admin-destination p {font-size:.93rem;margin:.65rem 0 1.1rem}.admin-destination>span {margin-top:auto;color:var(--primary);font-size:.85rem;font-weight:600}.admin-destination:hover {border-color:#97afcf;background:var(--soft)}
+
+.license-readonly { border: 0; padding: 0; margin: 1rem 0; min-width: 0; }
+
+@media print {
+  header, nav, aside, button, .no-print, .entity-form, .billing-actions { display: none !important; }
+  body, main, .main-content { background: white !important; color: black !important; margin: 0 !important; padding: 0 !important; }
+  .invoice-print { width: 100%; }
+  body:has(.cash-receipt) .invoice-print > :not(.cash-receipt) { display: none !important; }
+  .cash-receipt { border: 1px solid black; padding: 1rem; }
+  .table-scroll { overflow: visible; }
+}

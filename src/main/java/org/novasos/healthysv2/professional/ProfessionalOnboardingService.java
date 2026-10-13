@@ -39,10 +39,12 @@ class ProfessionalOnboardingService {
     private final ProfessionalRepository professionals;
     private final CurrentUserContext users;
     private final AuditTrail audit;
+    private final org.novasos.healthysv2.licensing.api.LicensingAccess licensing;
     private final ProfessionalRoleProvisioning roles;
     private final org.novasos.healthysv2.notification.api.ProfessionalRegistrationNotifications notifications;
-    ProfessionalOnboardingService(JdbcTemplate jdbc,IdentityProvisioningService identities,ProfessionalRepository professionals,CurrentUserContext users,AuditTrail audit,ProfessionalRoleProvisioning roles,org.novasos.healthysv2.notification.api.ProfessionalRegistrationNotifications notifications) {
+    ProfessionalOnboardingService(JdbcTemplate jdbc,IdentityProvisioningService identities,ProfessionalRepository professionals,CurrentUserContext users,AuditTrail audit,ProfessionalRoleProvisioning roles,org.novasos.healthysv2.notification.api.ProfessionalRegistrationNotifications notifications,org.novasos.healthysv2.licensing.api.LicensingAccess licensing) {
         this.jdbc=jdbc;
+        this.licensing=licensing;
         this.identities=identities;
         this.professionals=professionals;
         this.users=users;
@@ -243,14 +245,7 @@ class ProfessionalOnboardingService {
         return jdbc.query("select p.id,p.person_id,person.first_name,person.last_name,r.profession from professional.professional p join professional.registration_request r on r.professional_id=p.id join identity.person person on person.id=p.person_id where r.status='APPROVED' and p.status='ACTIVE' and person.status='ACTIVE' order by person.last_name,person.first_name limit 500",(rs,n)->new DirectoryEntry(rs.getObject(1,UUID.class),rs.getObject(2,UUID.class),rs.getString(3),rs.getString(4),rs.getString(5)));
     }
     InvitationResponse invite(InvitationRequest input) {
-        requireOrganization(input.organizationId());
-        requireReference("organization.organization",input.organizationId());
-        String token=Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes());
-        UUID id=UUID.randomUUID();
-        Instant expires=Instant.now().plus(Duration.ofDays(7));
-        jdbc.update("insert into professional.organization_invitation(id,organization_id,email,position,token_hash,expires_at) values (?,?,?,?,?,?)",id,input.organizationId(),input.email().trim().toLowerCase(Locale.ROOT),input.position(),hash(token),java.sql.Timestamp.from(expires));
-        audit.change(users.current().personId(),input.organizationId(),"professional","invitation",id,"INVITE",null,Map.of("email",input.email()));
-        return new InvitationResponse(id,input.email().trim().toLowerCase(Locale.ROOT),input.organizationId(),input.position(),token,expires,"PENDING");
+        throw conflict("Use organization licensed team invitations");
     }
     List<InvitationResponse> invitations() {
         UUID org=organizationScope();
@@ -258,23 +253,7 @@ class ProfessionalOnboardingService {
         return jdbc.query(sql,(rs,n)->invitation(rs),org==null?new Object[0]:new Object[]{org}        );
     }
     AffiliationResponse accept(JwtAuthenticationToken auth,AcceptanceRequest input) {
-        var jwt=auth.getToken();
-        if(!Boolean.TRUE.equals(jwt.getClaimAsBoolean("email_verified")))throw new AccessDeniedException("Verified email required");
-        var invitation=lockedInvitation(input.token());
-        String email=jwt.getClaimAsString("email");
-        if(email==null||!email.equalsIgnoreCase(invitation.email()))throw new AccessDeniedException("Invitation email does not match authenticated identity");
-        var dossier=owned(auth,true);
-        if(!"APPROVED".equals(dossier.status())||dossier.professionalId()==null)throw conflict("Professional verification required before affiliation");
-        var p=professionals.findById(dossier.professionalId()).orElseThrow();
-        if(!"ACTIVE".equals(p.getStatus()))throw conflict("Professional is suspended");
-        if("ACCEPTED".equals(invitation.status())&&dossier.personId().equals(invitation.acceptedBy()))return activeAffiliation(p,invitation.organizationId());
-        if(!"PENDING".equals(invitation.status())||invitation.expiresAt().isBefore(Instant.now()))throw conflict("Invitation is expired or no longer available");
-        var existing=p.getAssignments().stream().filter(a->a.getOrganizationId().equals(invitation.organizationId())&&"ACTIVE".equals(a.getStatus())).findFirst();
-        ProfessionalAssignment assignment=existing.orElseGet(()->p.addAssignment(invitation.organizationId(),null,null,invitation.position(),null,LocalDate.now(),null,"ACTIVE"));
-        professionals.flush();
-        jdbc.update("update professional.organization_invitation set status='ACCEPTED',accepted_by=? where id=?",dossier.personId(),invitation.id());
-        audit.change(dossier.personId(),invitation.organizationId(),"professional","assignment",assignment.getId(),"ACCEPT",null,Map.of("professionalId",p.getId()));
-        return affiliation(p.getId(),assignment);
+        throw conflict("Use organization licensed team invitation acceptance");
     }
     private Invitation lockedInvitation(String token) {
         var rows=jdbc.query("select * from professional.organization_invitation where token_hash=? for update",
@@ -303,7 +282,10 @@ class ProfessionalOnboardingService {
         if(rows.isEmpty())throw new ResourceNotFoundException("Affiliation",id);
         UUID org=rows.getFirst()[1];
         requireOrganization(org);
+        licensing.requireAdministrator(org);
+        UUID person=jdbc.queryForObject("select person_id from professional.professional where id=?",UUID.class,rows.getFirst()[0]);
         jdbc.update("update professional.professional_assignment set status='ENDED',end_date=greatest(start_date,current_date) where id=?",id);
+        if (jdbc.queryForObject("select count(*) from professional.professional_assignment where organization_id=? and professional_id=? and status='ACTIVE'",Integer.class,org,rows.getFirst()[0])==0) licensing.releaseProfessionalAssignment(org,person);
         audit.change(users.current().personId(),org,"professional","assignment",id,"END",null,Map.of("status","ENDED"));
     }
     private AffiliationResponse activeAffiliation(Professional p,UUID org) {

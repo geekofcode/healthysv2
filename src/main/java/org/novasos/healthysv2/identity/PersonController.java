@@ -39,10 +39,15 @@ class PersonController {
 
     @PostMapping
     @PreAuthorize(
-            "hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT')")
+            "hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','NURSE')")
     @Operation(summary = "Create a person")
     ResponseEntity<PersonResponse> create(
             @Valid @RequestBody CreatePersonRequest request) {
+        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        boolean platform = auth.getAuthorities().stream().anyMatch(a -> "ROLE_PLATFORM_ADMIN".equals(a.getAuthority()));
+        if (!platform && (request.keycloakUserId() != null || request.contacts().stream().anyMatch(org.novasos.healthysv2.identity.api.PersonContactRequest::verified))) {
+            throw new org.springframework.security.access.AccessDeniedException("IDENTITY_LINK_OR_VERIFICATION_PLATFORM_ONLY");
+        }
         PersonResponse response = service.create(request);
         return ResponseEntity
                 .created(URI.create(
@@ -51,8 +56,7 @@ class PersonController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize(
-            "hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT')")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
     @Operation(summary = "Find a person by identifier")
     PersonResponse findById(@PathVariable UUID id) {
         return service.findById(id);

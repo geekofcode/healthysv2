@@ -1,10 +1,11 @@
 import {describe, expect, it} from 'vitest';
-import {applicationRoles, canAccessPath} from './roles';
+import {applicationRoles, canAccessPath, effectiveApplicationRoles} from './roles';
 describe('Keycloak application roles', () => {
   it.each([
     ['admin', 'PLATFORM_ADMIN'], ['comptable', 'ACCOUNTANT'], ['gestionnaire', 'HOSPITAL_VIEWER'],
     ['hopital', 'HOSPITAL_ADMIN'], ['laboratoire', 'LAB_TECHNICIAN'], ['medecin', 'DOCTOR'],
-    ['nurse', 'NURSE'], ['patient', 'PATIENT'],
+    ['nurse', 'NURSE'], ['patient', 'PATIENT'], ['caissier', 'CASHIER'],
+    ['cashier', 'CASHIER'], ['CASHIER', 'CASHIER'], ['hospital_agent', 'HOSPITAL_AGENT'], ['HOSPITAL_AGENT', 'HOSPITAL_AGENT'],
   ])('maps %s explicitly to %s', (realmRole, role) => expect(applicationRoles([realmRole])).toEqual([role]));
   it('ignores technical and unknown roles without assigning pharmacist privileges', () => {
     expect(applicationRoles(['default-roles-healthys', 'offline_access', 'PHARMACIST', 'toString'])).toEqual([]);
@@ -35,4 +36,18 @@ describe('Keycloak application roles', () => {
     expect(canAccessPath(roles, '/billing')).toBe(true);
     expect(canAccessPath(roles, '/consultations/new')).toBe(false);
   });
+});
+
+it('allows nurse reception and cashier billing without cashier clinical access', () => {
+  expect(canAccessPath(applicationRoles(['nurse']), '/patients/new')).toBe(true);
+  expect(canAccessPath(applicationRoles(['nurse']), '/patients/123/edit')).toBe(true);
+  expect(canAccessPath(applicationRoles(['hospital_agent']), '/patients')).toBe(true);
+  expect(canAccessPath(applicationRoles(['caissier']), '/billing/invoices/123')).toBe(true);
+  expect(canAccessPath(applicationRoles(['caissier']), '/patients')).toBe(false);
+  expect(canAccessPath(applicationRoles(['caissier']), '/consultations')).toBe(false);
+});
+
+it('adds only trusted selected organization membership roles',()=>{
+ expect(effectiveApplicationRoles(['PATIENT'],[{organizationId:'a',role:'HOSPITAL_ADMIN'},{organizationId:'b',role:'CASHIER'},{organizationId:'b',role:'PLATFORM_ADMIN'}],'b')).toEqual(['PATIENT','CASHIER']);
+ expect(effectiveApplicationRoles(['PATIENT'],[{organizationId:'a',role:'HOSPITAL_ADMIN'}],'independent')).toEqual(['PATIENT']);
 });
