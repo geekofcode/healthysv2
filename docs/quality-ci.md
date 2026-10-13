@@ -1,11 +1,8 @@
 # End-to-end business tests and CI
 
-`ClinicalJourneyIntegrationTests` runs through the HTTP API with PostgreSQL Testcontainers and Flyway:
-organization, doctor and laboratory technician, patient registration, care relationships and consent,
-appointment, consultation and diagnosis, prescription, laboratory order, specimen, final result,
-and patient access. It also checks access refusal for a different patient and organization, plus audit entries.
-The same test transaction rolls back its business data; independently committed access decisions remain in
-`audit.data_access_log`.
+`CashCareJourneyIntegrationTests` couvre le parcours courant accueil → facturation cash → programmation → consultation → suivi gratuit, avec reports, changement de médecin, isolation entre établissements, expiration/révocation des accès, quotas et offres sans IA. `CutoverIntegrationTests` vérifie les preuves de bascule et le refus des anciennes écritures après activation. Les tests de conservation et migration restent associés aux données historiques.
+
+Le parcours historique incluant laboratoire, officine, messagerie et téléconsultation ne constitue plus une recette du produit actif. Les tests spécifiques aux modules retirés sont retirés avec leur code opérationnel ; les tests du socle ne sont pas désactivés pour masquer une régression.
 
 `SecurityIntegrationTests` checks all ten configured roles on real administration, professional and
 organization endpoints, an expired JWT, and unauthorized upload. `DocumentApiIntegrationTests` checks

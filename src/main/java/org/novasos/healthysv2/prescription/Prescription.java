@@ -73,7 +73,9 @@ class Prescription {
         return item;
     }
 
-    void recordDispense(List<PrescriptionDispensing.DispenseLine> lines) {
+    record HistoricalDispenseLine(UUID prescriptionItemId, BigDecimal quantity) {}
+
+    void recordDispense(List<HistoricalDispenseLine> lines) {
         ensureOpen();
         if (expired()) {
             throw new IllegalStateException("Prescription expired");

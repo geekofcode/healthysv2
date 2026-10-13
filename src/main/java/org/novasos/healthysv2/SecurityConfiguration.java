@@ -42,8 +42,6 @@ class SecurityConfiguration {
             "/v3/api-docs/**",
             "/swagger-ui.html",
             "/swagger-ui/**",
-            "/ws",
-            "/ws/**",
             "/api/v1/public/**"
     };
 

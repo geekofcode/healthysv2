@@ -25,7 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Transactional
-class PrescriptionService implements PrescriptionDispensing {
+class PrescriptionService {
     private final PrescriptionRepository prescriptions;
     private final JdbcTemplate jdbc;
     private final PatientAccessService access;
@@ -93,44 +93,6 @@ class PrescriptionService implements PrescriptionDispensing {
             return response(prescription);
         } catch (IllegalStateException exception) {
             throw rule("PRESCRIPTION_CANNOT_CANCEL", "error.pharmacy.cannot-cancel");
-        }
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public void verifyReadAccess(UUID prescriptionId) {
-        var prescription = get(prescriptionId);
-        requirePatientOwn(prescription.getPatientId());
-        access.requireAccess(prescription.getPatientId(), "PRESCRIPTIONS", "READ");
-    }
-
-    @Override
-    public PrescriptionForDispensing prepare(UUID prescriptionId) {
-        var prescription = forWrite(prescriptionId);
-        if (prescription.expired()) {
-            throw rule("PRESCRIPTION_EXPIRED", "error.pharmacy.expired");
-        }
-        if (Set.of("DISPENSED", "CANCELLED").contains(prescription.getStatus())) {
-            throw rule("PRESCRIPTION_CLOSED", "error.pharmacy.closed");
-        }
-        return new PrescriptionForDispensing(prescription.getId(), prescription.getPatientId(),
-                prescription.getOrganizationId(), prescription.getStatus(), prescription.getItems().stream()
-                .map(item -> new ItemForDispensing(item.getId(), item.getMedicationId(), item.remaining()))
-                .toList());
-    }
-
-    @Override
-    public void record(UUID prescriptionId, List<DispenseLine> lines) {
-        var prescription = forWrite(prescriptionId);
-        try {
-            prescription.recordDispense(lines);
-            prescriptions.flush();
-            audit(prescription, "RECORD_DISPENSE");
-        } catch (IllegalArgumentException exception) {
-            throw rule("INVALID_DISPENSE_QUANTITY", "error.pharmacy.dispense-quantity");
-        } catch (IllegalStateException exception) {
-            throw rule(prescription.expired() ? "PRESCRIPTION_EXPIRED" : "PRESCRIPTION_CLOSED",
-                    prescription.expired() ? "error.pharmacy.expired" : "error.pharmacy.closed");
         }
     }
 

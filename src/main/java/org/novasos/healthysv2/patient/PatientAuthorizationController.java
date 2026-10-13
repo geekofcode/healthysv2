@@ -7,7 +7,7 @@ import org.novasos.healthysv2.shared.api.ApiPaths; import org.springframework.ht
 
 @RestController @RequestMapping(ApiPaths.V1+"/patients/{patient}")
 @Tag(name="Patient authorization",description="Care relationships, consent lifecycle and access decisions")
-@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','PATIENT','DOCTOR','NURSE','PHARMACIST','LAB_TECHNICIAN')")
+@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','PATIENT','DOCTOR','NURSE')")
 class PatientAuthorizationController {
  private static final String ADMIN="hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','PATIENT')";private final PatientAuthorizationService service;private final PatientAccessService access;
  PatientAuthorizationController(PatientAuthorizationService service,PatientAccessService access){this.service=service;this.access=access;}

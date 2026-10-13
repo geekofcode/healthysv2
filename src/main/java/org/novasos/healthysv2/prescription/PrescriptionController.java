@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping(ApiPaths.V1 + "/prescriptions")
 @Tag(name = "Prescriptions", description = "Prescription lifecycle and medication orders")
-@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE','PHARMACIST','PATIENT')")
+@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE','PATIENT')")
 class PrescriptionController {
     private static final String PRESCRIBE = "hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR')";
     private final PrescriptionService service;
@@ -46,7 +46,7 @@ class PrescriptionController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE','PHARMACIST')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE')")
     PageResponse<PrescriptionSummary> search(@RequestParam(required = false) UUID patientId,
                                              @RequestParam(required = false) UUID organizationId,
                                              @RequestParam(required = false) String status,

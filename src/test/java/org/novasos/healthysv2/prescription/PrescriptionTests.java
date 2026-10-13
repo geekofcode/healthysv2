@@ -12,10 +12,10 @@ class PrescriptionTests {
                 UUID.randomUUID(), Instant.now().plusSeconds(3600));
         var item = prescription.addItem(UUID.randomUUID(), "500 mg", "Twice daily", "ORAL",
                 "5 days", new BigDecimal("10"), null);
-        prescription.recordDispense(List.of(new PrescriptionDispensing.DispenseLine(item.getId(), new BigDecimal("4"))));
+        prescription.recordDispense(List.of(new Prescription.HistoricalDispenseLine(item.getId(), new BigDecimal("4"))));
         assertThat(prescription.getStatus()).isEqualTo("PARTIALLY_DISPENSED");
         assertThat(item.getQuantityDispensed()).isEqualByComparingTo("4");
-        prescription.recordDispense(List.of(new PrescriptionDispensing.DispenseLine(item.getId(), new BigDecimal("6"))));
+        prescription.recordDispense(List.of(new Prescription.HistoricalDispenseLine(item.getId(), new BigDecimal("6"))));
         assertThat(prescription.getStatus()).isEqualTo("DISPENSED");
         assertThatThrownBy(prescription::cancel).isInstanceOf(IllegalStateException.class);
     }
@@ -25,11 +25,11 @@ class PrescriptionTests {
         var item = prescription.addItem(UUID.randomUUID(), "1 tablet", "Daily", "ORAL",
                 "3 days", new BigDecimal("3"), null);
         assertThatThrownBy(() -> prescription.recordDispense(List.of(
-                new PrescriptionDispensing.DispenseLine(item.getId(), new BigDecimal("4")))))
+                new Prescription.HistoricalDispenseLine(item.getId(), new BigDecimal("4")))))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> prescription.recordDispense(List.of(
-                new PrescriptionDispensing.DispenseLine(item.getId(), BigDecimal.ONE),
-                new PrescriptionDispensing.DispenseLine(item.getId(), BigDecimal.ONE))))
+                new Prescription.HistoricalDispenseLine(item.getId(), BigDecimal.ONE),
+                new Prescription.HistoricalDispenseLine(item.getId(), BigDecimal.ONE))))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(item.getQuantityDispensed()).isEqualByComparingTo("0");
     }

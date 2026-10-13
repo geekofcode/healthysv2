@@ -13,6 +13,8 @@ import {
   type NotificationPreferences,
 } from '../api/notifications';
 import {ApiErrorMessage} from '../components/ApiErrorMessage';
+import {useAuth} from '../auth/AuthContext';
+import {canAccessPath} from '../auth/roles';
 
 type PreferencesForm = Omit<NotificationPreferences, 'updatedAt'>;
 const defaults: PreferencesForm = {
@@ -26,6 +28,7 @@ const defaults: PreferencesForm = {
 export function NotificationsPage() {
   const {t, i18n} = useTranslation();
   const client = useQueryClient();
+  const auth = useAuth();
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
   const [form, setForm] = useState<PreferencesForm>(defaults);
@@ -94,7 +97,7 @@ export function NotificationsPage() {
         {item.title && <h2>{item.title}</h2>}
         <p>{item.body}</p>
         <div className="inline-actions">
-          {item.actionUrl?.startsWith('/') && <Link className="button" to={item.actionUrl}>{t('notifications.open')}</Link>}
+          {item.actionUrl?.startsWith('/') && canAccessPath(auth.roles, item.actionUrl) && <Link className="button" to={item.actionUrl}>{t('notifications.open')}</Link>}
           {!item.read && <button className="button-secondary" disabled={read.isPending} onClick={() => read.mutate(item.id)}>{t('notifications.markRead')}</button>}
         </div>
       </article>)}

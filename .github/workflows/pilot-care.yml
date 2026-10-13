@@ -63,7 +63,7 @@ jobs:
               db.execute('CREATE DATABASE healthys_migration_test')
           with psycopg.connect(target) as db:
               files=pathlib.Path('src/main/resources/db/migration').glob('V*__*.sql')
-              for file in sorted(files,key=lambda p:int(re.match(r'V(d+)',p.name)[1])):
+              for file in sorted(files,key=lambda p:int(re.match(r'V([0-9]+)',p.name)[1])):
                   db.execute(file.read_text(),prepare=False)
           PY
       - name: Verify historical import, replay and protected rollback

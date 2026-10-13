@@ -24,7 +24,7 @@ class PrescriptionRepositoryIntegrationTests {
                 Instant.now().plusSeconds(3600));
         var item = prescription.addItem(graph.medication(), "500 mg", "BID", "ORAL", "5 days",
                 new BigDecimal("10"), null);
-        prescription.recordDispense(List.of(new PrescriptionDispensing.DispenseLine(
+        prescription.recordDispense(List.of(new Prescription.HistoricalDispenseLine(
                 item.getId(), new BigDecimal("4"))));
         var saved = prescriptions.saveAndFlush(prescription);
 

@@ -1,7 +1,6 @@
 import {describe, expect, it, vi} from 'vitest';
 
 vi.mock('./client', () => ({apiRequest: vi.fn()}));
-vi.mock('../auth/keycloak', () => ({validAccessToken: vi.fn()}));
 
 import {apiRequest} from './client';
 import {

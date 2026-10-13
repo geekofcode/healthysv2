@@ -37,7 +37,7 @@ class NotificationController {
 
     @PostMapping
     @Operation(summary = "Create and publish a notification")
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','DOCTOR','NURSE','PHARMACIST','LAB_TECHNICIAN')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','DOCTOR','NURSE')")
     ResponseEntity<List<NotificationResponse>> create(@Valid @RequestBody CreateNotificationRequest request) {
         List<NotificationResponse> response = service.create(request);
         return ResponseEntity.created(URI.create(ApiPaths.V1 + "/notifications/" + response.getFirst().id())).body(response);
