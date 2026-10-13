@@ -62,9 +62,11 @@ class BillingService {
     PaymentResponse recordPayment(UUID invoiceId,RecordPaymentRequest request) {
         var invoice=forWrite(invoiceId);
         try {
+            // Validate the method before changing the invoice balance or recording any payment.
+            String method = Payment.normalizeMethod(request.paymentMethod());
             invoice.recordPayment(request.amount(),request.currency());
             var payment=payments.save(Payment.complete(invoice.getId(),request.amount(),invoice.getCurrency(),
-                    request.paymentMethod(),request.provider(),request.externalTransactionId()));
+                    method,request.provider(),request.externalTransactionId()));
             invoices.flush(); payments.flush(); audit(invoice,"RECORD_PAYMENT"); audit(payment,invoice.getOrganizationId());
             return payment(payment);
         } catch(IllegalArgumentException exception){throw rule("INVALID_PAYMENT","error.billing.payment-values");}

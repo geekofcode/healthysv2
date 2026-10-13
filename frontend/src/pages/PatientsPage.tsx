@@ -11,7 +11,7 @@ export function PatientsPage(){
  const [search,setSearch]=useState('');const [page,setPage]=useState(0);const [removeId,setRemoveId]=useState('');
  const result=useQuery({queryKey:[...patientKeys.all,'list',search,page],queryFn:()=>listPatients(search,page,20)});
  const removal=useMutation({mutationFn:deletePatient,onSuccess:async()=>{setRemoveId('');await client.invalidateQueries({queryKey:patientKeys.all});}});
- const canWrite=auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT');
+ const canWrite=auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','NURSE');
  return <section><div className="page-heading"><h1>{t('patients.title')}</h1>{canWrite&&<Link className="button" to="/patients/new">+ {t('patients.new')}</Link>}</div>
  <div className="table-filters"><label>{t('common.search')}<input type="search" placeholder={t('patients.searchPlaceholder')} value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}}/></label></div>
  {result.isPending&&<p>{t('common.loading')}</p>}{result.isError&&<ApiErrorMessage error={result.error}/>}{removal.isError&&<ApiErrorMessage error={removal.error}/>}

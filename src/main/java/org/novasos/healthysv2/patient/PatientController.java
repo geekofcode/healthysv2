@@ -30,12 +30,12 @@ class PatientController {
     @GetMapping @Operation(summary = "Search patients")
     PageResponse<PatientSummary> list(@RequestParam(defaultValue = "") String query, Pageable pageable) { return service.search(query, pageable); }
     @GetMapping("/{id}") PatientResponse get(@PathVariable UUID id) { access.requireAccess(id,"MEDICAL_RECORD","READ"); return service.find(id); }
-    @PostMapping @PreAuthorize(ADMIN_WRITE)
+    @PostMapping @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','NURSE')")
     ResponseEntity<PatientResponse> create(@Valid @RequestBody PatientRequest request) {
         var result = service.create(request);
         return ResponseEntity.created(URI.create(ApiPaths.V1 + "/patients/" + result.id())).body(result);
     }
-    @PutMapping("/{id}") @PreAuthorize(ADMIN_WRITE) PatientResponse update(@PathVariable UUID id, @Valid @RequestBody PatientUpdateRequest request) { return service.update(id, request); }
+    @PutMapping("/{id}") @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','NURSE')") PatientResponse update(@PathVariable UUID id, @Valid @RequestBody PatientUpdateRequest request) { return service.update(id, request); }
     @DeleteMapping("/{id}") @PreAuthorize(ADMIN_WRITE) ResponseEntity<Void> delete(@PathVariable UUID id) { service.delete(id); return ResponseEntity.noContent().build(); }
 
     @PostMapping("/{patient}/identifiers") @PreAuthorize(ADMIN_WRITE) ResponseEntity<IdentifierResponse> addIdentifier(@PathVariable UUID patient, @Valid @RequestBody IdentifierRequest r) { return created(service.addIdentifier(patient, r)); }

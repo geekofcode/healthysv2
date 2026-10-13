@@ -14,6 +14,9 @@ class KeycloakRoleMappingTests {
                 "laboratoire", "LAB_TECHNICIAN", "medecin", "DOCTOR",
                 "nurse", "NURSE", "patient", "PATIENT");
         expected.forEach((role, authority) -> assertThat(KeycloakRoleMapping.canonicalRole(role)).isEqualTo(authority));
+        assertThat(KeycloakRoleMapping.canonicalRole("caissier")).isEqualTo("CASHIER");
+        assertThat(KeycloakRoleMapping.canonicalRole("cashier")).isEqualTo("CASHIER");
+        assertThat(KeycloakRoleMapping.canonicalRole("hospital_agent")).isEqualTo("HOSPITAL_AGENT");
         assertThat(KeycloakRoleMapping.canonicalRole("offline_access")).isNull();
         assertThat(KeycloakRoleMapping.canonicalRole("default-roles-healthys")).isNull();
         assertThat(KeycloakRoleMapping.canonicalRole("Admin")).isNull();
