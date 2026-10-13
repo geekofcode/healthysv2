@@ -1,3 +1,4 @@
+vi.mock('../components/LicenseBoundary',()=>({LicenseBoundary:({children}:any)=>children}));
 // @vitest-environment jsdom
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {cleanup, fireEvent, render, screen} from '@testing-library/react';
@@ -12,7 +13,7 @@ vi.mock('../auth/keycloak', () => ({keycloak:{tokenParsed:{}}}));
 vi.mock('@tanstack/react-query', () => ({useQuery: () => ({data:{firstName:'Ada', lastName:'Lovelace'}})}));
 vi.mock('../components/NotificationBell', () => ({NotificationBell: () => <a href="/notifications">Notifications</a>}));
 vi.mock('../api/preferences',()=>({getPreferences:vi.fn(),updatePreferences:vi.fn()}));
-vi.mock('react-i18next', () => ({useTranslation: () => ({t:(key:string) => key})}));
+vi.mock('react-i18next', () => ({useTranslation: () => ({t:(key:string) => key,i18n:{language:'en'}})}));
 afterEach(() => {cleanup(); vi.clearAllMocks();});
 describe('application shell', () => {
  it('keeps navigation in the sidebar and opens the account actions', () => {

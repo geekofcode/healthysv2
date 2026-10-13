@@ -50,6 +50,11 @@ logging:
     level: "%5p [correlationId=%X{correlationId:-}]"
 
 healthys:
+  licensing:
+    stripe:
+      secret-key: ${STRIPE_SECRET_KEY:}
+      webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+      return-url: ${STRIPE_RETURN_URL:http://localhost:5173/licensing}
   push:
     enabled: ${PUSH_ENABLED:false}
     fcm-project-id: ${FCM_PROJECT_ID:}

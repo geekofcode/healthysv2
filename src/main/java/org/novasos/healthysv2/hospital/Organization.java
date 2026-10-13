@@ -32,6 +32,10 @@ class Organization extends AuditableEntity {
     private String website;
     @Column(nullable = false, length = 30)
     private String status = "ACTIVE";
+    @Column(nullable=false, length=100)
+    private String timezone = "UTC";
+    @Column(name="administrator_person_id")
+    private UUID administratorPersonId;
     @OneToMany(mappedBy = "organization", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Department> departments = new ArrayList<>();
     @OneToMany(mappedBy = "organization", cascade = CascadeType.ALL, orphanRemoval = true)
@@ -55,8 +59,23 @@ class Organization extends AuditableEntity {
         this.phone = trim(phone);
         this.email = trim(email);
         this.website = trim(website);
-        this.status = status == null ? "ACTIVE" : required(status, "status").toUpperCase();
+        if (status != null) changeStatus(status);
     }
+
+    void configure(String timezone, UUID administratorPersonId) {
+        if (timezone != null) {
+            try { this.timezone = java.time.ZoneId.of(timezone.trim()).getId(); }
+            catch (java.time.DateTimeException exception) { throw new IllegalArgumentException("Invalid organization timezone"); }
+        }
+        this.administratorPersonId = administratorPersonId;
+    }
+    void changeStatus(String status) {
+        String value = required(status, "status").toUpperCase(java.util.Locale.ROOT);
+        if (!java.util.Set.of("ACTIVE", "INACTIVE").contains(value)) throw new IllegalArgumentException("Invalid organization status");
+        this.status = value;
+    }
+    String getTimezone() { return timezone; }
+    UUID getAdministratorPersonId() { return administratorPersonId; }
 
     Department addDepartment(String code, String name, String description, String status) {
         Department child = Department.create(this, code, name, description, status);

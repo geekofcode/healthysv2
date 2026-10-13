@@ -27,6 +27,8 @@ export function canAccessPath(roles: readonly string[], path: string): boolean {
   const section = segments[0];
   if (!section || ['me', 'registration', 'notifications', 'professional-onboarding', 'professional-invitation'].includes(section)) return true;
   if (section === 'professionals' && (segments[1] === 'new' || segments[2] === 'edit')) return roles.includes('PLATFORM_ADMIN');
+  if (section === 'organizations' && segments[2] === 'license') return roles.some(role => ['PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE','HOSPITAL_AGENT','CASHIER','ACCOUNTANT'].includes(role));
+  if (section === 'organizations' && segments[1] === 'new') return roles.includes('PLATFORM_ADMIN');
   if (section === 'organizations' &&
       (segments[1] === 'new' || segments[2] === 'edit')) {
     return roles.some(role => ['PLATFORM_ADMIN', 'HOSPITAL_ADMIN'].includes(role));
@@ -36,4 +38,10 @@ export function canAccessPath(roles: readonly string[], path: string): boolean {
   }
   const allowed = routeRoles[section];
   return !!allowed && roles.some(role => allowed.includes(role));
+}
+
+/** Memberships originate from the authenticated backend; only the selected organization applies. */
+export function effectiveApplicationRoles(baseRoles:readonly string[],memberships:readonly {organizationId:string;role:string}[],organizationId?:string):string[]{
+ const allowed=['DOCTOR','NURSE','HOSPITAL_AGENT','CASHIER','ACCOUNTANT','HOSPITAL_ADMIN'];
+ return [...new Set([...baseRoles,...memberships.filter(m=>m.organizationId===organizationId&&allowed.includes(m.role)).map(m=>m.role)])];
 }

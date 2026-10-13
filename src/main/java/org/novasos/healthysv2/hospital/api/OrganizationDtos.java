@@ -14,12 +14,15 @@ public final class OrganizationDtos {
             @NotBlank @Size(max=255) String name,
             @Size(max=255) String legalName, UUID organizationTypeId,
             @Size(max=50) String phone, @Email @Size(max=255) String email,
-            @Size(max=255) String website, @Size(max=30) String status) {}
+            @Size(max=255) String website, @Size(max=30) String status,
+            @Size(max=100) String timezone, UUID administratorPersonId) {}
     public record OrganizationUpdateRequest(
             @NotBlank @Size(max=255) String name,
             @Size(max=255) String legalName, UUID organizationTypeId,
             @Size(max=50) String phone, @Email @Size(max=255) String email,
-            @Size(max=255) String website, @Size(max=30) String status) {}
+            @Size(max=255) String website, @Size(max=30) String status,
+            @Size(max=100) String timezone, UUID administratorPersonId) {}
+    public record OrganizationStatusRequest(@NotBlank @jakarta.validation.constraints.Pattern(regexp="ACTIVE|INACTIVE") String status) {}
     public record DepartmentRequest(@NotBlank @Size(max=50) String code,
             @NotBlank @Size(max=255) String name, String description, @Size(max=30) String status) {}
     public record DepartmentUpdateRequest(@NotBlank @Size(max=255) String name,
@@ -40,7 +43,8 @@ public final class OrganizationDtos {
     public record OrganizationResponse(UUID id, String number, String name,
             String legalName, UUID organizationTypeId, String phone, String email,
             String website, String status, Instant createdAt, Instant updatedAt,
-            List<DepartmentResponse> departments, List<RoomResponse> rooms) {}
+            List<DepartmentResponse> departments, List<RoomResponse> rooms,
+            String timezone, UUID administratorPersonId) {}
     public record DepartmentResponse(UUID id, String code, String name,
             String description, String status, List<ServiceResponse> services) {}
     public record ServiceResponse(UUID id, String code, String name,

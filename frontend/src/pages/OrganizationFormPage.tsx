@@ -2,15 +2,16 @@ import {FormEvent,useEffect,useState} from 'react';
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query';
 import {Link,useNavigate,useParams} from 'react-router-dom';
 import {useTranslation} from 'react-i18next';
-import {createOrganization,getOrganization,listOrganizationTypes,organizationKeys,OrganizationInput,updateOrganization} from '../api/organizations';
+import {createOrganization,getOrganization,listOrganizationTypes,organizationKeys,OrganizationInput,updateOrganization,setOrganizationStatus} from '../api/organizations';
+import {useAuth} from '../auth/AuthContext';
 import {ApiErrorMessage} from '../components/ApiErrorMessage';
 export function OrganizationFormPage(){
- const {t,i18n}=useTranslation();const fr=i18n.language.startsWith('fr');const {id}=useParams();const navigate=useNavigate();const client=useQueryClient();
+ const {t,i18n}=useTranslation();const auth=useAuth();const platformAdmin=auth.hasAnyRole('PLATFORM_ADMIN');const fr=i18n.language.startsWith('fr');const {id}=useParams();const navigate=useNavigate();const client=useQueryClient();
  const query=useQuery({queryKey:id?organizationKeys.detail(id):['organization','new'],queryFn:()=>getOrganization(id!),enabled:Boolean(id)});
  const types=useQuery({queryKey:['organizations','types'],queryFn:listOrganizationTypes});
- const [values,setValues]=useState<OrganizationInput>({number:'',name:'',status:'ACTIVE'});
- useEffect(()=>{if(query.data){const {number,name,legalName,organizationTypeId,phone,email,website,status}=query.data;setValues({number,name,legalName,organizationTypeId,phone,email,website,status});}},[query.data]);
- const mutation=useMutation({mutationFn:(input:OrganizationInput)=>id?updateOrganization(id,input):createOrganization(input),onSuccess:async result=>{await client.invalidateQueries({queryKey:organizationKeys.all});navigate(`/organizations/${result.id}`);}});
+ const [values,setValues]=useState<OrganizationInput>({number:'',name:'',status:'ACTIVE',timezone:'UTC'});
+ useEffect(()=>{if(query.data){const {number,name,legalName,organizationTypeId,phone,email,website,status,timezone,administratorPersonId}=query.data;setValues({number,name,legalName,organizationTypeId,phone,email,website,status,timezone:timezone??'UTC',administratorPersonId});}},[query.data]);
+ const mutation=useMutation({mutationFn:async(input:OrganizationInput)=>{if(!id)return createOrganization(input);const {status,...details}=input;const result=await updateOrganization(id,details);if(platformAdmin&&status&&status!==query.data?.status)return setOrganizationStatus(id,status);return result},onSuccess:async result=>{await client.invalidateQueries({queryKey:organizationKeys.all});navigate(`/organizations/${result.id}`);}});
  const submit=(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();mutation.mutate({...values,organizationTypeId:values.organizationTypeId||undefined});};
  if(id&&query.isPending)return <p>{t('common.loading')}</p>;
  if(id&&query.isError)return <ApiErrorMessage error={query.error}/>;
@@ -20,12 +21,12 @@ export function OrganizationFormPage(){
  <Field label={t('organizations.name')} value={values.name} required onChange={name=>setValues({...values,name})}/>
  <Field label={t('organizations.legalName')} value={values.legalName??''} onChange={legalName=>setValues({...values,legalName})}/>
  <label>{fr?'Type d’établissement':'Organization type'}<select value={values.organizationTypeId??''} onChange={e=>setValues({...values,organizationTypeId:e.target.value})}><option value="">{t('common.none')}</option>{types.data?.map(type=><option key={type.id} value={type.id}>{type.label}</option>)}</select>{types.isError&&<ApiErrorMessage error={types.error}/>}</label>
- <label>{t('organizations.status')}<select value={values.status??'ACTIVE'} onChange={e=>setValues({...values,status:e.target.value})}>{['ACTIVE','INACTIVE'].map(s=><option key={s}>{t(`status.${s}`,s)}</option>)}</select></label>
+ {platformAdmin&&<label>{t('organizations.status')}<select value={values.status??'ACTIVE'} onChange={e=>setValues({...values,status:e.target.value})}>{['ACTIVE','INACTIVE'].map(s=><option key={s}>{t(`status.${s}`,s)}</option>)}</select></label>}
  </div></fieldset><fieldset><legend>{fr?'Coordonnées':'Contact details'}</legend><div className="form-grid">
  <Field label={t('organizations.phone')} type="tel" maxLength={50} value={values.phone??''} onChange={phone=>setValues({...values,phone})}/>
  <Field label={t('organizations.email')} type="email" value={values.email??''} onChange={email=>setValues({...values,email})}/>
  <Field label={t('organizations.website')} type="url" value={values.website??''} onChange={website=>setValues({...values,website})}/>
- </div></fieldset><div className="form-actions"><button disabled={mutation.isPending}>{t('common.save')}</button><Link className="button secondary" to={id?`/organizations/${id}`:'/organizations'}>{t('common.cancel')}</Link></div>
+ <Field label={fr?'Fuseau horaire (IANA)':'Time zone (IANA)'} value={values.timezone??'UTC'} required onChange={timezone=>setValues({...values,timezone})}/>{platformAdmin&&<Field label={fr?'Identifiant de la personne administratrice':'Administrator person ID'} value={values.administratorPersonId??''} onChange={administratorPersonId=>setValues({...values,administratorPersonId:administratorPersonId||undefined})}/>}</div></fieldset><div className="form-actions"><button disabled={mutation.isPending}>{t('common.save')}</button><Link className="button secondary" to={id?`/organizations/${id}`:'/organizations'}>{t('common.cancel')}</Link></div>
  </form></section>;
 }
 function Field({label,value,onChange,type='text',required=false,disabled=false,maxLength=255}:{label:string;value:string;onChange:(v:string)=>void;type?:string;required?:boolean;disabled?:boolean;maxLength?:number}){return <label>{label}{required?' *':''}<input type={type} value={value} required={required} disabled={disabled} maxLength={maxLength} onChange={e=>onChange(e.target.value)}/></label>}

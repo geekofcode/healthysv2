@@ -5,9 +5,9 @@ export type Room = {id:string; departmentId?:string; roomNumber:string; type?:st
 export type CareService = {id:string; code:string; name:string; description?:string; status:string};
 export type Department = {id:string; code:string; name:string; description?:string; status:string; services:CareService[]};
 export type OrganizationSummary = {id:string; number:string; name:string; legalName?:string; status:string};
-export type Organization = OrganizationSummary & {organizationTypeId?:string; phone?:string; email?:string; website?:string; createdAt:string; updatedAt:string; departments:Department[]; rooms:Room[]};
+export type Organization = OrganizationSummary & {organizationTypeId?:string; phone?:string; email?:string; website?:string; timezone?:string; administratorPersonId?:string; createdAt:string; updatedAt:string; departments:Department[]; rooms:Room[]};
 export type Page<T> = {content:T[]; page:{number:number;size:number;totalElements:number;totalPages:number;first:boolean;last:boolean}};
-export type OrganizationInput = {number:string;name:string;legalName?:string;organizationTypeId?:string;phone?:string;email?:string;website?:string;status?:string};
+export type OrganizationInput = {number:string;name:string;legalName?:string;organizationTypeId?:string;phone?:string;email?:string;website?:string;timezone?:string;administratorPersonId?:string;status?:string};
 
 export const organizationKeys = {all:['organizations'] as const, detail:(id:string)=>['organizations',id] as const};
 export const listOrganizations = (query='',page=0,size=100,status='') => apiRequest<Page<OrganizationSummary>>(`/organizations?size=${size}&page=${page}&sort=name,asc&query=${encodeURIComponent(query)}&status=${encodeURIComponent(status)}`);
@@ -21,3 +21,5 @@ export const addRoom = (organizationId:string,input:{departmentId?:string;roomNu
 export const addBed = (organizationId:string,roomId:string,input:{bedNumber:string}) => apiRequest<Bed>(`/organizations/${organizationId}/rooms/${roomId}/beds`,{method:'POST',body:JSON.stringify(input)});
 
 export const listOrganizationTypes=()=>apiRequest<{id:string;code:string;label:string}[]>('/organizations/types');
+
+export const setOrganizationStatus=(id:string,status:string)=>apiRequest<Organization>(`/organizations/${id}/status`,{method:'PATCH',body:JSON.stringify({status})});

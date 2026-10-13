@@ -15,7 +15,7 @@ class OrganizationViewerTests {
     private final CurrentUserContext users = mock(CurrentUserContext.class);
     private final OrganizationService service = new OrganizationService(repository,
             mock(DepartmentRepository.class), mock(CareServiceRepository.class),
-            mock(RoomRepository.class), mock(BedRepository.class), users);
+            mock(RoomRepository.class), mock(BedRepository.class), users, mock(org.springframework.jdbc.core.JdbcTemplate.class));
 
     @Test
     void viewerCannotReadWithoutOrganizationContext() {

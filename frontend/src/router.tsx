@@ -1,3 +1,6 @@
+import {MyTeamInvitationsPage} from './pages/MyTeamInvitationsPage';
+import {LicensingPlansPage} from './pages/LicensingPlansPage';
+import {OrganizationLicensePage} from './pages/OrganizationLicensePage';
 import {MyPatientAccessPage} from './pages/MyPatientAccessPage';
 import {ProfessionalOnboardingPage} from './pages/ProfessionalOnboardingPage';
 import {ConsultationsPage} from './pages/ConsultationsPage';
@@ -58,6 +61,7 @@ export const router = createBrowserRouter([
         element: <MainLayout />,
         children: [
           {path: '/', element: <DashboardPage />},
+          {path: '/me/team-invitations', element: <MyTeamInvitationsPage />},
           {path: '/me', element: <MePage />},
           {path: '/me/access', element: <MyPatientAccessPage />},
           {path: '/professional-onboarding', element: <ProfessionalOnboardingPage />},
@@ -67,6 +71,8 @@ export const router = createBrowserRouter([
           {path: '/organizations', element: <OrganizationsPage />},
           {path: '/organizations/new', element: <OrganizationFormPage />},
           {path: '/organizations/:id', element: <OrganizationDetailPage />},
+          {path: '/organizations/:id/license', element: <OrganizationLicensePage />},
+          {path: '/admin/licensing-plans', element: <LicensingPlansPage />},
           {path: '/organizations/:id/edit', element: <OrganizationFormPage />},
           {path: '/professionals', element: <ProfessionalsPage />},
           {path: '/professionals/new', element: <ProfessionalFormPage />},

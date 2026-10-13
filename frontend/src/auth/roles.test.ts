@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {applicationRoles, canAccessPath} from './roles';
+import {applicationRoles, canAccessPath, effectiveApplicationRoles} from './roles';
 describe('Keycloak application roles', () => {
   it.each([
     ['admin', 'PLATFORM_ADMIN'], ['comptable', 'ACCOUNTANT'], ['gestionnaire', 'HOSPITAL_VIEWER'],
@@ -45,4 +45,9 @@ it('allows nurse reception and cashier billing without cashier clinical access',
   expect(canAccessPath(applicationRoles(['caissier']), '/billing/invoices/123')).toBe(true);
   expect(canAccessPath(applicationRoles(['caissier']), '/patients')).toBe(false);
   expect(canAccessPath(applicationRoles(['caissier']), '/consultations')).toBe(false);
+});
+
+it('adds only trusted selected organization membership roles',()=>{
+ expect(effectiveApplicationRoles(['PATIENT'],[{organizationId:'a',role:'HOSPITAL_ADMIN'},{organizationId:'b',role:'CASHIER'},{organizationId:'b',role:'PLATFORM_ADMIN'}],'b')).toEqual(['PATIENT','CASHIER']);
+ expect(effectiveApplicationRoles(['PATIENT'],[{organizationId:'a',role:'HOSPITAL_ADMIN'}],'independent')).toEqual(['PATIENT']);
 });

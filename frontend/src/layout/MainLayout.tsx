@@ -1,3 +1,4 @@
+import {LicenseBoundary} from '../components/LicenseBoundary';
 import {getPreferences} from '../api/preferences';
 import {ThemeSwitch} from '../components/ThemeSwitch';
 import {Breadcrumbs} from '../components/Breadcrumbs';
@@ -14,7 +15,7 @@ import {NotificationBell} from '../components/NotificationBell';
 
 export function MainLayout() {
   const auth = useAuth();
-  const {t} = useTranslation();
+  const {t,i18n} = useTranslation();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -61,7 +62,7 @@ export function MainLayout() {
             </button>
             {profileOpen && <div className="profile-dropdown" id="account-dropdown">
               <div className="profile-summary"><strong>{fullName}</strong><span>{auth.username}</span></div>
-              <NavLink to="/me">{t('nav.profile')}</NavLink>
+              <NavLink to="/me">{t('nav.profile')}</NavLink><NavLink to="/me/team-invitations">{i18n.language.startsWith('fr')?'Invitations d’établissement':'Organization invitations'}</NavLink>
           {auth.roles.includes('PATIENT')&&<NavLink to="/me/access">{t('access.title')}</NavLink>}
           <NavLink to="/professional-onboarding">{t('onboarding.title')}</NavLink>
               <button type="button" onClick={() => {setProfileOpen(false); void auth.logout();}}>{t('auth.logout')}</button>
@@ -74,7 +75,7 @@ export function MainLayout() {
         <OrganizationContext />
         <nav id="main-navigation" aria-label={t('nav.main')}>
           <NavLink to="/" end>{t('nav.home')}</NavLink>
-          <NavLink to="/me">{t('nav.profile')}</NavLink>
+          <NavLink to="/me">{t('nav.profile')}</NavLink><NavLink to="/me/team-invitations">{i18n.language.startsWith('fr')?'Invitations d’établissement':'Organization invitations'}</NavLink>
           {auth.roles.includes('PATIENT')&&<NavLink to="/me/access">{t('access.title')}</NavLink>}
           <NavLink to="/professional-onboarding">{t('onboarding.title')}</NavLink>
           {canAccessPath(auth.roles, '/organizations')&&<NavLink to="/organizations">{t('nav.organizations')}</NavLink>}
@@ -89,11 +90,12 @@ export function MainLayout() {
           {canAccessPath(auth.roles, '/teleconsultations')&&<NavLink to="/teleconsultations">{t('nav.teleconsultations')}</NavLink>}
           {canAccessPath(auth.roles, '/pharmacy/prescriptions')&&<NavLink to="/pharmacy/prescriptions">{t('nav.pharmacy')}</NavLink>}
           {canAccessPath(auth.roles, '/billing')&&<NavLink to="/billing">{t('nav.billing')}</NavLink>}
+          {canAccessPath(auth.roles, '/admin')&&<NavLink to="/admin/licensing-plans">{i18n.language.startsWith('fr')?'Offres et licences':'Plans and licenses'}</NavLink>}
           {canAccessPath(auth.roles, '/admin')&&<NavLink to="/admin">{t('nav.admin')}</NavLink>}
         </nav>
         </aside>
         {sidebarOpen && <button className="sidebar-backdrop" type="button" aria-label={t('shell.closeNavigation')} onClick={() => {setSidebarOpen(false); navigationRef.current?.focus();}} />}
-        <main className="content" id="main-content" tabIndex={-1}><Breadcrumbs /><Outlet /></main>
+        <main className="content" id="main-content" tabIndex={-1}><Breadcrumbs /><LicenseBoundary><Outlet /></LicenseBoundary></main>
       </div>
     </div>
   );
