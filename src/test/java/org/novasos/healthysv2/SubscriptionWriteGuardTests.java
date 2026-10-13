@@ -32,4 +32,15 @@ class SubscriptionWriteGuardTests {
         assertThatThrownBy(()->guard.preHandle(new MockHttpServletRequest("POST","/api/v1/visits/visit/ai-jobs"),new MockHttpServletResponse(),new Object())).isInstanceOf(AccessDeniedException.class);
         verify(licensing).requireActive(org);
     }
+    @Test void patientCanRevokeOwnAccessWithoutAnOrganizationSubscription() {
+        UUID patient=UUID.randomUUID();
+        when(users.current()).thenReturn(new CurrentUserContext.UserContext(UUID.randomUUID(),null,Set.of("PATIENT")));
+        assertThat(guard.preHandle(new MockHttpServletRequest("POST","/api/v1/patients/"+patient+"/access-revocations"),new MockHttpServletResponse(),new Object())).isTrue();
+        verifyNoInteractions(licensing);
+    }
+    @Test void patientCannotUseAccessDecisionExemptionToRequestStaffAccess() {
+        UUID patient=UUID.randomUUID();
+        when(users.current()).thenReturn(new CurrentUserContext.UserContext(UUID.randomUUID(),null,Set.of("PATIENT")));
+        assertThatThrownBy(()->guard.preHandle(new MockHttpServletRequest("POST","/api/v1/patients/"+patient+"/access-requests"),new MockHttpServletResponse(),new Object())).isInstanceOf(AccessDeniedException.class);
+    }
 }

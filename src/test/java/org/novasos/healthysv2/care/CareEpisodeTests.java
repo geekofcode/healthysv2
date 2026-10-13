@@ -37,6 +37,25 @@ class CareEpisodeTests {
         assertThat(episode.getExpiresAt()).isEqualTo(expiration);
         assertThat(episode.isActiveAt(expiration)).isFalse();
     }
+    @Test void receptionCreatesFirstVisitWithoutStartingOrBypassingCash() {
+        var episode=episode();
+        var speciality=UUID.randomUUID();
+        episode.specifySpeciality(speciality);
+        var visit=CareVisit.prepare(episode,UUID.randomUUID(),now.plusSeconds(3600),policy,now);
+        assertThat(episode.getSpecialityId()).isEqualTo(speciality);
+        assertThat(episode.getStatus()).isEqualTo(CareEpisode.Status.AWAITING_PAYMENT);
+        assertThat(visit.getStatus()).isEqualTo(CareVisit.Status.PENDING_PAYMENT);
+        assertThat(episode.getStartedAt()).isNull();
+        assertThat(episode.getExpiresAt()).isNull();
+        assertThatThrownBy(()->visit.start(organization,now)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(visit::releaseAfterPayment).isInstanceOf(IllegalStateException.class);
+        episode.confirmPayment();
+        visit.releaseAfterPayment();
+        assertThat(visit.getStatus()).isEqualTo(CareVisit.Status.SCHEDULED);
+        assertThat(episode.getStartedAt()).isNull();
+        visit.start(organization,now.plusSeconds(3600));
+        assertThat(episode.getStartedAt()).isEqualTo(now.plusSeconds(3600));
+    }
     @Test void retentionUsesCalendarYearsAndPolicyIsValidated() {
         assertThat(episode().getRetentionExpiresAt()).isEqualTo(Instant.parse("2056-10-12T12:00:00Z"));
         assertThatThrownBy(() -> new CarePolicy(Duration.ZERO, 30)).isInstanceOf(IllegalArgumentException.class);

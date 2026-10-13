@@ -15,7 +15,7 @@ const clinical = ['PLATFORM_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'];
 const staff = [...clinical, 'LAB_TECHNICIAN'];
 const routeRoles: Record<string, readonly string[]> = {
   organizations: [...staff, 'HOSPITAL_VIEWER'], professionals: [...staff, 'HOSPITAL_VIEWER'],
-  patients: [...staff, 'HOSPITAL_AGENT'], agenda: [...clinical, 'PATIENT'], consultations: clinical,
+  patients: [...clinical, 'HOSPITAL_AGENT'], care: [...clinical,'HOSPITAL_AGENT'], agenda: [...clinical, 'PATIENT'], consultations: clinical,
   laboratory: staff, 'maternal-child': [...clinical, 'PATIENT'], documents: [...clinical, 'PATIENT'],
   chat: [...staff, 'PATIENT'], teleconsultations: [...clinical, 'PATIENT'],
   pharmacy: ['PLATFORM_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR'],

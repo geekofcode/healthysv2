@@ -50,6 +50,13 @@ logging:
     level: "%5p [correlationId=%X{correlationId:-}]"
 
 healthys:
+  access:
+    request-duration: ${PATIENT_ACCESS_REQUEST_DURATION:PT48H}
+    emergency-duration: ${PATIENT_ACCESS_EMERGENCY_DURATION:PT1H}
+    scheduled-grace: ${PATIENT_ACCESS_SCHEDULED_GRACE:PT1H}
+  care:
+    follow-up-duration: ${CARE_FOLLOW_UP_DURATION:PT168H}
+    retention-years: ${DATA_RETENTION_YEARS:30}
   licensing:
     stripe:
       secret-key: ${STRIPE_SECRET_KEY:}

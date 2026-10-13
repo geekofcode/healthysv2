@@ -13,6 +13,7 @@ public class CareEpisode {
     @Column(name="patient_id", nullable=false) private UUID patientId;
     @Column(name="organization_id", nullable=false) private UUID organizationId;
     @Column(nullable=false, columnDefinition="text") private String reason;
+    @Column(name="speciality_id") private UUID specialityId;
     @Enumerated(EnumType.STRING) @Column(nullable=false) private Status status;
     @Column(name="follow_up_seconds", nullable=false) private long followUpSeconds;
     @Column(name="started_at") private Instant startedAt;
@@ -65,6 +66,10 @@ public class CareEpisode {
         return status == Status.ACTIVE && !now.isBefore(startedAt) && now.isBefore(expiresAt);
     }
     public void close() { status = Status.CLOSED; }
+    public void specifySpeciality(UUID speciality) { specialityId = Objects.requireNonNull(speciality); }
+    public UUID getSpecialityId() { return specialityId; }
+    public String getReason() { return reason; }
+    public Instant getCreatedAt() { return createdAt; }
     public UUID getId() { return id; }
     public UUID getPatientId() { return patientId; }
     public UUID getOrganizationId() { return organizationId; }

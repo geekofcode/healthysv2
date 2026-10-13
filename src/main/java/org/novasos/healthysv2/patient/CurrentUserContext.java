@@ -18,9 +18,15 @@ public class CurrentUserContext {
         UUID person=subject==null?null:jdbc.query("select id from identity.person where keycloak_user_id=? limit 1",rs->rs.next()?(UUID)rs.getObject(1):null,subject);
         UUID organization=claimUuid(jwt,"healthys_organization_id");if(organization==null)organization=claimUuid(jwt,"organization_id");
         Set<String> roles=new HashSet<>();jwt.getAuthorities().forEach(a->{if(a.getAuthority().startsWith("ROLE_"))roles.add(a.getAuthority().substring(5));});
-        UUID claimedOrganization = organization;
         var attributes = org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
         if (attributes instanceof org.springframework.web.context.request.ServletRequestAttributes servlet) {
+            String uri = servlet.getRequest().getRequestURI();
+            var selfControl = java.util.regex.Pattern.compile("/api/v1/patients/([0-9a-fA-F-]{36})/(access-requests|access-grants|access-revocations|consents)(/.*)?").matcher(uri);
+            if (person != null && roles.contains("PATIENT") && selfControl.matches()) {
+                UUID patientId = uuid(selfControl.group(1));
+                Integer owner = jdbc.queryForObject("select count(*) from patient.patient where id=? and person_id=?", Integer.class, patientId, person);
+                if (Integer.valueOf(1).equals(owner)) return new UserContext(person, null, Set.copyOf(roles));
+            }
             String selected = servlet.getRequest().getHeader("X-Organization-ID");
             if (selected != null && !selected.isBlank()) {
                 if ("independent".equalsIgnoreCase(selected.trim())) {

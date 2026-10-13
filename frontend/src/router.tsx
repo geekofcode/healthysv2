@@ -1,3 +1,5 @@
+import {CareEpisodeCreatePage,CareEpisodePage} from './pages/CareEpisodePage';
+import {PatientIdentityCreatePage,PatientIdentityPage} from './pages/PatientIdentityPage';
 import {MyTeamInvitationsPage} from './pages/MyTeamInvitationsPage';
 import {LicensingPlansPage} from './pages/LicensingPlansPage';
 import {OrganizationLicensePage} from './pages/OrganizationLicensePage';
@@ -79,10 +81,13 @@ export const router = createBrowserRouter([
           {path: '/professionals/:id', element: <ProfessionalDetailPage />},
           {path: '/professionals/:id/edit', element: <ProfessionalFormPage />},
           {path: '/patients', element: <PatientsPage />},
-          {path: '/patients/new', element: <PatientFormPage />},
+          {path: '/patients/new', element: <PatientIdentityCreatePage />},
+          {path: '/patients/:id/identity', element: <PatientIdentityPage />},
           {path: '/patients/:id', element: <PatientDetailPage />},
           {path: '/patients/:id/edit', element: <PatientFormPage />},
           {path: '/patients/:id/access', element: <PatientAccessPage />},
+          {path: '/care/episodes/new', element: <CareEpisodeCreatePage />},
+          {path: '/care/episodes/:id', element: <CareEpisodePage />},
           {path: '/agenda', element: <AgendaPage />},
           {path: '/consultations', element: <ConsultationsPage />},
           {path: '/consultations/new', element: <ConsultationStartPage />},

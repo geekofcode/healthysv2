@@ -27,7 +27,7 @@ class CurrentOrganizationContextTests {
     }
 
     @Test
-    void selectedOrganizationRequiresLiveAssignmentEvenWithOldJwt() {
+    void selectedOrganizationRequiresLiveMembershipEvenWithOldJwt() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         UUID subject = UUID.randomUUID(), person = UUID.randomUUID(), selected = UUID.randomUUID();
         Jwt jwt = Jwt.withTokenValue("test").header("alg", "RS256").subject(subject.toString())
@@ -39,11 +39,11 @@ class CurrentOrganizationContextTests {
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
         when(jdbc.query(anyString(), org.mockito.ArgumentMatchers.<ResultSetExtractor<UUID>>any(), eq(subject)))
                 .thenReturn(person);
-        when(jdbc.queryForObject(contains("professional_assignment"), eq(Integer.class), eq(person), eq(selected)))
+        when(jdbc.queryForObject(contains("licensing.member"), eq(Integer.class), eq(selected), eq(person)))
                 .thenReturn(0);
         assertThatThrownBy(() -> new CurrentUserContext(jdbc).current())
-                .isInstanceOf(AccessDeniedException.class).hasMessage("PROFESSIONAL_NOT_ASSIGNED");
-        when(jdbc.queryForObject(contains("professional_assignment"), eq(Integer.class), eq(person), eq(selected)))
+                .isInstanceOf(AccessDeniedException.class).hasMessage("ORGANIZATION_MEMBERSHIP_REQUIRED");
+        when(jdbc.queryForObject(contains("licensing.member"), eq(Integer.class), eq(selected), eq(person)))
                 .thenReturn(1);
         assertThat(new CurrentUserContext(jdbc).current().organizationId()).isEqualTo(selected);
     }
@@ -66,5 +66,20 @@ class CurrentOrganizationContextTests {
                 List.of(new SimpleGrantedAuthority("ROLE_HOSPITAL_ADMIN"))));
         assertThatThrownBy(() -> new CurrentUserContext(jdbc).current())
                 .isInstanceOf(AccessDeniedException.class).hasMessage("INDEPENDENT_CONTEXT_DENIED");
+    }
+    @Test void ownerCanControlConsentDespiteAStaleOrganizationHeader() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        UUID subject=UUID.randomUUID(), person=UUID.randomUUID(), patient=UUID.randomUUID();
+        Jwt jwt = Jwt.withTokenValue("test").header("alg","RS256").subject(subject.toString())
+                .issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(300)).build();
+        SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt,
+                List.of(new SimpleGrantedAuthority("ROLE_PATIENT"))));
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/patients/"+patient+"/access-revocations");
+        request.addHeader("X-Organization-ID", UUID.randomUUID().toString());
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+        when(jdbc.query(anyString(), org.mockito.ArgumentMatchers.<ResultSetExtractor<UUID>>any(), eq(subject))).thenReturn(person);
+        when(jdbc.queryForObject(contains("patient.patient"), eq(Integer.class), eq(patient), eq(person))).thenReturn(1);
+        assertThat(new CurrentUserContext(jdbc).current().organizationId()).isNull();
+        verify(jdbc, never()).queryForObject(contains("licensing.member"), eq(Integer.class), any(), any());
     }
 }

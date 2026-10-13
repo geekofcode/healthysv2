@@ -17,7 +17,7 @@ class SubscriptionWebConfiguration implements WebMvcConfigurer {
     private final CurrentUserContext users;
     SubscriptionWebConfiguration(LicensingAccess licensing, CurrentUserContext users) { this.licensing=licensing; this.users=users; }
     @Override public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(new WriteGuard(licensing, users)).addPathPatterns("/api/v1/patients/**", "/api/v1/consultations/**", "/api/v1/appointments/**",
+        registry.addInterceptor(new WriteGuard(licensing, users)).addPathPatterns("/api/v1/persons", "/api/v1/patients/**", "/api/v1/consultations/**", "/api/v1/appointments/**",
                 "/api/v1/care/**", "/api/v1/episodes/**", "/api/v1/visits/**", "/api/v1/invoices/**",
                 "/api/v1/billing/**", "/api/v1/prescriptions/**", "/api/v1/documents/**")
                 .excludePathPatterns("/api/v1/patients/me/**", "/api/v1/patients/me");
@@ -29,6 +29,12 @@ class SubscriptionWebConfiguration implements WebMvcConfigurer {
             @Override public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
                 if (java.util.Set.of("GET","HEAD","OPTIONS").contains(request.getMethod())) return true;
                 var user=users.current();
+                String uri = request.getRequestURI();
+                boolean patientDecision = uri.matches("/api/v1/patients/[0-9a-fA-F-]{36}/access-revocations")
+                        || uri.matches("/api/v1/patients/[0-9a-fA-F-]{36}/consents(/[0-9a-fA-F-]{36}/revoke)?")
+                        || uri.matches("/api/v1/patients/[0-9a-fA-F-]{36}/access-requests/[0-9a-fA-F-]{36}/(accept|revoke)")
+                        || ("DELETE".equals(request.getMethod()) && uri.matches("/api/v1/patients/[0-9a-fA-F-]{36}/access-grants/[0-9a-fA-F-]{36}"));
+                if (patientDecision && user.has("PATIENT")) return true;
                 if (user.organizationId()==null) throw new AccessDeniedException("ORGANIZATION_CONTEXT_REQUIRED");
                 licensing.requireMember(user.organizationId());
                 licensing.requireActive(user.organizationId());

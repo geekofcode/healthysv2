@@ -1,0 +1,12 @@
+import {apiRequest} from './client';
+import type {Page} from './organizations';
+import type {Identifier} from './patients';
+export type PatientIdentity = {id:string;personId:string;patientNumber:string;firstName:string;lastName:string;birthDate?:string;gender?:string;email?:string;phone?:string;status:string;identifiers:Identifier[]};
+export const identityKeys = {all:['patient-identities'] as const,detail:(id:string)=>['patient-identities',id] as const};
+export const searchPatientIdentities = (query='',page=0)=>apiRequest<Page<PatientIdentity>>(`/patients/identities?${new URLSearchParams({query,page:String(page),size:'20'})}`);
+export const getPatientIdentity = (id:string)=>apiRequest<PatientIdentity>(`/patients/${id}/identity`);
+export const createPatientIdentity = (input:{personId:string;identifiers:Omit<Identifier,'id'>[]})=>apiRequest<PatientIdentity>('/patients/identities',{method:'POST',body:JSON.stringify(input)});
+export type PersonIdentity = {personId:string;personNumber:string;firstName:string;lastName:string;birthDate?:string;gender?:string;email?:string;phone?:string;patientId?:string;patientNumber?:string};
+export const searchPersonIdentities = (query='',page=0)=>apiRequest<Page<PersonIdentity>>(`/patients/person-identities?${new URLSearchParams({query,page:String(page),size:'20'})}`);
+export type PatientIdentityInput={firstName:string;lastName:string;middleName?:string;birthDate?:string;gender?:string;email?:string;phone?:string};
+export const updatePatientIdentity=(id:string,input:PatientIdentityInput)=>apiRequest<PatientIdentity>(`/patients/${id}/identity`,{method:'PUT',body:JSON.stringify(input)});

@@ -181,6 +181,14 @@ public class Person extends AuditableEntity {
         this.preferredLanguageId = preferredLanguageId;
     }
 
+    void replaceReceptionContacts(String email, String phone) {
+        var verified = contacts.stream().filter(PersonContact::isVerified)
+                .map(contact -> contact.getType() + "\u0000" + contact.getValue()).collect(java.util.stream.Collectors.toSet());
+        contacts.removeIf(contact -> java.util.Set.of("EMAIL", "PHONE", "MOBILE").contains(contact.getType()));
+        if (optional(email) != null) addContact("EMAIL", email, true, verified.contains("EMAIL\u0000" + email.trim()));
+        if (optional(phone) != null) addContact("PHONE", phone, true, verified.contains("PHONE\u0000" + phone.trim()));
+    }
+
     void replaceProfileContacts() {
         contacts.clear();
         emergencyContacts.clear();

@@ -8,7 +8,7 @@ import java.util.UUID;
 @Entity
 @Table(name="care_visit", schema="care")
 public class CareVisit {
-    public enum Status { SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED }
+    public enum Status { PENDING_PAYMENT, SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED }
     @Id private UUID id;
     @ManyToOne(fetch=FetchType.LAZY, optional=false) @JoinColumn(name="episode_id", nullable=false)
     private CareEpisode episode;
@@ -45,6 +45,31 @@ public class CareVisit {
         visit.retentionExpiresAt = now.atZone(ZoneOffset.UTC).plusYears(policy.retentionYears()).toInstant();
         return visit;
     }
+    /** Reception reserves a visit without settling payment or starting follow-up. */
+    public static CareVisit prepare(CareEpisode episode, UUID professional, Instant date,
+                                    CarePolicy policy, Instant now) {
+        if (episode.getStatus() != CareEpisode.Status.AWAITING_PAYMENT) {
+            throw new IllegalStateException("Reception requires an unpaid episode");
+        }
+        validateDate(date, now);
+        var visit = new CareVisit();
+        visit.id = UUID.randomUUID();
+        visit.episode = Objects.requireNonNull(episode);
+        visit.professionalId = Objects.requireNonNull(professional);
+        visit.scheduledAt = date;
+        visit.status = Status.PENDING_PAYMENT;
+        visit.createdAt = now;
+        visit.retentionExpiresAt = now.atZone(ZoneOffset.UTC).plusYears(policy.retentionYears()).toInstant();
+        return visit;
+    }
+    public void releaseAfterPayment() {
+        if (status != Status.PENDING_PAYMENT || episode.getStatus() != CareEpisode.Status.READY) {
+            throw new IllegalStateException("Confirmed payment is required");
+        }
+        status = Status.SCHEDULED;
+    }
+    public boolean isFollowUp() { return followUp; }
+    public Instant getStartedAt() { return startedAt; }
     public void reschedule(Instant date, Instant now) {
         ensureScheduled();
         validateDate(date, now);

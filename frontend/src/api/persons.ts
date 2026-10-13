@@ -66,4 +66,4 @@ export const updateMyProfile=(input:ProfileInput)=>apiRequest<MyProfile>('/perso
 
 export const searchPersons=(query:string,page=0)=>apiRequest<import('./organizations').Page<Person>>(`/persons?query=${encodeURIComponent(query)}&page=${page}&size=20`);
 
-export const createPerson=(input:{firstName:string;lastName:string;birthDate?:string;gender?:string})=>apiRequest<Person>('/persons',{method:'POST',body:JSON.stringify(input)});
+export const createPerson=(input:{firstName:string;lastName:string;birthDate?:string;gender?:string;contacts?:Omit<PersonContact,'id'>[]})=>apiRequest<Person>('/persons',{method:'POST',body:JSON.stringify(input)});

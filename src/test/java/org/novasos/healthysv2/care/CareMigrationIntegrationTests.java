@@ -20,6 +20,8 @@ class CareMigrationIntegrationTests {
         assertThat(jdbc.queryForObject("SELECT to_regclass('care.care_episode') IS NOT NULL AND to_regclass('care.care_visit') IS NOT NULL AND to_regclass('consultation.consultation') IS NOT NULL AND to_regclass('appointment.appointment') IS NOT NULL", Boolean.class)).isTrue();
         assertThat(jdbc.queryForObject("SELECT indexdef FROM pg_indexes WHERE schemaname='care' AND indexname='uq_care_visit_initial'", String.class))
                 .contains("UNIQUE").contains("follow_up").contains("CANCELLED");
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM information_schema.table_constraints WHERE table_schema='care' AND constraint_type='FOREIGN KEY'", Integer.class)).isEqualTo(4);
+        assertThat(jdbc.queryForObject("SELECT to_regclass('care.reception_intake') IS NOT NULL",Boolean.class)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='chk_visit_status' AND conrelid='care.care_visit'::regclass",String.class)).contains("PENDING_PAYMENT");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM information_schema.table_constraints WHERE table_schema='care' AND constraint_type='FOREIGN KEY'", Integer.class)).isEqualTo(7);
     }
 }

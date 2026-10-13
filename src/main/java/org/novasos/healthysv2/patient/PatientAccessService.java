@@ -12,9 +12,11 @@ public class PatientAccessService {
     private final JdbcTemplate jdbc;
     private final CurrentUserContext users;
     private final PatientAuditService audit;
+    private final org.novasos.healthysv2.licensing.api.LicensingAccess licensing;
+    private final PatientAccessPolicy policy;
 
-    PatientAccessService(JdbcTemplate jdbc, CurrentUserContext users, PatientAuditService audit) {
-        this.jdbc = jdbc; this.users = users; this.audit = audit;
+    PatientAccessService(JdbcTemplate jdbc, CurrentUserContext users, PatientAuditService audit, org.novasos.healthysv2.licensing.api.LicensingAccess licensing, PatientAccessPolicy policy) {
+        this.jdbc = jdbc; this.users = users; this.audit = audit; this.licensing=licensing; this.policy=policy;
     }
 
     @Transactional(readOnly = true)
@@ -27,7 +29,7 @@ public class PatientAccessService {
             throw exception;
         }
         AccessDecision decision = decide(user, patientId, normalize(scope), normalize(action));
-        audit.access(user.personId(), patientId, user.organizationId(), scope, patientId,
+        audit.access(user.personId(), "PATIENT_NOT_FOUND".equals(decision.reason())?null:patientId, user.organizationId(), scope, patientId,
                 decision.allowed() ? action : "DENIED", decision.reason(),
                 Map.of("allowed", decision.allowed(), "decision", decision.reason(), "roles", user.roles()));
         if (!decision.allowed()) throw new AccessDeniedException(decision.reason());
@@ -46,42 +48,37 @@ public class PatientAccessService {
                 // Invalid subjects must not be attributed to another local person.
             }
         }
-        audit.access(person, patientId, null, scope, patientId, "DENIED", reason,
+        audit.access(person, exists("select count(*) from patient.patient where id=?",patientId)?patientId:null, null, scope, patientId, "DENIED", reason,
                 Map.of("allowed", false, "decision", reason));
     }
 
     private AccessDecision decide(CurrentUserContext.UserContext user, UUID patientId, String scope, String action) {
         if (!exists("select count(*) from patient.patient where id=?", patientId)) return denied("PATIENT_NOT_FOUND");
-        if (user.has("PLATFORM_ADMIN")) return allowed("PLATFORM_ADMIN");
-        if (user.has("PATIENT") && user.personId()!=null && exists("select count(*) from patient.patient where id=? and person_id=?",patientId,user.personId())) return allowed("PATIENT_SELF");
-        if (user.has("HOSPITAL_ADMIN") && registered(patientId,user.organizationId())) return allowed("ORGANIZATION_ADMIN");
-        if (!user.hasAny("DOCTOR","NURSE","PHARMACIST","LAB_TECHNICIAN")) return denied("ROLE_NOT_AUTHORIZED");
-        if (user.personId()==null) return denied("PERSON_CONTEXT_MISSING");
-
-        UUID professional=jdbc.query("select id from professional.professional where person_id=? and status='ACTIVE' limit 1",rs->rs.next()?(UUID)rs.getObject(1):null,user.personId());
-        if (professional==null) return denied("PROFESSIONAL_PROFILE_MISSING");
-        if (user.organizationId()==null) return independent(user, patientId, professional, scope);
-        if (!exists("select count(*) from professional.professional_assignment where professional_id=? and organization_id=? and status='ACTIVE' and start_date<=current_date and (end_date is null or end_date>=current_date)",professional,user.organizationId())) return denied("PROFESSIONAL_NOT_ASSIGNED");
-        if (!registered(patientId,user.organizationId())) return denied("PATIENT_OTHER_ORGANIZATION");
-        if (!exists("select count(*) from patient.care_relationship where patient_id=? and professional_id=? and organization_id=? and status='ACTIVE' and start_date<=clock_timestamp() and (end_date is null or end_date>clock_timestamp())",patientId,professional,user.organizationId())) return denied("CARE_RELATIONSHIP_MISSING");
-        if (!exists("select count(*) from patient.consent where patient_id=? and status='ACTIVE' and revoked_at is null and granted_at<=clock_timestamp() and (expires_at is null or expires_at>clock_timestamp()) and (grantee_person_id=? or grantee_organization_id=?) and (scope=? or scope='FULL_RECORD')",patientId,user.personId(),user.organizationId(),scope)) return denied("CONSENT_MISSING_OR_INACTIVE");
-        return allowed("CARE_CONTEXT_AUTHORIZED");
+        if (user.personId()!=null && exists("select count(*) from patient.patient where id=? and person_id=?",patientId,user.personId())) return allowed("PATIENT_SELF");
+        if (!user.hasAny("DOCTOR","NURSE","HOSPITAL_ADMIN")) return denied("ROLE_NOT_AUTHORIZED");
+        if (user.personId()==null || user.organizationId()==null) return denied("LICENSED_ORGANIZATION_REQUIRED");
+        try { licensing.requireMember(user.organizationId()); licensing.requireActive(user.organizationId()); }
+        catch(AccessDeniedException e) {return denied("ORGANIZATION_LICENSE_OR_MEMBERSHIP_REQUIRED");}
+        if (exists("select count(*) from patient.access_grant where patient_id=? and person_id=? and organization_id=? and revoked_at is null and granted_at<=clock_timestamp() and expires_at>clock_timestamp() and (scope=? or scope='FULL_RECORD')",patientId,user.personId(),user.organizationId(),scope)) {
+            if (!exists("select count(*) from patient.access_revocation where patient_id=? and person_id=? and organization_id=?",patientId,user.personId(),user.organizationId()) || exists("select count(*) from patient.access_grant where patient_id=? and person_id=? and organization_id=? and source='EMERGENCY' and revoked_at is null and expires_at>clock_timestamp()",patientId,user.personId(),user.organizationId())) return allowed("TEMPORARY_GRANT");
+        }
+        if(exists("select count(*) from patient.access_revocation where patient_id=? and person_id=? and organization_id=?",patientId,user.personId(),user.organizationId())) return denied("PATIENT_REVOKED_ACCESS");
+        if (!user.hasAny("DOCTOR","NURSE")) return denied("CLINICAL_ROLE_REQUIRED");
+        UUID professional=jdbc.query("select id from professional.professional where person_id=? and status='ACTIVE' limit 1",rs->rs.next()?rs.getObject(1,UUID.class):null,user.personId());
+        if(professional==null) return denied("PROFESSIONAL_PROFILE_MISSING");
+        if(!exists("select count(*) from professional.professional_assignment where professional_id=? and organization_id=? and status='ACTIVE' and start_date<=current_date and (end_date is null or end_date>=current_date)",professional,user.organizationId())) return denied("PROFESSIONAL_NOT_ASSIGNED");
+        String participant = user.has("NURSE") ? "" : " and v.professional_id=?";
+        Object[] scheduled=user.has("NURSE")? new Object[]{patientId,user.organizationId(),policy.scheduledGrace.getSeconds()}:new Object[]{patientId,user.organizationId(),policy.scheduledGrace.getSeconds(),professional};
+        if(exists("select count(*) from care.care_visit v join care.care_episode e on e.id=v.episode_id where e.patient_id=? and e.organization_id=? and e.status in ('READY','ACTIVE') and v.status='SCHEDULED' and v.created_at<=clock_timestamp() and v.scheduled_at + ? * interval '1 second'>clock_timestamp()"+participant,scheduled)) return allowed("SCHEDULED_VISIT");
+        Object[] active=user.has("NURSE")?new Object[]{patientId,user.organizationId()}:new Object[]{patientId,user.organizationId(),professional};
+        if(exists("select count(*) from care.care_episode e join care.care_visit v on v.episode_id=e.id where e.patient_id=? and e.organization_id=? and e.status='ACTIVE' and e.started_at<=clock_timestamp() and e.expires_at>clock_timestamp() and v.status<>'CANCELLED'"+participant,active)) return allowed("ACTIVE_EPISODE");
+        // Legacy grants are still honored, but never indefinitely or without an effective expiry.
+        if(exists("select count(*) from patient.consent where patient_id=? and grantee_person_id=? and status='ACTIVE' and revoked_at is null and granted_at<=clock_timestamp() and expires_at>clock_timestamp() and (scope=? or scope='FULL_RECORD')",patientId,user.personId(),scope)) return allowed("PATIENT_CONSENT");
+        return denied("TEMPORARY_ACCESS_REQUIRED");
     }
 
-    private AccessDecision independent(CurrentUserContext.UserContext user, UUID patient,
-            UUID professional, String scope) {
-        if (!exists("select count(*) from patient.care_relationship where patient_id=? and professional_id=? and organization_id is null and status='ACTIVE' and start_date<=clock_timestamp() and (end_date is null or end_date>clock_timestamp())", patient, professional)) {
-            return denied("INDEPENDENT_CARE_RELATIONSHIP_MISSING");
-        }
-        if (!exists("select count(*) from patient.consent where patient_id=? and grantee_person_id=? and grantee_organization_id is null and status='ACTIVE' and revoked_at is null and granted_at<=clock_timestamp() and (expires_at is null or expires_at>clock_timestamp()) and (scope=? or scope='FULL_RECORD')", patient, user.personId(), scope)) {
-            return denied("CONSENT_MISSING_OR_INACTIVE");
-        }
-        return allowed("INDEPENDENT_CARE_CONTEXT_AUTHORIZED");
-    }
-
-    private boolean registered(UUID patient,UUID organization){return organization!=null&&exists("select count(*) from patient.patient_registration where patient_id=? and organization_id=? and status='ACTIVE'",patient,organization);}
     private boolean exists(String sql,Object...args){return Objects.requireNonNull(jdbc.queryForObject(sql,Integer.class,args))>0;}
-    private String normalize(String value){return value==null||value.isBlank()?"MEDICAL_RECORD":value.trim().toUpperCase();}
+    private String normalize(String value){if(value==null||value.isBlank())return "MEDICAL_RECORD";String normalized=value.trim().toUpperCase(java.util.Locale.ROOT);return switch(normalized){case "DOCUMENTS" -> "DOCUMENT";case "LAB_RESULTS","MATERNAL_HEALTH","PEDIATRIC_RECORD","PRESCRIPTIONS" -> "MEDICAL_RECORD";default -> normalized;};}
     private AccessDecision allowed(String reason){return new AccessDecision(true,reason,Instant.now());}private AccessDecision denied(String reason){return new AccessDecision(false,reason,Instant.now());}
     public record AccessDecision(boolean allowed,String reason,Instant decidedAt){}
 }
