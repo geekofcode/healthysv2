@@ -8,7 +8,7 @@ import java.util.UUID;
 @Entity
 @Table(name="care_visit", schema="care")
 public class CareVisit {
-    public enum Status { PENDING_PAYMENT, SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED }
+    public enum Status { PENDING_PAYMENT, AWAITING_SCHEDULING, SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED }
     @Id private UUID id;
     @ManyToOne(fetch=FetchType.LAZY, optional=false) @JoinColumn(name="episode_id", nullable=false)
     private CareEpisode episode;
@@ -20,6 +20,7 @@ public class CareVisit {
     @Column(name="completed_at") private Instant completedAt;
     @Column(name="created_at", nullable=false) private Instant createdAt;
     @Column(name="retention_expires_at", nullable=false) private Instant retentionExpiresAt;
+    @Column(name="slot_minutes", nullable=false) private int slotMinutes = 30;
     @Version private long version;
     protected CareVisit() {}
 
@@ -68,6 +69,39 @@ public class CareVisit {
         }
         status = Status.SCHEDULED;
     }
+    void markPaidForScheduling() {
+        if (status == Status.PENDING_PAYMENT) status = Status.AWAITING_SCHEDULING;
+    }
+    void suspendForOutstandingBalance() {
+        if (startedAt != null || status == Status.IN_PROGRESS || status == Status.COMPLETED) {
+            throw new IllegalStateException("Started visits cannot lose their payment eligibility");
+        }
+        if (status != Status.CANCELLED) status = Status.PENDING_PAYMENT;
+    }
+    void program(UUID professional, Instant date, int durationMinutes, Instant now) {
+        if(durationMinutes<1 || durationMinutes>240) throw new IllegalArgumentException("Invalid visit slot duration");
+        if (status != Status.SCHEDULED && status != Status.AWAITING_SCHEDULING) {
+            throw new IllegalStateException("Payment confirmation is required before programming");
+        }
+        validateDate(date, now);
+        if (status == Status.SCHEDULED && date.isBefore(scheduledAt)) {
+            throw new IllegalArgumentException("A scheduled visit can only be postponed");
+        }
+        if (followUp && (!episode.isActiveAt(now) || !episode.isActiveAt(date))) {
+            throw new IllegalStateException("Programming exceeds follow-up coverage");
+        }
+        if (!followUp && episode.getStatus() != CareEpisode.Status.READY) {
+            throw new IllegalStateException("Initial visit requires a paid episode");
+        }
+        professionalId = Objects.requireNonNull(professional);
+        scheduledAt = date;
+        slotMinutes = durationMinutes;
+        status = Status.SCHEDULED;
+    }
+    CareEpisode episode() { return episode; }
+    public long getVersion() { return version; }
+    public int getSlotMinutes() { return slotMinutes; }
+    public Instant getCreatedAt() { return createdAt; }
     public boolean isFollowUp() { return followUp; }
     public Instant getStartedAt() { return startedAt; }
     public void reschedule(Instant date, Instant now) {

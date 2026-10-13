@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional
 class BillingService {
-    private static final String[] BILLING_ROLES = {"HOSPITAL_ADMIN","HOSPITAL_AGENT","CASHIER","ACCOUNTANT"};
+    private static final String[] BILLING_ROLES = {"HOSPITAL_ADMIN","HOSPITAL_AGENT","NURSE","CASHIER","ACCOUNTANT"};
     private final InvoiceRepository invoices;
     private final PaymentRepository payments;
     private final JdbcTemplate jdbc;
@@ -26,16 +26,7 @@ class BillingService {
     }
 
     InvoiceResponse create(CreateInvoiceRequest request) {
-        authorizeWrite(request.organizationId()); validateContext(request);
-        Invoice invoice;
-        try {
-            invoice=Invoice.create(request.patientId(),request.organizationId(),request.encounterId(),request.currency(),request.dueAt());
-            request.items().forEach(item->invoice.addItem(item.itemType(),item.referenceId(),item.description(),
-                    item.quantity(),item.unitPrice(),item.taxAmount()));
-        } catch (IllegalArgumentException exception) {
-            throw rule("INVALID_INVOICE", "error.billing.invoice-values");
-        }
-        invoices.saveAndFlush(invoice); audit(invoice,"CREATE_INVOICE"); return response(invoice);
+        throw new ConflictException("CATALOGUE_INVOICE_REQUIRED", "Create a care invoice from establishment tariffs through /billing/care/episodes/{id}/invoice");
     }
 
     @Transactional(readOnly=true)
@@ -48,29 +39,21 @@ class BillingService {
     }
 
     InvoiceResponse issue(UUID id) {
-        var invoice=forWrite(id);
+        var invoice=forWrite(id); rejectCareLifecycle(id);
         try { invoice.issue(); invoices.flush(); audit(invoice,"ISSUE_INVOICE"); return response(invoice); }
         catch(IllegalStateException exception){throw rule("INVOICE_CANNOT_ISSUE","error.billing.cannot-issue");}
     }
 
     InvoiceResponse cancel(UUID id) {
-        var invoice=forWrite(id);
+        var invoice=forWrite(id); rejectCareLifecycle(id);
         try { invoice.cancel(); invoices.flush(); audit(invoice,"CANCEL_INVOICE"); return response(invoice); }
         catch(IllegalStateException exception){throw rule("INVOICE_CANNOT_CANCEL","error.billing.cannot-cancel");}
     }
 
     PaymentResponse recordPayment(UUID invoiceId,RecordPaymentRequest request) {
-        var invoice=forWrite(invoiceId);
-        try {
-            // Validate the method before changing the invoice balance or recording any payment.
-            String method = Payment.normalizeMethod(request.paymentMethod());
-            invoice.recordPayment(request.amount(),request.currency());
-            var payment=payments.save(Payment.complete(invoice.getId(),request.amount(),invoice.getCurrency(),
-                    method,request.provider(),request.externalTransactionId()));
-            invoices.flush(); payments.flush(); audit(invoice,"RECORD_PAYMENT"); audit(payment,invoice.getOrganizationId());
-            return payment(payment);
-        } catch(IllegalArgumentException exception){throw rule("INVALID_PAYMENT","error.billing.payment-values");}
-          catch(IllegalStateException exception){throw rule("INVOICE_NOT_PAYABLE","error.billing.not-payable");}
+        try { Payment.normalizeMethod(request.paymentMethod()); }
+        catch (IllegalArgumentException e) { throw rule("INVALID_PAYMENT", "error.billing.payment-values"); }
+        throw new ConflictException("IDEMPOTENT_CASH_REQUIRED", "Use /billing/care/invoices/{id}/cash with an Idempotency-Key");
     }
 
     @Transactional(readOnly=true)
@@ -113,7 +96,13 @@ class BillingService {
     }
 
     private InvoiceSummary summary(Invoice i){return new InvoiceSummary(i.getId(),i.getNumber(),i.getPatientId(),i.getOrganizationId(),i.getCurrency(),i.getTotalAmount(),i.getAmountPaid(),i.balance(),i.getIssuedAt(),i.getDueAt(),i.getStatus());}
-    private InvoiceResponse response(Invoice i){return new InvoiceResponse(i.getId(),i.getNumber(),i.getPatientId(),i.getOrganizationId(),i.getEncounterId(),i.getCurrency(),i.getSubtotal(),i.getTaxAmount(),i.getTotalAmount(),i.getAmountPaid(),i.balance(),i.getIssuedAt(),i.getDueAt(),i.getStatus(),i.getItems().stream().map(this::item).toList(),payments.findByInvoiceIdOrderByPaidAtDesc(i.getId()).stream().map(this::payment).toList());}
+    private InvoiceResponse response(Invoice i){return new InvoiceResponse(i.getId(),i.getNumber(),i.getPatientId(),i.getOrganizationId(),i.getEncounterId(),i.getCurrency(),i.getSubtotal(),i.getTaxAmount(),i.getTotalAmount(),i.getAmountPaid(),i.balance(),i.getIssuedAt(),i.getDueAt(),i.getStatus(),i.getItems().stream().map(this::item).toList(),payments.findByInvoiceIdOrderByPaidAtDesc(i.getId()).stream().map(this::payment).toList(),careEpisode(i.getId()));}
+    private void rejectCareLifecycle(UUID id) {
+        if (careEpisode(id) != null) throw new ConflictException("CARE_INVOICE_IMMUTABLE", "Care invoices are issued automatically and remain immutable; use traced cash refunds");
+    }
+    private UUID careEpisode(UUID invoiceId) {
+        return jdbc.query("select episode_id from billing.care_invoice where invoice_id=?",rs->rs.next()?(UUID)rs.getObject(1):null,invoiceId);
+    }
     private InvoiceItemResponse item(InvoiceItem i){return new InvoiceItemResponse(i.getId(),i.getType(),i.getReferenceId(),i.getDescription(),i.getQuantity(),i.getUnitPrice(),i.getTaxAmount(),i.getTotalAmount());}
     private PaymentResponse payment(Payment p){return new PaymentResponse(p.getId(),p.getNumber(),p.getInvoiceId(),p.getAmount(),p.getCurrency(),p.getMethod(),p.getPaidAt(),p.getStatus(),p.getTransactions().stream().map(t->new PaymentTransactionResponse(t.getId(),t.getProvider(),t.getExternalReference(),t.getType(),t.getAmount(),t.getStatus(),t.getOccurredAt())).toList());}
     private void audit(Invoice i,String action){jdbc.update("insert into audit.audit_log(actor_person_id,organization_id,module,entity_type,entity_id,action,new_value) values (?,?,?,?,?,?,?::jsonb)",users.current().personId(),i.getOrganizationId(),"BILLING","Invoice",i.getId(),action,"{\"status\":\""+i.getStatus()+"\",\"balance\":"+i.balance()+"}");}

@@ -176,7 +176,7 @@ public class ReceptionService {
     }
     private ReceptionDtos.Episode response(CareEpisode e,boolean includeIntake) {
         var summaries=visits.findByEpisodeIdOrderByCreatedAtAsc(e.getId()).stream().map(v ->
-                new ReceptionDtos.Visit(v.getId(),v.getProfessionalId(),v.getScheduledAt(),v.getStatus(),v.isFollowUp(),v.getStartedAt())).toList();
+                new ReceptionDtos.Visit(v.getId(),v.getProfessionalId(),v.getScheduledAt(),v.getStatus(),v.isFollowUp(),v.getStartedAt(),v.getVersion(),v.getSlotMinutes())).toList();
         ReceptionDtos.Intake intake=null;
         if(includeIntake) intake=loadIntake(e.getId());
         return new ReceptionDtos.Episode(e.getId(),e.getPatientId(),e.getOrganizationId(),e.getReason(),e.getSpecialityId(),

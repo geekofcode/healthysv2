@@ -8,7 +8,7 @@ export type InvoiceItem=InvoiceItemInput&{id:string;totalAmount:number};
 export type PaymentTransaction={id:string;provider?:string;externalTransactionId?:string;transactionType:string;amount:number;status:string;occurredAt:string};
 export type Payment={id:string;paymentNumber:string;invoiceId:string;amount:number;currency:string;paymentMethod:string;paidAt:string;status:string;transactions:PaymentTransaction[]};
 export type InvoiceSummary={id:string;invoiceNumber:string;patientId:string;organizationId:string;currency:string;totalAmount:number;amountPaid:number;balance:number;issuedAt:string;dueAt?:string;status:InvoiceStatus};
-export type Invoice=InvoiceSummary&{encounterId?:string;subtotal:number;taxAmount:number;items:InvoiceItem[];payments:Payment[]};
+export type Invoice=InvoiceSummary&{careEpisodeId?:string;encounterId?:string;subtotal:number;taxAmount:number;items:InvoiceItem[];payments:Payment[]};
 export type InvoiceFilters={patientId?:string;organizationId?:string;status?:string};
 export type PaymentInput={amount:number;currency:string;paymentMethod:'CASH'};
 

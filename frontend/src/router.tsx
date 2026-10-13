@@ -1,3 +1,5 @@
+import {AgendaEntryPage} from './pages/AgendaEntryPage';
+import {CareTariffsPage} from './pages/CareTariffsPage';
 import {CareEpisodeCreatePage,CareEpisodePage} from './pages/CareEpisodePage';
 import {PatientIdentityCreatePage,PatientIdentityPage} from './pages/PatientIdentityPage';
 import {MyTeamInvitationsPage} from './pages/MyTeamInvitationsPage';
@@ -88,7 +90,8 @@ export const router = createBrowserRouter([
           {path: '/patients/:id/access', element: <PatientAccessPage />},
           {path: '/care/episodes/new', element: <CareEpisodeCreatePage />},
           {path: '/care/episodes/:id', element: <CareEpisodePage />},
-          {path: '/agenda', element: <AgendaPage />},
+          {path: '/agenda', element: <AgendaEntryPage />},
+          {path: '/agenda/legacy', element: <AgendaPage />},
           {path: '/consultations', element: <ConsultationsPage />},
           {path: '/consultations/new', element: <ConsultationStartPage />},
           {path: '/consultations/:id', element: <ConsultationPage />},
@@ -106,6 +109,7 @@ export const router = createBrowserRouter([
           {path: '/pharmacy/prescriptions/:id', element: <PrescriptionDetailPage />},
           {path: '/pharmacy/stocks', element: <MedicationStocksPage />},
           {path: '/billing', element: <BillingPage />},
+          {path: '/billing/tariffs', element: <CareTariffsPage />},
           {path: '/billing/invoices/:id', element: <InvoiceDetailPage />},
           {path: '/admin', element: <AdminPlatformPage />},
           {path: '/admin/audit-security', element: <AuditSecurityDashboardPage />},

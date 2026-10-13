@@ -86,6 +86,18 @@ class Invoice {
         touch();
     }
 
+    void refund(BigDecimal amount, String refundCurrency) {
+        BigDecimal normalized = money(amount);
+        if (!Set.of("PAID", "PARTIALLY_PAID").contains(status)
+                || normalized.signum() <= 0 || normalized.compareTo(amountPaid) > 0
+                || !currency.equals(normalizeCurrency(refundCurrency))) {
+            throw new IllegalArgumentException("Invalid cash refund");
+        }
+        amountPaid = amountPaid.subtract(normalized);
+        status = amountPaid.signum() == 0 ? "ISSUED" : "PARTIALLY_PAID";
+        touch();
+    }
+
     BigDecimal balance() { return totalAmount.subtract(amountPaid); }
     private void recalculate() {
         subtotal = money(items.stream().map(InvoiceItem::subtotal).reduce(BigDecimal.ZERO, BigDecimal::add));

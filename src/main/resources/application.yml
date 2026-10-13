@@ -55,6 +55,7 @@ healthys:
     emergency-duration: ${PATIENT_ACCESS_EMERGENCY_DURATION:PT1H}
     scheduled-grace: ${PATIENT_ACCESS_SCHEDULED_GRACE:PT1H}
   care:
+    visit-slot-minutes: ${CARE_VISIT_SLOT_MINUTES:30}
     follow-up-duration: ${CARE_FOLLOW_UP_DURATION:PT168H}
     retention-years: ${DATA_RETENTION_YEARS:30}
   licensing:

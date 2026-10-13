@@ -15,11 +15,11 @@ const clinical = ['PLATFORM_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'];
 const staff = [...clinical, 'LAB_TECHNICIAN'];
 const routeRoles: Record<string, readonly string[]> = {
   organizations: [...staff, 'HOSPITAL_VIEWER'], professionals: [...staff, 'HOSPITAL_VIEWER'],
-  patients: [...clinical, 'HOSPITAL_AGENT'], care: [...clinical,'HOSPITAL_AGENT'], agenda: [...clinical, 'PATIENT'], consultations: clinical,
+  patients: [...clinical, 'HOSPITAL_AGENT'], care: [...clinical,'HOSPITAL_AGENT'], agenda: [...clinical, 'HOSPITAL_AGENT', 'PATIENT'], consultations: clinical,
   laboratory: staff, 'maternal-child': [...clinical, 'PATIENT'], documents: [...clinical, 'PATIENT'],
   chat: [...staff, 'PATIENT'], teleconsultations: [...clinical, 'PATIENT'],
   pharmacy: ['PLATFORM_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR'],
-  billing: ['PLATFORM_ADMIN', 'HOSPITAL_ADMIN', 'HOSPITAL_AGENT', 'CASHIER', 'ACCOUNTANT', 'PATIENT'], admin: ['PLATFORM_ADMIN'],
+  billing: ['PLATFORM_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'HOSPITAL_AGENT', 'CASHIER', 'ACCOUNTANT', 'PATIENT'], admin: ['PLATFORM_ADMIN'],
 };
 /** Shared by route guards and navigation; backend authorization remains authoritative. */
 export function canAccessPath(roles: readonly string[], path: string): boolean {

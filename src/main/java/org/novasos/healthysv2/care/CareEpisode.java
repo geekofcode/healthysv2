@@ -47,6 +47,13 @@ public class CareEpisode {
         status = Status.READY;
     }
 
+    void reopenPayment() {
+        if (startedAt != null || (status != Status.READY && status != Status.AWAITING_PAYMENT)) {
+            throw new IllegalStateException("Restitutions are only allowed before the first medical encounter");
+        }
+        status = Status.AWAITING_PAYMENT;
+    }
+
     void startVisit(UUID organization, boolean followUp, Instant now) {
         Objects.requireNonNull(now);
         if (now.isBefore(createdAt)) throw new IllegalArgumentException("Visit precedes episode creation");
