@@ -21,6 +21,7 @@ public class CareVisit {
     @Column(name="created_at", nullable=false) private Instant createdAt;
     @Column(name="retention_expires_at", nullable=false) private Instant retentionExpiresAt;
     @Column(name="slot_minutes", nullable=false) private int slotMinutes = 30;
+    @Column(columnDefinition="text") private String reason;
     @Version private long version;
     protected CareVisit() {}
 
@@ -98,6 +99,8 @@ public class CareVisit {
         slotMinutes = durationMinutes;
         status = Status.SCHEDULED;
     }
+    void specifyReason(String value) { reason = value == null || value.isBlank() ? episode.getReason() : value.trim(); }
+    public String getReason() { return reason == null ? episode.getReason() : reason; }
     CareEpisode episode() { return episode; }
     public long getVersion() { return version; }
     public int getSlotMinutes() { return slotMinutes; }

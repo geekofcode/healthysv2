@@ -23,7 +23,7 @@ public final class ReceptionDtos {
     public record ReceptionSpeciality(UUID id, String name) {}
     public record ReceptionOptions(List<ReceptionDoctor> doctors, List<ReceptionSpeciality> specialities) {}
     public record Visit(UUID id, UUID professionalId, Instant scheduledAt, CareVisit.Status status,
-            boolean followUp, Instant startedAt, long version, int slotMinutes) {}
+            boolean followUp, Instant startedAt, long version, int slotMinutes, String reason) {}
     public record Episode(UUID id, UUID patientId, UUID organizationId, String reason, UUID specialityId,
             CareEpisode.Status status, Instant createdAt, Instant startedAt, Instant expiresAt,
             long followUpSeconds, List<Visit> visits, Intake intake) {}

@@ -64,7 +64,7 @@ class BillingApiIntegrationTests {
         mvc.perform(get("/api/v1/invoices/{id}",id).header(HttpHeaders.AUTHORIZATION,"Bearer patient-"+own.subject)).andExpect(status().isOk());
         Graph other=graph();
         mvc.perform(get("/api/v1/invoices/{id}",id).header(HttpHeaders.AUTHORIZATION,"Bearer patient-"+other.subject)).andExpect(status().isForbidden());
-        mvc.perform(post("/api/v1/invoices/{id}/cancel",id).header(HttpHeaders.AUTHORIZATION,"Bearer admin"))
+        mvc.perform(post("/api/v1/invoices/{id}/cancel",id).header(HttpHeaders.AUTHORIZATION,"Bearer admin").header("X-Organization-ID",own.organization))
             .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("CARE_INVOICE_IMMUTABLE"));
     }
 

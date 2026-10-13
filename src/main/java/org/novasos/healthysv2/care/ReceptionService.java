@@ -119,6 +119,8 @@ public class ReceptionService {
         var episode = scoped(id, user.organizationId());
         jdbc.queryForObject("select id from care.care_episode where id=? and organization_id=? for update", UUID.class, id, user.organizationId());
         ensureReceptionOpen(episode);
+        Integer initial=jdbc.queryForObject("select count(*) from care.care_visit where episode_id=? and not follow_up and started_at is null and status<>'CANCELLED'",Integer.class,id);
+        if(initial==null || initial==0) throw rule("INTAKE_CLOSED","Use the new visit intake; the initial encounter has already started");
         var vital = request.vitals();
         if (vital.systolicBp()!=null && vital.diastolicBp()!=null && vital.systolicBp()<=vital.diastolicBp())
             throw rule("INVALID_BLOOD_PRESSURE", "Systolic pressure must exceed diastolic pressure");
@@ -176,14 +178,14 @@ public class ReceptionService {
     }
     private ReceptionDtos.Episode response(CareEpisode e,boolean includeIntake) {
         var summaries=visits.findByEpisodeIdOrderByCreatedAtAsc(e.getId()).stream().map(v ->
-                new ReceptionDtos.Visit(v.getId(),v.getProfessionalId(),v.getScheduledAt(),v.getStatus(),v.isFollowUp(),v.getStartedAt(),v.getVersion(),v.getSlotMinutes())).toList();
+                new ReceptionDtos.Visit(v.getId(),v.getProfessionalId(),v.getScheduledAt(),v.getStatus(),v.isFollowUp(),v.getStartedAt(),v.getVersion(),v.getSlotMinutes(),v.getReason())).toList();
         ReceptionDtos.Intake intake=null;
         if(includeIntake) intake=loadIntake(e.getId());
         return new ReceptionDtos.Episode(e.getId(),e.getPatientId(),e.getOrganizationId(),e.getReason(),e.getSpecialityId(),
                 e.getStatus(),e.getCreatedAt(),e.getStartedAt(),e.getExpiresAt(),e.getFollowUpSeconds(),summaries,intake);
     }
     private ReceptionDtos.Intake loadIntake(UUID id) {
-        return jdbc.query("select observations,vitals::text from care.reception_intake where episode_id=?",rs ->
+        return jdbc.query("select i.observations,i.vitals::text from care.visit_intake i join care.care_visit v on v.id=i.visit_id where v.episode_id=? and not v.follow_up and v.status<>'CANCELLED'",rs ->
                 rs.next()?new ReceptionDtos.Intake(rs.getString(1),decode(rs.getString(2))):null,id);
     }
     private String encode(Object value) {

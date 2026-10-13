@@ -16,7 +16,7 @@ export function BillingPage(){
  const reception=auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','NURSE');
  const money=(amount:number,currency:string)=>new Intl.NumberFormat(i18n.language,{style:'currency',currency}).format(amount);
  return <section>
-  <div className="page-heading"><div><p className="eyebrow">{t('billing.eyebrow')}</p><h1>{t('billing.title')}</h1></div><div className="card-actions">{staff&&<Link to="/billing/tariffs">{fr?'Tarifs de soins':'Care tariffs'}</Link>}{reception&&<Link to="/patients">{fr?'Accueillir un patient':'Receive patient'}</Link>}</div></div>
+  <div className="page-heading"><div><p className="eyebrow">{t('billing.eyebrow')}</p><h1>{t('billing.title')}</h1></div><div className="card-actions">{auth.hasAnyRole('CASHIER','ACCOUNTANT','HOSPITAL_ADMIN','PLATFORM_ADMIN')&&<Link to="/billing/cash">{fr?'Rapports et clôtures de caisse':'Cash reports and closures'}</Link>}{staff&&<Link to="/billing/tariffs">{fr?'Tarifs de soins':'Care tariffs'}</Link>}{reception&&<Link to="/patients">{fr?'Accueillir un patient':'Receive patient'}</Link>}</div></div>
   {reception&&<p>{fr?'La facture est générée depuis la prise en charge du patient, à partir des tarifs de l’établissement.':'Invoices are generated from the patient’s care episode using organization tariffs.'}</p>}
   <form className="search-form" onSubmit={event=>{event.preventDefault();setApplied(filters);setPage(0);}}>
 

@@ -51,6 +51,7 @@ logging:
 
 healthys:
   access:
+    in-progress-duration: ${CARE_IN_PROGRESS_ACCESS_DURATION:PT4H}
     request-duration: ${PATIENT_ACCESS_REQUEST_DURATION:PT48H}
     emergency-duration: ${PATIENT_ACCESS_EMERGENCY_DURATION:PT1H}
     scheduled-grace: ${PATIENT_ACCESS_SCHEDULED_GRACE:PT1H}
