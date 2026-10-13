@@ -8,16 +8,14 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
-
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.novasos.healthysv2.shared.api.dto.PageResponse;
 import org.novasos.healthysv2.shared.api.error.BusinessRuleException;
 import org.novasos.healthysv2.shared.api.error.ResourceNotFoundException;
 import org.springframework.data.domain.Pageable;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,245 +23,256 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional
 public class NotificationService {
-    private final org.novasos.healthysv2.identity.api.IdentityProvisioningService identities;
-    private final JdbcTemplate jdbc;
-    private final NotificationRepository repository;
-    private final PushDevices devices;
-    private final SimpMessagingTemplate broker;
+  private final org.novasos.healthysv2.identity.api.IdentityProvisioningService identities;
+  private final JdbcTemplate jdbc;
+  private final NotificationRepository repository;
+  private final PushDevices devices;
 
-    NotificationService(
-            JdbcTemplate jdbc,
-            NotificationRepository repository,
-            PushDevices devices,
-            SimpMessagingTemplate broker,
-            org.novasos.healthysv2.identity.api.IdentityProvisioningService identities) {
-        this.identities = identities;
-        this.jdbc = jdbc;
-        this.repository = repository;
-        this.devices = devices;
-        this.broker = broker;
+  NotificationService(
+      JdbcTemplate jdbc,
+      NotificationRepository repository,
+      PushDevices devices,
+      org.novasos.healthysv2.identity.api.IdentityProvisioningService identities) {
+    this.identities = identities;
+    this.jdbc = jdbc;
+    this.repository = repository;
+    this.devices = devices;
+  }
+
+  public List<NotificationResponse> create(CreateNotificationRequest request) {
+    UUID actor = requireCurrentPerson();
+    String type = normalize(request.type());
+    String priority = request.priority() == null ? "NORMAL" : normalize(request.priority());
+    if (!type.matches("[A-Z0-9_]{2,80}")) {
+      throw rule("INVALID_NOTIFICATION_TYPE", "error.notification.type");
     }
+    if (request.expiresAt() != null && !request.expiresAt().isAfter(Instant.now())) {
+      throw rule("INVALID_NOTIFICATION_EXPIRATION", "error.notification.expiration");
+    }
+    request.recipientPersonIds().forEach(this::requirePerson);
 
-    public List<NotificationResponse> create(CreateNotificationRequest request) {
-        UUID actor = requireCurrentPerson();
-        String type = normalize(request.type());
-        String priority = request.priority() == null ? "NORMAL" : normalize(request.priority());
-        if (!type.matches("[A-Z0-9_]{2,80}")) {
-            throw rule("INVALID_NOTIFICATION_TYPE", "error.notification.type");
-        }
-        if (request.expiresAt() != null && !request.expiresAt().isAfter(Instant.now())) {
-            throw rule("INVALID_NOTIFICATION_EXPIRATION", "error.notification.expiration");
-        }
-        request.recipientPersonIds().forEach(this::requirePerson);
+    UUID id = UUID.randomUUID();
+    jdbc.update(
+        "insert into"
+            + " notification.notification(id,type,title,body,resource_type,resource_id,action_url,priority,expires_at,status)"
+            + " values (?,?,?,?,?,?,?,?,?,'CREATED')",
+        id,
+        type,
+        blank(request.title()),
+        request.body().trim(),
+        blank(request.resourceType()),
+        request.resourceId(),
+        blank(request.actionUrl()),
+        priority,
+        timestamp(request.expiresAt()));
+    for (UUID recipient : request.recipientPersonIds()) {
+      jdbc.update(
+          "insert into notification.notification_recipient(notification_id,person_id) values (?,?)",
+          id,
+          recipient);
+      jdbc.update(
+          "insert into"
+              + " notification.notification_delivery(notification_id,person_id,channel,provider,sent_at,delivered_at,status)"
+              + " select ?,?,'IN_APP','HEALTHYS',now(),now(),'DELIVERED' where coalesce((select"
+              + " in_app_enabled from notification.notification_preference where"
+              + " person_id=?),true)",
+          id,
+          recipient,
+          recipient);
+    }
+    devices.enqueue(id);
+    audit(actor, id, "CREATE_NOTIFICATION");
 
-        UUID id = UUID.randomUUID();
+    return request.recipientPersonIds().stream()
+        .map(recipient -> repository.findForRecipient(id, recipient).orElseThrow())
+        .toList();
+  }
+
+  public PageResponse<NotificationResponse> list(
+      boolean unreadOnly, String type, Pageable pageable) {
+    return repository.findForRecipient(requireCurrentPerson(), unreadOnly, type, pageable);
+  }
+
+  public UnreadCountResponse unreadCount() {
+    return new UnreadCountResponse(repository.unreadCount(requireCurrentPerson()));
+  }
+
+  public NotificationResponse markRead(UUID notificationId) {
+    UUID person = requireCurrentPerson();
+    int changed =
         jdbc.update(
-                "insert into notification.notification(id,type,title,body,resource_type,resource_id,action_url,priority,expires_at,status) values (?,?,?,?,?,?,?,?,?,'CREATED')",
-                id,
-                type,
-                blank(request.title()),
-                request.body().trim(),
-                blank(request.resourceType()),
-                request.resourceId(),
-                blank(request.actionUrl()),
-                priority,
-                timestamp(request.expiresAt()));
-        for (UUID recipient : request.recipientPersonIds()) {
-            jdbc.update(
-                    "insert into notification.notification_recipient(notification_id,person_id) values (?,?)",
-                    id,
-                    recipient);
-            jdbc.update(
-                    "insert into notification.notification_delivery(notification_id,person_id,channel,provider,sent_at,delivered_at,status) select ?,?,'IN_APP','HEALTHYS',now(),now(),'DELIVERED' where coalesce((select in_app_enabled from notification.notification_preference where person_id=?),true)",
-                    id,
-                    recipient,
-                    recipient);
-        }
-        devices.enqueue(id);
-        audit(actor, id, "CREATE_NOTIFICATION");
-
-        return request.recipientPersonIds().stream().map(recipient -> {
-            NotificationResponse response = repository.findForRecipient(id, recipient).orElseThrow();
-            if (repository.preferences(recipient).inAppEnabled()) {
-                afterCommit(() -> broker.convertAndSend("/topic/notifications/" + recipient, response));
-            }
-            return response;
-        }).toList();
+            "update notification.notification_recipient set read_at=coalesce(read_at,now()) where"
+                + " notification_id=? and person_id=?",
+            notificationId,
+            person);
+    if (changed == 0) {
+      throw new ResourceNotFoundException("Notification", notificationId);
     }
+    audit(person, notificationId, "READ_NOTIFICATION");
+    return repository.findForRecipient(notificationId, person).orElseThrow();
+  }
 
-    public PageResponse<NotificationResponse> list(boolean unreadOnly, String type, Pageable pageable) {
-        return repository.findForRecipient(requireCurrentPerson(), unreadOnly, type, pageable);
-    }
-
-    public UnreadCountResponse unreadCount() {
-        return new UnreadCountResponse(repository.unreadCount(requireCurrentPerson()));
-    }
-
-    public NotificationResponse markRead(UUID notificationId) {
-        UUID person = requireCurrentPerson();
-        int changed = jdbc.update(
-                "update notification.notification_recipient set read_at=coalesce(read_at,now()) where notification_id=? and person_id=?",
-                notificationId,
-                person);
-        if (changed == 0) {
-            throw new ResourceNotFoundException("Notification", notificationId);
-        }
-        audit(person, notificationId, "READ_NOTIFICATION");
-        return repository.findForRecipient(notificationId, person).orElseThrow();
-    }
-
-    public MarkAllReadResponse markAllRead() {
-        UUID person = requireCurrentPerson();
-        int changed = jdbc.update(
-                "update notification.notification_recipient nr set read_at=now() from notification.notification n where nr.notification_id=n.id and nr.person_id=? and nr.read_at is null and (n.expires_at is null or n.expires_at>now())",
-                person);
-        audit(person, person, "READ_ALL_NOTIFICATIONS");
-        return new MarkAllReadResponse(changed);
-    }
-
-    public NotificationPreferencesResponse preferences() {
-        return repository.preferences(requireCurrentPerson());
-    }
-
-    public NotificationPreferencesResponse updatePreferences(UpdateNotificationPreferencesRequest request) {
-        UUID person = requireCurrentPerson();
-        if (!request.hasConsistentQuietHours()) {
-            throw rule("INVALID_QUIET_HOURS", "error.notification.quiet-hours");
-        }
+  public MarkAllReadResponse markAllRead() {
+    UUID person = requireCurrentPerson();
+    int changed =
         jdbc.update(
-                "insert into notification.notification_preference(person_id,in_app_enabled,email_enabled,sms_enabled,push_enabled,quiet_hours_start,quiet_hours_end,locale,updated_at) values (?,?,?,?,?,?,?,?,now()) on conflict(person_id) do update set in_app_enabled=excluded.in_app_enabled,email_enabled=excluded.email_enabled,sms_enabled=excluded.sms_enabled,push_enabled=excluded.push_enabled,quiet_hours_start=excluded.quiet_hours_start,quiet_hours_end=excluded.quiet_hours_end,locale=excluded.locale,updated_at=now()",
-                person,
-                request.inAppEnabled(),
-                request.emailEnabled(),
-                request.smsEnabled(),
-                request.pushEnabled(),
-                request.quietHoursStart() == null ? null : Time.valueOf(request.quietHoursStart()),
-                request.quietHoursEnd() == null ? null : Time.valueOf(request.quietHoursEnd()),
-                request.locale());
-        audit(person, person, "UPDATE_NOTIFICATION_PREFERENCES");
-        return repository.preferences(person);
+            "update notification.notification_recipient nr set read_at=now() from"
+                + " notification.notification n where nr.notification_id=n.id and nr.person_id=?"
+                + " and nr.read_at is null and (n.expires_at is null or n.expires_at>now())",
+            person);
+    audit(person, person, "READ_ALL_NOTIFICATIONS");
+    return new MarkAllReadResponse(changed);
+  }
+
+  public NotificationPreferencesResponse preferences() {
+    return repository.preferences(requireCurrentPerson());
+  }
+
+  public NotificationPreferencesResponse updatePreferences(
+      UpdateNotificationPreferencesRequest request) {
+    UUID person = requireCurrentPerson();
+    if (!request.hasConsistentQuietHours()) {
+      throw rule("INVALID_QUIET_HOURS", "error.notification.quiet-hours");
     }
+    jdbc.update(
+        "insert into"
+            + " notification.notification_preference(person_id,in_app_enabled,email_enabled,sms_enabled,push_enabled,quiet_hours_start,quiet_hours_end,locale,updated_at)"
+            + " values (?,?,?,?,?,?,?,?,now()) on conflict(person_id) do update set"
+            + " in_app_enabled=excluded.in_app_enabled,email_enabled=excluded.email_enabled,sms_enabled=excluded.sms_enabled,push_enabled=excluded.push_enabled,quiet_hours_start=excluded.quiet_hours_start,quiet_hours_end=excluded.quiet_hours_end,locale=excluded.locale,updated_at=now()",
+        person,
+        request.inAppEnabled(),
+        request.emailEnabled(),
+        request.smsEnabled(),
+        request.pushEnabled(),
+        request.quietHoursStart() == null ? null : Time.valueOf(request.quietHoursStart()),
+        request.quietHoursEnd() == null ? null : Time.valueOf(request.quietHoursEnd()),
+        request.locale());
+    audit(person, person, "UPDATE_NOTIFICATION_PREFERENCES");
+    return repository.preferences(person);
+  }
 
-    public boolean maySubscribe(Authentication authentication, UUID targetPerson) {
-        try {
-            return Objects.equals(personId(authentication), targetPerson);
-        } catch (RuntimeException exception) {
-            return false;
-        }
+  public boolean maySubscribe(Authentication authentication, UUID targetPerson) {
+    try {
+      return Objects.equals(personId(authentication), targetPerson);
+    } catch (RuntimeException exception) {
+      return false;
     }
+  }
 
-    private void afterCommit(Runnable action) {
-        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
-            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
-                    new org.springframework.transaction.support.TransactionSynchronization() {
-                        @Override public void afterCommit() { action.run(); }
-                    });
-        } else {
-            action.run();
-        }
+  private UUID personId(Authentication authentication) {
+    if (!(authentication instanceof JwtAuthenticationToken jwt)) {
+      throw new AccessDeniedException("JWT_REQUIRED");
     }
-
-    private UUID personId(Authentication authentication) {
-        if (!(authentication instanceof JwtAuthenticationToken jwt)) {
-            throw new AccessDeniedException("JWT_REQUIRED");
-        }
-        UUID subject;
-        if (jwt.getToken().getSubject() == null) throw new AccessDeniedException("INVALID_SUBJECT");
-        try {
-            subject = UUID.fromString(jwt.getToken().getSubject());
-        } catch (IllegalArgumentException exception) {
-            throw new AccessDeniedException("INVALID_SUBJECT");
-        }
-        UUID person = jdbc.query(
-                "select id from identity.person where keycloak_user_id=? and status='ACTIVE' limit 1",
-                rs -> rs.next() ? (UUID) rs.getObject(1) : null,
-                subject);
-        if (person == null) {
-            var token = jwt.getToken();
-            person = identities.provisionIdentity(subject,
-                    token.getClaimAsString("given_name"),
-                    token.getClaimAsString("family_name"),
-                    token.getClaimAsString("email"),
-                    Boolean.TRUE.equals(token.getClaimAsBoolean("email_verified"))).id();
-            requirePerson(person);
-        }
-        synchronizeAdministratorAudience(authentication, person);
-        return person;
+    UUID subject;
+    if (jwt.getToken().getSubject() == null) throw new AccessDeniedException("INVALID_SUBJECT");
+    try {
+      subject = UUID.fromString(jwt.getToken().getSubject());
+    } catch (IllegalArgumentException exception) {
+      throw new AccessDeniedException("INVALID_SUBJECT");
     }
-
-    private void synchronizeAdministratorAudience(Authentication authentication, UUID person) {
-        boolean admin = authentication.getAuthorities().stream()
-                .anyMatch(authority -> "ROLE_PLATFORM_ADMIN".equals(authority.getAuthority()));
-        if (admin) {
-            jdbc.update("""
-                with recipients as (
-                    insert into notification.notification_recipient(notification_id,person_id)
-                    select audience.notification_id,? from notification.notification_audience audience
-                    join notification.notification n on n.id=audience.notification_id
-                    where n.expires_at is null or n.expires_at>now()
-                    on conflict(notification_id,person_id) do nothing
-                    returning notification_id,person_id
-                )
-                insert into notification.notification_delivery(notification_id,person_id,channel,provider,sent_at,delivered_at,status)
-                select notification_id,person_id,'IN_APP','HEALTHYS',now(),now(),'DELIVERED' from recipients
-                where coalesce((select in_app_enabled from notification.notification_preference where person_id=?),true)
-                """, person, person);
-        } else {
-            // A demoted administrator must no longer retrieve privileged announcements.
-            jdbc.update("""
-                delete from notification.notification_recipient recipient
-                using notification.notification_audience audience
-                where recipient.notification_id=audience.notification_id and recipient.person_id=?
-                """, person);
-        }
+    UUID person =
+        jdbc.query(
+            "select id from identity.person where keycloak_user_id=? and status='ACTIVE' limit 1",
+            rs -> rs.next() ? (UUID) rs.getObject(1) : null,
+            subject);
+    if (person == null) {
+      var token = jwt.getToken();
+      person =
+          identities
+              .provisionIdentity(
+                  subject,
+                  token.getClaimAsString("given_name"),
+                  token.getClaimAsString("family_name"),
+                  token.getClaimAsString("email"),
+                  Boolean.TRUE.equals(token.getClaimAsBoolean("email_verified")))
+              .id();
+      requirePerson(person);
     }
+    synchronizeAdministratorAudience(authentication, person);
+    return person;
+  }
 
-    private UUID requireCurrentPerson() {
-        return personId(SecurityContextHolder.getContext().getAuthentication());
+  private void synchronizeAdministratorAudience(Authentication authentication, UUID person) {
+    boolean admin =
+        authentication.getAuthorities().stream()
+            .anyMatch(authority -> "ROLE_PLATFORM_ADMIN".equals(authority.getAuthority()));
+    if (admin) {
+      jdbc.update(
+          """
+          with recipients as (
+              insert into notification.notification_recipient(notification_id,person_id)
+              select audience.notification_id,? from notification.notification_audience audience
+              join notification.notification n on n.id=audience.notification_id
+              where n.expires_at is null or n.expires_at>now()
+              on conflict(notification_id,person_id) do nothing
+              returning notification_id,person_id
+          )
+          insert into notification.notification_delivery(notification_id,person_id,channel,provider,sent_at,delivered_at,status)
+          select notification_id,person_id,'IN_APP','HEALTHYS',now(),now(),'DELIVERED' from recipients
+          where coalesce((select in_app_enabled from notification.notification_preference where person_id=?),true)
+          """,
+          person,
+          person);
+    } else {
+      // A demoted administrator must no longer retrieve privileged announcements.
+      jdbc.update(
+          """
+          delete from notification.notification_recipient recipient
+          using notification.notification_audience audience
+          where recipient.notification_id=audience.notification_id and recipient.person_id=?
+          """,
+          person);
     }
+  }
 
-    public NotificationResponse find(UUID id) {
-        NotificationResponse response = repository.findForRecipient(id, requireCurrentPerson())
-                .orElseThrow(() -> new ResourceNotFoundException("Notification", id));
-        if (response.expiresAt() != null && !response.expiresAt().isAfter(Instant.now())) {
-            throw new ResourceNotFoundException("Notification", id);
-        }
-        return response;
+  private UUID requireCurrentPerson() {
+    return personId(SecurityContextHolder.getContext().getAuthentication());
+  }
+
+  public NotificationResponse find(UUID id) {
+    NotificationResponse response =
+        repository
+            .findForRecipient(id, requireCurrentPerson())
+            .orElseThrow(() -> new ResourceNotFoundException("Notification", id));
+    if (response.expiresAt() != null && !response.expiresAt().isAfter(Instant.now())) {
+      throw new ResourceNotFoundException("Notification", id);
     }
+    return response;
+  }
 
-
-
-    private void requirePerson(UUID person) {
-        Integer count = jdbc.queryForObject(
-                "select count(*) from identity.person where id=? and status='ACTIVE'",
-                Integer.class,
-                person);
-        if (count == null || count == 0) {
-            throw new ResourceNotFoundException("Person", person);
-        }
+  private void requirePerson(UUID person) {
+    Integer count =
+        jdbc.queryForObject(
+            "select count(*) from identity.person where id=? and status='ACTIVE'",
+            Integer.class,
+            person);
+    if (count == null || count == 0) {
+      throw new ResourceNotFoundException("Person", person);
     }
+  }
 
-    private void audit(UUID actor, UUID entity, String action) {
-        jdbc.update(
-                "insert into audit.audit_log(actor_person_id,module,entity_type,entity_id,action) values (?,'NOTIFICATION','Notification',?,?)",
-                actor,
-                entity,
-                action);
-    }
+  private void audit(UUID actor, UUID entity, String action) {
+    jdbc.update(
+        "insert into audit.audit_log(actor_person_id,module,entity_type,entity_id,action) values"
+            + " (?,'NOTIFICATION','Notification',?,?)",
+        actor,
+        entity,
+        action);
+  }
 
-    private Timestamp timestamp(Instant value) {
-        return value == null ? null : Timestamp.from(value);
-    }
+  private Timestamp timestamp(Instant value) {
+    return value == null ? null : Timestamp.from(value);
+  }
 
-    private String normalize(String value) {
-        return value == null ? "" : value.trim().toUpperCase();
-    }
+  private String normalize(String value) {
+    return value == null ? "" : value.trim().toUpperCase();
+  }
 
-    private String blank(String value) {
-        return value == null || value.isBlank() ? null : value.trim();
-    }
+  private String blank(String value) {
+    return value == null || value.isBlank() ? null : value.trim();
+  }
 
-    private BusinessRuleException rule(String code, String messageKey) {
-        return new BusinessRuleException(code, messageKey);
-    }
+  private BusinessRuleException rule(String code, String messageKey) {
+    return new BusinessRuleException(code, messageKey);
+  }
 }

@@ -17,14 +17,8 @@ class ModularArchitectureTests {
     }
 
     @Test
-    void exposesPrescriptionContractWithoutSharingJpaEntities() throws ClassNotFoundException {
-        Class<?> contract = Class.forName("org.novasos.healthysv2.prescription.PrescriptionDispensing");
+    void keepsPrescriptionPersistencePrivate() throws ClassNotFoundException {
         Class<?> prescription = Class.forName("org.novasos.healthysv2.prescription.Prescription");
-        Class<?> dispense = Class.forName("org.novasos.healthysv2.pharmacy.Dispense");
-
-        assertThat(Modifier.isPublic(contract.getModifiers())).isTrue();
         assertThat(Modifier.isPublic(prescription.getModifiers())).isFalse();
-        assertThat(dispense.getDeclaredFields())
-                .noneMatch(field -> field.getType().getPackageName().equals("org.novasos.healthysv2.prescription"));
     }
 }

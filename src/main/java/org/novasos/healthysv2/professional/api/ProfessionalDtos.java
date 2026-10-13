@@ -18,9 +18,9 @@ public final class ProfessionalDtos {
 
     public record ProfessionalRequest(@NotNull UUID personId,
             @NotBlank @Size(max=50) String professionalNumber,
-            @NotBlank @Size(max=50) String professionalType,
+            @NotBlank @jakarta.validation.constraints.Pattern(regexp="DOCTOR|MEDECIN|NURSE") @Size(max=50) String professionalType,
             @Size(max=30) String status) {}
-    public record ProfessionalUpdateRequest(@NotBlank @Size(max=50) String professionalType,
+    public record ProfessionalUpdateRequest(@NotBlank @jakarta.validation.constraints.Pattern(regexp="DOCTOR|MEDECIN|NURSE") @Size(max=50) String professionalType,
             @Size(max=30) String status) {}
     public record LicenseRequest(@NotBlank @Size(max=100) String licenseNumber,
             @Size(max=255) String issuingAuthority, UUID countryId,

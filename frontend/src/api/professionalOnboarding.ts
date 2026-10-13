@@ -1,6 +1,6 @@
 import {apiRequest} from './client';
 import {validAccessToken} from '../auth/keycloak';
-export type Profession='medecin'|'nurse'|'laboratoire';
+export type Profession='medecin'|'nurse';
 export type IdentityDocumentType='PASSPORT'|'NATIONAL_ID'|'DRIVING_LICENSE';
 export type DocumentKind='ID_FRONT'|'ID_BACK'|'LICENSE';
 export type DossierInput={profession:Profession;licenseNumber:string;issuingAuthority:string;countryId:string;specialityCatalogId?:string;specialityName?:string;identityDocumentType?:IdentityDocumentType;identityDocumentNumber?:string;identityExpiresOn?:string};

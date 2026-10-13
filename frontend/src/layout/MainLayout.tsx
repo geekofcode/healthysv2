@@ -83,12 +83,7 @@ export function MainLayout() {
           {canAccessPath(auth.roles, '/patients')&&<NavLink to="/patients">{t('nav.patients')}</NavLink>}
           {canAccessPath(auth.roles, '/agenda')&&<NavLink to="/agenda">{t('nav.agenda')}</NavLink>}
           {canAccessPath(auth.roles, '/consultations')&&<NavLink to="/consultations">{t('nav.consultations')}</NavLink>}
-          {canAccessPath(auth.roles, '/laboratory/orders')&&<NavLink to="/laboratory/orders">{t('nav.laboratory')}</NavLink>}
-          {canAccessPath(auth.roles, '/maternal-child')&&<NavLink to="/maternal-child">{t('nav.maternalChild')}</NavLink>}
           {canAccessPath(auth.roles, '/documents')&&<NavLink to="/documents">{t('nav.documents')}</NavLink>}
-          {canAccessPath(auth.roles, '/chat')&&<NavLink to="/chat">{t('nav.chat')}</NavLink>}
-          {canAccessPath(auth.roles, '/teleconsultations')&&<NavLink to="/teleconsultations">{t('nav.teleconsultations')}</NavLink>}
-          {canAccessPath(auth.roles, '/pharmacy/prescriptions')&&<NavLink to="/pharmacy/prescriptions">{t('nav.pharmacy')}</NavLink>}
           {canAccessPath(auth.roles, '/billing')&&<NavLink to="/billing">{t('nav.billing')}</NavLink>}
           {canAccessPath(auth.roles, '/admin')&&<NavLink to="/admin/licensing-plans">{i18n.language.startsWith('fr')?'Offres et licences':'Plans and licenses'}</NavLink>}
           {canAccessPath(auth.roles, '/admin')&&<NavLink to="/admin">{t('nav.admin')}</NavLink>}

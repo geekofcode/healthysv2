@@ -1,6 +1,6 @@
 const realmRoleMapping: Record<string, string> = {
   admin: 'PLATFORM_ADMIN', comptable: 'ACCOUNTANT', gestionnaire: 'HOSPITAL_VIEWER',
-  hopital: 'HOSPITAL_ADMIN', laboratoire: 'LAB_TECHNICIAN', medecin: 'DOCTOR',
+  hopital: 'HOSPITAL_ADMIN', medecin: 'DOCTOR',
   nurse: 'NURSE', patient: 'PATIENT',
   caissier: 'CASHIER', cashier: 'CASHIER', CASHIER: 'CASHIER',
   hospital_agent: 'HOSPITAL_AGENT', HOSPITAL_AGENT: 'HOSPITAL_AGENT',
@@ -12,13 +12,11 @@ export function applicationRoles(realmRoles: readonly string[]): string[] {
   ))];
 }
 const clinical = ['PLATFORM_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'];
-const staff = [...clinical, 'LAB_TECHNICIAN'];
+const staff = clinical;
 const routeRoles: Record<string, readonly string[]> = {
   organizations: [...staff, 'HOSPITAL_VIEWER'], professionals: [...staff, 'HOSPITAL_VIEWER'],
   patients: [...clinical, 'HOSPITAL_AGENT'], care: [...clinical,'HOSPITAL_AGENT'], agenda: [...clinical, 'HOSPITAL_AGENT', 'PATIENT'], consultations: clinical,
-  laboratory: staff, 'maternal-child': [...clinical, 'PATIENT'], documents: [...clinical, 'PATIENT'],
-  chat: [...staff, 'PATIENT'], teleconsultations: [...clinical, 'PATIENT'],
-  pharmacy: ['PLATFORM_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR'],
+  documents: [...clinical, 'PATIENT'],
   billing: ['PLATFORM_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'HOSPITAL_AGENT', 'CASHIER', 'ACCOUNTANT', 'PATIENT'], admin: ['PLATFORM_ADMIN'],
 };
 /** Shared by route guards and navigation; backend authorization remains authoritative. */

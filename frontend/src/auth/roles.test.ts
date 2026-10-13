@@ -3,12 +3,12 @@ import {applicationRoles, canAccessPath, effectiveApplicationRoles} from './role
 describe('Keycloak application roles', () => {
   it.each([
     ['admin', 'PLATFORM_ADMIN'], ['comptable', 'ACCOUNTANT'], ['gestionnaire', 'HOSPITAL_VIEWER'],
-    ['hopital', 'HOSPITAL_ADMIN'], ['laboratoire', 'LAB_TECHNICIAN'], ['medecin', 'DOCTOR'],
+    ['hopital', 'HOSPITAL_ADMIN'], ['medecin', 'DOCTOR'],
     ['nurse', 'NURSE'], ['patient', 'PATIENT'], ['caissier', 'CASHIER'],
     ['cashier', 'CASHIER'], ['CASHIER', 'CASHIER'], ['hospital_agent', 'HOSPITAL_AGENT'], ['HOSPITAL_AGENT', 'HOSPITAL_AGENT'],
   ])('maps %s explicitly to %s', (realmRole, role) => expect(applicationRoles([realmRole])).toEqual([role]));
   it('ignores technical and unknown roles without assigning pharmacist privileges', () => {
-    expect(applicationRoles(['default-roles-healthys', 'offline_access', 'PHARMACIST', 'toString'])).toEqual([]);
+    expect(applicationRoles(['default-roles-healthys', 'offline_access', 'PHARMACIST', 'laboratoire', 'LAB_TECHNICIAN', 'toString'])).toEqual([]);
   });
   it('allows hospital readers to read but not mutate or access clinical records', () => {
     const roles = applicationRoles(['gestionnaire']);
@@ -21,7 +21,7 @@ describe('Keycloak application roles', () => {
   it('shows patient services without organization administration', () => {
     const roles = applicationRoles(['patient']);
     expect(canAccessPath(roles, '/agenda')).toBe(true);
-    expect(canAccessPath(roles, '/teleconsultations')).toBe(true);
+    expect(canAccessPath(roles, '/teleconsultations')).toBe(false);
     expect(canAccessPath(roles, '/organizations')).toBe(false);
     expect(canAccessPath(roles, '/admin')).toBe(false);
   });
@@ -50,4 +50,9 @@ it('allows nurse reception and cashier billing without cashier clinical access',
 it('adds only trusted selected organization membership roles',()=>{
  expect(effectiveApplicationRoles(['PATIENT'],[{organizationId:'a',role:'HOSPITAL_ADMIN'},{organizationId:'b',role:'CASHIER'},{organizationId:'b',role:'PLATFORM_ADMIN'}],'b')).toEqual(['PATIENT','CASHIER']);
  expect(effectiveApplicationRoles(['PATIENT'],[{organizationId:'a',role:'HOSPITAL_ADMIN'}],'independent')).toEqual(['PATIENT']);
+});
+
+
+it.each(['/teleconsultations', '/teleconsultations/session', '/maternal-child', '/maternal-child/pregnancies/p', '/laboratory/orders', '/pharmacy/stocks', '/pharmacy/prescriptions', '/chat'])('excludes retired modules for every role, including platform administration: %s', path => {
+  expect(canAccessPath(['PLATFORM_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'PATIENT', 'LAB_TECHNICIAN', 'PHARMACIST'], path)).toBe(false);
 });

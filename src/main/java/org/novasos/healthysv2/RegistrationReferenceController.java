@@ -41,8 +41,7 @@ class RegistrationReferenceController {
                         row.getString("code"), row.getString("name")));
         return new RegistrationOptions(countries, specialities, List.of(
                 new Profession("medecin", "Doctor", "Médecin"),
-                new Profession("nurse", "Nurse / midwife", "Infirmier / sage-femme"),
-                new Profession("laboratoire", "Laboratory professional", "Professionnel de laboratoire")));
+                new Profession("nurse", "Nurse / midwife", "Infirmier / sage-femme")));
     }
 
     record RegistrationOptions(List<Country> countries, List<Speciality> specialities, List<Profession> professions) {}
