@@ -71,7 +71,7 @@ class CareVisitDocumentService {
             cleanupOnRollback(key);
             String checksum=HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
             var document=HealthDocument.create(visit.patient(),null,name,key,"application/pdf",content.length,checksum,actor.personId());
-            document.setPatientVisible(true);documents.saveAndFlush(document);
+            document.setPatientVisible(report.patientVisible());documents.saveAndFlush(document);
             jdbc.update("insert into document.document_link(document_id,resource_type,resource_id) values (?,'CARE_VISIT',?)",document.id(),visitId);
             jdbc.update("""
                 insert into care.visit_document(document_id,visit_id,organization_id,document_type,report_revision_id,report_revision,prescription_revision_id,prescription_revision,retention_expires_at)

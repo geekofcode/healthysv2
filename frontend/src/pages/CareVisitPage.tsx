@@ -1,3 +1,4 @@
+import {CarePatientHistory} from "../components/CarePatientHistory";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -206,6 +207,7 @@ function VisitWorkspace({
       )}
       {intake.error && <ApiErrorMessage error={intake.error} />}
       {episode.error && <ApiErrorMessage error={episode.error} />}
+      <CarePatientHistory patientId={value.patientId} currentVisitId={id}/>
       <CareAiAssistant
         visitId={id}
         organizationId={value.organizationId}

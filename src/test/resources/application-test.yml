@@ -1,9 +1,19 @@
 spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://keycloak.example/realms/healthys
+          audiences: healthys-backend-apps
   jpa:
     hibernate:
       ddl-auto: validate
 
 healthys:
+  security:
+    api-client-id: healthys-backend-apps
+    cors:
+      allowed-origins: http://localhost:5173
   storage:
     endpoint: http://localhost:9000
     region: us-east-1

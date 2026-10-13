@@ -1,3 +1,4 @@
+import {getCareCutover} from '../api/cutover';
 import {useState,type FormEvent} from 'react';
 import {Link,useParams} from 'react-router-dom';
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query';
@@ -10,6 +11,7 @@ import {ApiErrorMessage} from '../components/ApiErrorMessage';
 export function InvoiceDetailPage(){
  const {id=''}=useParams();const {t,i18n}=useTranslation();const fr=i18n.language.startsWith('fr');const auth=useAuth();const cache=useQueryClient();
  const invoice=useQuery({queryKey:billingKeys.invoice(id),queryFn:()=>getInvoice(id),enabled:!!id});
+ const cutover=useQuery({queryKey:['care','cutover'],queryFn:getCareCutover,enabled:!!invoice.data&&!invoice.data.careEpisodeId,staleTime:0,refetchInterval:30000});
  const [amount,setAmount]=useState('');const [refundAmount,setRefundAmount]=useState('');const [reason,setReason]=useState('');
  const [paymentKey,setPaymentKey]=useState(()=>crypto.randomUUID());const [refundKey,setRefundKey]=useState(()=>crypto.randomUUID());const [receipt,setReceipt]=useState<CashReceipt>();
  const receipts=useQuery({queryKey:['cash-receipts',id],queryFn:()=>listCashReceipts(id),enabled:!!invoice.data?.careEpisodeId});
@@ -29,7 +31,7 @@ export function InvoiceDetailPage(){
   <dl className="profile-grid">
    <div><dt>{t('billing.patientId')}</dt><dd>{data.patientId}</dd></div><div><dt>{t('billing.organizationId')}</dt><dd>{data.organizationId}</dd></div><div><dt>{t('billing.total')}</dt><dd>{money(data.totalAmount)}</dd></div><div><dt>{t('billing.amountPaid')}</dt><dd>{money(data.amountPaid)}</dd></div><div><dt>{t('billing.balance')}</dt><dd>{money(data.balance)}</dd></div><div><dt>{t('billing.dueAt')}</dt><dd>{data.dueAt?new Date(data.dueAt).toLocaleString(i18n.language):'—'}</dd></div>
   </dl>
-  {canWrite&&!data.careEpisodeId&&<div className="card-actions billing-actions">{data.status==='DRAFT'&&<button onClick={()=>issue.mutate()} disabled={issue.isPending}>{t('billing.issue')}</button>}{['DRAFT','ISSUED'].includes(data.status)&&data.amountPaid===0&&<button className="danger" onClick={()=>cancel.mutate()} disabled={cancel.isPending}>{t('billing.cancelInvoice')}</button>}</div>}
+  {canWrite&&!data.careEpisodeId&&cutover.data&&cutover.data.mode!=='CARE_ONLY'&&<div className="card-actions billing-actions">{data.status==='DRAFT'&&<button onClick={()=>issue.mutate()} disabled={issue.isPending}>{t('billing.issue')}</button>}{['DRAFT','ISSUED'].includes(data.status)&&data.amountPaid===0&&<button className="danger" onClick={()=>cancel.mutate()} disabled={cancel.isPending}>{t('billing.cancelInvoice')}</button>}</div>}
   <section className="detail-section"><h2>{t('billing.items')}</h2><div className="table-scroll"><table><thead><tr><th>{t('billing.description')}</th><th>{t('billing.quantity')}</th><th>{t('billing.unitPrice')}</th><th>{t('billing.taxAmount')}</th><th>{t('billing.total')}</th></tr></thead><tbody>{data.items.map(item=><tr key={item.id}><td>{item.description}</td><td>{item.quantity}</td><td>{money(item.unitPrice)}</td><td>{money(item.taxAmount)}</td><td>{money(item.totalAmount)}</td></tr>)}</tbody></table></div></section>
   {canCash&&data.careEpisodeId&&payable&&<section className="detail-section no-print"><h2>{t('billing.recordPayment')}</h2><form className="entity-form payment-form" onSubmit={submit}><label>{t('billing.amount')}<input required type="number" min="0.01" max={data.balance} step="0.01" value={amount} onChange={e=>{setAmount(e.target.value);setPaymentKey(crypto.randomUUID());}}/></label><p>{t('billing.paymentMethod')}: {t('billing.methods.CASH')}</p><button disabled={pay.isPending}>{t('billing.confirmPayment')}</button></form></section>}
   <section className="detail-section"><h2>{t('billing.payments')}</h2><div className="payment-list">{data.payments.map(payment=><article className="payment-card" key={payment.id}><strong>{payment.paymentNumber}</strong><span>{t(`billing.methods.${payment.paymentMethod}`,payment.paymentMethod)}</span><b>{money(payment.amount)}</b><small>{new Date(payment.paidAt).toLocaleString(i18n.language)}</small></article>)}</div>{!data.payments.length&&<p>{t('billing.noPayments')}</p>}</section>

@@ -1,3 +1,5 @@
+import {DataDeletionPage} from './pages/DataDeletionPage';
+import {LegacyCareBoundary} from './components/LegacyCareBoundary';
 import {CashManagementPage} from './pages/CashManagementPage';
 import {CareVisitPage} from './pages/CareVisitPage';
 import {AgendaEntryPage} from './pages/AgendaEntryPage';
@@ -63,6 +65,7 @@ export const router = createBrowserRouter([
     element: <ProtectedRoute />,
         children: [
           {path: '/registration/complete', element: <RegistrationCompletePage />},
+          {path: '/me/data-deletion', element: <DataDeletionPage />},
           {
         element: <MainLayout />,
         children: [
@@ -94,10 +97,10 @@ export const router = createBrowserRouter([
           {path: '/care/episodes/:id', element: <CareEpisodePage />},
           {path: '/care/visits/:id', element: <CareVisitPage />},
           {path: '/agenda', element: <AgendaEntryPage />},
-          {path: '/agenda/legacy', element: <AgendaPage />},
-          {path: '/consultations', element: <ConsultationsPage />},
-          {path: '/consultations/new', element: <ConsultationStartPage />},
-          {path: '/consultations/:id', element: <ConsultationPage />},
+          {path: '/agenda/legacy', element: <LegacyCareBoundary>{readOnly=><AgendaPage readOnly={readOnly}/>}</LegacyCareBoundary>},
+          {path: '/consultations', element: <LegacyCareBoundary>{readOnly=><ConsultationsPage readOnly={readOnly}/>}</LegacyCareBoundary>},
+          {path: '/consultations/new', element: <LegacyCareBoundary writeOnly>{()=><ConsultationStartPage/>}</LegacyCareBoundary>},
+          {path: '/consultations/:id', element: <LegacyCareBoundary>{readOnly=><ConsultationPage readOnly={readOnly}/>}</LegacyCareBoundary>},
           {path: '/laboratory/orders', element: <LaboratoryOrdersPage />},
           {path: '/laboratory/orders/:id', element: <LaboratoryOrderPage />},
           {path: '/maternal-child', element: <MaternalChildPage />},

@@ -1,3 +1,4 @@
+vi.mock("../api/careHistory",()=>({getCarePatientHistory:vi.fn().mockResolvedValue([])}));
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
 import {

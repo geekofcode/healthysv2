@@ -30,6 +30,7 @@ class SubscriptionWebConfiguration implements WebMvcConfigurer {
                 if (java.util.Set.of("GET","HEAD","OPTIONS").contains(request.getMethod())) return true;
                 var user=users.current();
                 String uri = request.getRequestURI();
+                if (uri.equals("/api/v1/care/cutover/activate") && user.has("PLATFORM_ADMIN")) return true;
                 boolean patientDecision = uri.matches("/api/v1/patients/[0-9a-fA-F-]{36}/access-revocations")
                         || uri.matches("/api/v1/patients/[0-9a-fA-F-]{36}/consents(/[0-9a-fA-F-]{36}/revoke)?")
                         || uri.matches("/api/v1/patients/[0-9a-fA-F-]{36}/access-requests/[0-9a-fA-F-]{36}/(accept|revoke)")

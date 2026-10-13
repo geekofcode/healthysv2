@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+migration-plan*.json
+*-snapshot.json
+backups/
+restoration-proof.json
+.venv/

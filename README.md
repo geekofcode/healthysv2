@@ -86,3 +86,7 @@ Aucune publication store ni activation des fournisseurs n’est effectuée par l
 # Inscription et identité HEALTH’YS
 
 Le [guide du thème Keycloak](docs/keycloak-theme.md) décrit l’installation du thème bleu, les champs d’inscription patient et les claims de synchronisation. Le [parcours professionnel](docs/professional-registration.md) décrit les demandes d’accès, la vérification administrative, les invitations et les affiliations facultatives aux établissements.
+
+## Conservation et bascule vers le parcours consultation
+
+Le [guide de livraison Phase 7](docs/PHASE7_RELEASE.md) décrit la conservation, la migration historique, les preuves de restauration et la bascule contrôlée. Le mode livré reste `LEGACY` jusqu’à validation du pilote cash sans IA.
