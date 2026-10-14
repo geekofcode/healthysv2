@@ -61,7 +61,7 @@ void i18n.use(LanguageDetector).use(initReactI18next).init({
   supportedLngs: ['en', 'fr'],
   fallbackLng: 'en',
   interpolation: {escapeValue: false},
-  detection: {order: ['localStorage', 'navigator'], caches: ['localStorage']},
+  detection: {order: ['navigator'], caches: []},
 });
 
 export default i18n;

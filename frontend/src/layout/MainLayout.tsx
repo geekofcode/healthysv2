@@ -1,11 +1,9 @@
-import {LanguageSwitch} from '../components/LanguageSwitch';
 import {ProfileContractBoundary} from '../auth/ProfileContractBoundary';
 import {AccessProfileSelector} from '../components/AccessProfileSelector';
 import {HospitalPermissionProvider,HospitalOperationBoundary} from '../auth/HospitalPermissionProvider';
 import {useHospitalPermission} from '../auth/HospitalPermissions';
 import {LicenseBoundary} from '../components/LicenseBoundary';
 import {getPreferences} from '../api/preferences';
-import {ThemeSwitch} from '../components/ThemeSwitch';
 import {Breadcrumbs} from '../components/Breadcrumbs';
 import {useEffect, useRef, useState} from 'react';
 import {NavLink, Outlet, useLocation} from 'react-router-dom';
@@ -67,7 +65,7 @@ function MainLayoutContent() {
         <div className="session">
           <span className="session-name">{fullName}</span>
           <AccessProfileSelector />
-          <LanguageSwitch /><ThemeSwitch authenticated />
+
           {!auth.roles.includes('PLATFORM_ADMIN')&&<NotificationBell />}
           <div className="profile-menu" ref={profileRef} onBlur={event => {if (!event.currentTarget.contains(event.relatedTarget as Node)) setProfileOpen(false);}}>
             <button ref={avatarRef} type="button" className="profile-avatar" aria-label={t('shell.accountMenu')} aria-expanded={profileOpen} aria-controls="account-dropdown" onClick={() => setProfileOpen(!profileOpen)}>

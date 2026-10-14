@@ -1,3 +1,4 @@
+import {AccountAppearance} from './components/AccountAppearance';
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import {QueryClientProvider} from '@tanstack/react-query';
@@ -18,6 +19,7 @@ createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        <AccountAppearance/>
         <RouterProvider router={router} />
       </AuthProvider>
     </QueryClientProvider>

@@ -46,3 +46,9 @@ Le profil personnel a pour identifiant le UUID patient. Un profil familial a pou
 `PATIENT_ADULT_AGE=18` configure la limite d'âge. Le contrôle utilise la date de naissance actuelle et l'échéance enregistrée à la création : l'accès familial cesse au plus tard à cette échéance. Une relation révoquée, un représentant désactivé ou un enfant devenu majeur ne sont plus proposés comme profils familiaux. La disparition du profil familial ne supprime pas le dossier partagé de l'enfant.
 
 La fiche est créée en base, puis l'acceptation du contrat du profil conditionne son usage opérationnel. Les signatures et documents contractuels sont gérés par le module de contrats. La création ou la découverte ne vaut pas acceptation.
+
+## Préférences du compte
+
+La langue et le thème se règlent dans `/me`, section personnalisation, et non dans les en-têtes. Les valeurs par défaut sont `SYSTEM` : thème selon `prefers-color-scheme`, langue selon les langues du navigateur (français/anglais, repli anglais). Le thème suit les changements du système et la langue suit l’événement `languagechange` quand le mode système est choisi. Les réglages sont propres au compte et partagés entre ses profils.
+
+`GET /api/v1/persons/me/preferences` renvoie `{theme, avatarUrl, language}`. `PUT` accepte une mise à jour partielle ; changer la langue ne remplace ni le thème ni l’avatar, et changer le thème ne remplace pas la langue. `avatarUrl: null` efface la photo. Ces réglages personnels restent accessibles avant la signature du profil et ne donnent aucun accès aux opérations des établissements.

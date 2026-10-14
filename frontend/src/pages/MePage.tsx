@@ -1,3 +1,4 @@
+import {LanguageSwitch} from '../components/LanguageSwitch';
 import {Link} from 'react-router-dom';
 import {DataDeletionPanel} from '../components/DataDeletionPanel';
 import {useState,type FormEvent} from 'react';
@@ -44,5 +45,5 @@ function ProfileAppearance(){
 }
 function AppearanceEditor({preferences,fr,onSaved}:{preferences:PersonPreferences;fr:boolean;onSaved:(saved:PersonPreferences)=>void}){
  const [avatarUrl,setAvatarUrl]=useState(preferences.avatarUrl??'');const [saved,setSaved]=useState(false);const mutation=useMutation({mutationFn:updatePreferences,onSuccess:result=>{onSaved(result);setSaved(true)}});
- return <form className="entity-form" onSubmit={e=>{e.preventDefault();mutation.mutate({theme:preferences.theme,avatarUrl:avatarUrl.trim()||null})}}><fieldset><legend>{fr?'Personnalisation':'Personalization'}</legend><div className="form-grid"><label>{fr?'Photo de profil (lien HTTPS)':'Profile photo (HTTPS link)'}<input type="url" pattern="https://.*" maxLength={2048} placeholder="https://…" value={avatarUrl} onChange={e=>{setSaved(false);setAvatarUrl(e.target.value)}}/></label><div><p>{fr?'Thème d’affichage':'Display theme'}</p><ThemeSwitch authenticated/></div></div></fieldset>{mutation.isError&&<ApiErrorMessage error={mutation.error}/>} {saved&&<p role="status">{fr?'Préférences enregistrées.':'Preferences saved.'}</p>}<button disabled={mutation.isPending}>{fr?'Enregistrer la personnalisation':'Save personalization'}</button></form>;
+ return <form className="entity-form" onSubmit={e=>{e.preventDefault();mutation.mutate({avatarUrl:avatarUrl.trim()||null})}}><fieldset><legend>{fr?'Personnalisation':'Personalization'}</legend><div className="form-grid"><label>{fr?'Photo de profil (lien HTTPS)':'Profile photo (HTTPS link)'}<input type="url" pattern="https://.*" maxLength={2048} placeholder="https://…" value={avatarUrl} onChange={e=>{setSaved(false);setAvatarUrl(e.target.value)}}/></label><div><p>{fr?'Thème d’affichage':'Display theme'}</p><ThemeSwitch authenticated/></div><div><LanguageSwitch authenticated/></div></div></fieldset>{mutation.isError&&<ApiErrorMessage error={mutation.error}/>} {saved&&<p role="status">{fr?'Préférences enregistrées.':'Preferences saved.'}</p>}<button disabled={mutation.isPending}>{fr?'Enregistrer la personnalisation':'Save personalization'}</button></form>;
 }

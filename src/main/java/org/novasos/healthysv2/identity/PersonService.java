@@ -192,12 +192,15 @@ class PersonService
     UUID personId = meEntity(subject).getId();
     var rows =
         jdbc.query(
-            "select theme, avatar_url from identity.person_preferences where person_id = ?",
+            "select theme, avatar_url, language from identity.person_preferences where person_id ="
+                + " ?",
             (row, index) ->
                 new org.novasos.healthysv2.identity.api.PersonPreferences(
                     org.novasos.healthysv2.identity.api.PersonPreferences.Theme.valueOf(
                         row.getString("theme")),
-                    row.getString("avatar_url")),
+                    row.getString("avatar_url"),
+                    org.novasos.healthysv2.identity.api.PersonPreferences.Language.valueOf(
+                        row.getString("language"))),
             personId);
     return rows.isEmpty()
         ? new org.novasos.healthysv2.identity.api.PersonPreferences(
@@ -206,17 +209,24 @@ class PersonService
   }
 
   org.novasos.healthysv2.identity.api.PersonPreferences updatePreferences(
-      UUID subject, org.novasos.healthysv2.identity.api.PersonPreferences request) {
+      UUID subject, org.novasos.healthysv2.identity.api.UpdatePersonPreferencesRequest request) {
     jdbc.update(
         """
-        insert into identity.person_preferences(person_id, theme, avatar_url) values (?, ?, ?)
-        on conflict (person_id) do update set theme = excluded.theme,
-        avatar_url = excluded.avatar_url, updated_at = now()
+        insert into identity.person_preferences(person_id, theme, avatar_url,language) values (?, ?, ?, ?)
+        on conflict (person_id) do update set
+          theme=case when ? then excluded.theme else person_preferences.theme end,
+          avatar_url=case when ? then excluded.avatar_url else person_preferences.avatar_url end,
+          language=case when ? then excluded.language else person_preferences.language end,
+          updated_at=now()
         """,
         meEntity(subject).getId(),
-        request.theme().name(),
-        request.avatarUrl());
-    return request;
+        request.theme() == null ? "SYSTEM" : request.theme().name(),
+        request.avatarUrl(),
+        request.language() == null ? "SYSTEM" : request.language().name(),
+        request.theme() != null,
+        request.avatarProvided(),
+        request.language() != null);
+    return preferences(subject);
   }
 
   @Override

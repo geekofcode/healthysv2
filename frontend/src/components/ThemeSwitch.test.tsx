@@ -24,6 +24,6 @@ describe('display theme',()=>{
   render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><ThemeSwitch authenticated /></QueryClientProvider>);
   await waitFor(()=>expect((screen.getByRole('combobox') as HTMLSelectElement).disabled).toBe(false));
   fireEvent.change(screen.getByRole('combobox'),{target:{value:'dark'}});
-  await waitFor(()=>expect(updatePreferences).toHaveBeenCalledWith({theme:'DARK',avatarUrl:'https://example.com/avatar.png'}));
+  await waitFor(()=>expect(updatePreferences).toHaveBeenCalledWith({theme:'DARK'}));
  });
 });

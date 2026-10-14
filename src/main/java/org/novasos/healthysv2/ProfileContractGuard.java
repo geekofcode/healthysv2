@@ -58,6 +58,7 @@ class ProfileContractGuard implements WebMvcConfigurer {
           || path.equals("/api/v1/notifications/devices/revoke")
           || path.equals("/api/v1/persons/me")
           || path.equals("/api/v1/persons/me/profile")
+          || path.equals("/api/v1/persons/me/preferences")
           || path.equals("/api/v1/me/access-profiles")
           || path.equals("/api/v1/me/patient-profiles")
           || path.startsWith("/api/v1/me/profile-contracts/")

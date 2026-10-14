@@ -116,7 +116,8 @@ class PersonController {
   @org.springframework.web.bind.annotation.PutMapping("/me/preferences")
   org.novasos.healthysv2.identity.api.PersonPreferences updatePreferences(
       JwtAuthenticationToken authentication,
-      @Valid @RequestBody org.novasos.healthysv2.identity.api.PersonPreferences request) {
+      @Valid @RequestBody
+          org.novasos.healthysv2.identity.api.UpdatePersonPreferencesRequest request) {
     me(authentication);
     return service.updatePreferences(
         UUID.fromString(authentication.getToken().getSubject()), request);

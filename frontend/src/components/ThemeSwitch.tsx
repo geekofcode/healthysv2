@@ -9,7 +9,7 @@ function initialTheme(): ThemePreference {
   try {const saved = localStorage.getItem(storageKey); if (saved === 'light' || saved === 'dark') return saved;} catch { /* Storage can be disabled. */ }
   return 'system';
 }
-export function ThemeSwitch({authenticated = false}: {authenticated?:boolean}) {
+export function ThemeSwitch({authenticated = false,hidden=false}: {authenticated?:boolean;hidden?:boolean}) {
   const {i18n} = useTranslation();
   const french = i18n?.language?.startsWith('fr');
   const queryClient = useQueryClient();
@@ -18,13 +18,14 @@ export function ThemeSwitch({authenticated = false}: {authenticated?:boolean}) {
   const [preference, setPreference] = useState<ThemePreference>(initialTheme);
   useEffect(() => {
     if (authenticated && preferences.data?.theme) setPreference(preferences.data.theme.toLowerCase() as ThemePreference);
-  }, [authenticated,preferences.data?.theme]);
+    else if(hidden && !authenticated) setPreference("system");
+  }, [authenticated,preferences.data?.theme,hidden]);
   const change = async (theme:ThemePreference) => {
     setPreference(theme);
     setSaveError(false);
     if (!authenticated) return;
     try {
-      const saved = await updatePreferences({theme:theme.toUpperCase() as 'LIGHT'|'DARK'|'SYSTEM',avatarUrl:preferences.data?.avatarUrl ?? null});
+      const saved = await updatePreferences({theme:theme.toUpperCase() as 'LIGHT'|'DARK'|'SYSTEM'});
       queryClient.setQueryData(['person','preferences'], saved);
     } catch {setSaveError(true);}
   };
@@ -36,5 +37,6 @@ export function ThemeSwitch({authenticated = false}: {authenticated?:boolean}) {
     try {localStorage.setItem(storageKey, preference);} catch { /* Keep the in-memory preference. */ }
     return () => media?.removeEventListener('change', apply);
   }, [preference]);
+  if(hidden)return null;
   return <label className="theme-switch"><span className="sr-only">{french ? 'Thème d’affichage' : 'Display theme'}</span><select disabled={authenticated && !preferences.data?.theme} value={preference} onChange={event => void change(event.target.value as ThemePreference)} aria-label={french ? 'Thème d’affichage' : 'Display theme'}><option value="system">{french ? 'Thème système' : 'System theme'}</option><option value="light">{french ? 'Clair' : 'Light'}</option><option value="dark">{french ? 'Sombre' : 'Dark'}</option></select>{saveError && <span className="theme-save-error" role="status">{french ? 'Préférence non enregistrée' : 'Preference not saved'}</span>}</label>;
 }

@@ -1,8 +1,6 @@
-import {LanguageSwitch} from '../components/LanguageSwitch';
 import {Navigate,useLocation} from 'react-router-dom';
 import {useAuth} from '../auth/AuthContext';
 import {useTranslation} from 'react-i18next';
-import {ThemeSwitch} from '../components/ThemeSwitch';
 
 export function LoginPage() {
   const auth = useAuth();
@@ -12,7 +10,7 @@ export function LoginPage() {
   const french = i18n?.language?.startsWith('fr');
   if(auth.initialized&&auth.authenticated)return <Navigate to="/profiles/select" replace/>;
   return <main className="login-page">
-    <header className="public-header"><a className="brand" href="/">HEALTH’YS</a><LanguageSwitch /><ThemeSwitch /></header>
+    <header className="public-header"><a className="brand" href="/">HEALTH’YS</a></header>
     <div className="welcome-layout">
       <section className="welcome-story">
         <p className="eyebrow">{t('auth.securePortal')}</p>
