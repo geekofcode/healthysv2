@@ -2,7 +2,6 @@ package org.novasos.healthysv2.patient;
 
 import java.util.*;
 import org.novasos.healthysv2.accessprofile.api.AccessProfileResolver;
-import org.novasos.healthysv2.shared.security.KeycloakRoles;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -37,9 +36,7 @@ public class CurrentUserContext {
       String header = request.getHeader("X-Organization-ID");
       if (header != null && !header.isBlank()) org = uuid(header, "INVALID_ORGANIZATION_CONTEXT");
     }
-    var profile =
-        profiles.resolve(
-            subject, KeycloakRoles.canonicalRoles(jwt.getToken(), apiClientId), profileId, org);
+    var profile = profiles.resolve(subject, Set.of(), profileId, org);
     if (profile == null) return new UserContext(null, null, Set.of(), null);
     Set<String> activeRoles = new LinkedHashSet<>();
     jwt.getAuthorities().stream()

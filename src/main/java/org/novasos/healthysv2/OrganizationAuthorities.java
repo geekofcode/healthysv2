@@ -22,12 +22,6 @@ class OrganizationAuthorities {
   Collection<GrantedAuthority> augment(Jwt jwt, Collection<GrantedAuthority> original) {
     UUID subject = uuid(jwt.getSubject(), "INVALID_IDENTITY_SUBJECT");
     if (subject == null) throw new AccessDeniedException("INVALID_IDENTITY_SUBJECT");
-    var roles = new LinkedHashSet<String>();
-    original.stream()
-        .map(GrantedAuthority::getAuthority)
-        .filter(a -> a.startsWith("ROLE_"))
-        .map(a -> a.substring(5))
-        .forEach(roles::add);
     UUID profileId = null;
     UUID org = null;
     if (RequestContextHolder.getRequestAttributes()
@@ -41,7 +35,7 @@ class OrganizationAuthorities {
     }
     AccessProfileResolver.AccessProfile profile;
     try {
-      profile = profiles.resolve(subject, Set.copyOf(roles), profileId, org);
+      profile = profiles.resolve(subject, Set.of(), profileId, org);
     } catch (AccessDeniedException denied) {
       if (!"ACTIVE_ACCOUNT_REQUIRED".equals(denied.getMessage()) || !selfBootstrap()) throw denied;
       return original.stream().filter(a -> !a.getAuthority().startsWith("ROLE_")).toList();

@@ -49,3 +49,9 @@ Les catégories au niveau plateforme sont administrateur HEALTH’YS, hôpital e
 - [Conditions, signature et contrats PDF](docs/PROFILE_CONTRACTS.md)
 
 Publier les modèles et les conditions réelles depuis l’administration avant la signature. Configurer MinIO et activer SMTP pour les copies par email ; aucun lien de conditions ni texte juridique n’est inventé par défaut. L’administrateur plateforme dispose des statistiques agrégées et des comptes, sans accès aux opérations des établissements.
+
+## Administrateur plateforme persistant
+
+Tous les droits d’accès proviennent des profils en base ; les rôles du token Keycloak ne créent aucun profil ni autorisation. Le profil administrateur est stocké dans `accessprofile.platform_administrator` (migration V51) et sa révocation prend effet dès la requête suivante, sans attendre le renouvellement du token. Keycloak conserve l’authentification, la vérification d’email et l’activation des comptes.
+
+Pour initialiser le premier administrateur, renseigner temporairement `PLATFORM_ADMIN_BOOTSTRAP_SUBJECT` avec le véritable UUID de son compte Keycloak, puis ouvrir la liste de ses profils. Retirer ensuite la variable. Les anciens rôles administrateur Keycloak ne sont pas automatiquement importés. Voir le [guide d’initialisation et de révocation](docs/PLATFORM_ADMINISTRATOR_BOOTSTRAP.md).

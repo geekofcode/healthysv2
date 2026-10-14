@@ -48,6 +48,9 @@ class CutoverIntegrationTests {
         person,
         person.toString(),
         subject);
+    db.update(
+        "insert into accessprofile.platform_administrator(person_id,status) values (?,'ACTIVE')",
+        person);
   }
 
   @AfterEach

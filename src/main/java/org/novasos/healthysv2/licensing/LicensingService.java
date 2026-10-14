@@ -3,7 +3,6 @@ package org.novasos.healthysv2.licensing;
 import java.util.*;
 import org.novasos.healthysv2.licensing.api.*;
 import org.novasos.healthysv2.licensing.api.LicensingDtos.*;
-import org.novasos.healthysv2.shared.security.KeycloakRoles;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -85,11 +84,7 @@ public class LicensingService implements LicensingAccess {
         throw denied("INVALID_PROFILE_CONTEXT");
       }
     }
-    return profiles.resolve(
-        UUID.fromString(jwt.getToken().getSubject()),
-        KeycloakRoles.canonicalRoles(jwt.getToken(), apiClientId),
-        profileId,
-        org);
+    return profiles.resolve(UUID.fromString(jwt.getToken().getSubject()), Set.of(), profileId, org);
   }
 
   private void profileOrganization(UUID org, boolean administrator) {

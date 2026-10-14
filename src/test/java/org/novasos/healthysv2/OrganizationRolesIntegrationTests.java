@@ -25,7 +25,6 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest(
     properties = {
       "STAFF_ACCOUNT_PROVISIONING_ENABLED=false",
-      "healthys.professional-role-sync.enabled=false",
       "DATA_DELETION_WORKER_ENABLED=false",
       "DATA_RETENTION_PURGE_ENABLED=false",
       "AI_WORKER_ENABLED=false"
@@ -34,7 +33,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @Import({TestcontainersConfiguration.class, OrganizationRolesIntegrationTests.Tokens.class})
 class OrganizationRolesIntegrationTests {
   static final Map<String, UUID> subjects = new HashMap<>();
-  UUID org, foreign, managerPerson, managerMember, hospitalProfile, platformProfile;
+  UUID org, foreign, managerPerson, managerMember, hospitalProfile, platformProfile, platformPerson;
   @MockitoBean ContractAccess contracts;
   @Autowired MockMvc mvc;
   @Autowired JdbcTemplate db;
@@ -49,6 +48,10 @@ class OrganizationRolesIntegrationTests {
     foreign = organization(platform);
     hospitalProfile = member(org, admin, "HOSPITAL_ADMIN");
     platformProfile = AccessProfileResolver.platformId(platform);
+    platformPerson = platform;
+    db.update(
+        "insert into accessprofile.platform_administrator(person_id,status) values (?,'ACTIVE')",
+        platform);
     managerMember = member(org, managerPerson, "CASHIER");
   }
 
@@ -280,6 +283,35 @@ class OrganizationRolesIntegrationTests {
                 Integer.class,
                 foreignMember))
         .isZero();
+  }
+
+  @Test
+  void persistedPlatformAdministratorDoesNotNeedAnyRealmRole() throws Exception {
+    subjects.put("platform-no-realm", subjects.get("platform"));
+    mvc.perform(
+            get("/api/v1/admin/statistics")
+                .header("Authorization", auth("platform-no-realm"))
+                .header("X-Profile-ID", platformProfile))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void revocationCannotBeOverriddenByARealmAdminRole() throws Exception {
+    db.update(
+        "update accessprofile.platform_administrator set status='REVOKED',revoked_at=now() where"
+            + " person_id=?",
+        platformPerson);
+    mvc.perform(
+            get("/api/v1/admin/statistics")
+                .header("Authorization", auth("platform"))
+                .header("X-Profile-ID", platformProfile))
+        .andExpect(status().isForbidden());
+    assertThat(
+            db.queryForObject(
+                "select status from accessprofile.platform_administrator where person_id=?",
+                String.class,
+                platformPerson))
+        .isEqualTo("REVOKED");
   }
 
   @TestConfiguration

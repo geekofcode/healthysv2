@@ -72,8 +72,7 @@ class CurrentOrganizationContextTests {
   void selectedPersistedProfileDeterminesOrganizationAndOnlyItsRole() {
     authentication("DOCTOR");
     headers(profile, org);
-    when(resolver.resolve(subject, Set.of("PLATFORM_ADMIN", "DOCTOR", "PATIENT"), profile, org))
-        .thenReturn(persona("DOCTOR", org));
+    when(resolver.resolve(subject, Set.of(), profile, org)).thenReturn(persona("DOCTOR", org));
     var user = context.current();
     assertThat(user.personId()).isEqualTo(person);
     assertThat(user.organizationId()).isEqualTo(org);
@@ -85,8 +84,7 @@ class CurrentOrganizationContextTests {
   void explicitProfileIgnoresStaleJwtOrganizationWhenNoOrganizationHeaderProvided() {
     authentication("DOCTOR");
     headers(profile, null);
-    when(resolver.resolve(subject, Set.of("PLATFORM_ADMIN", "DOCTOR", "PATIENT"), profile, null))
-        .thenReturn(persona("DOCTOR", org));
+    when(resolver.resolve(subject, Set.of(), profile, null)).thenReturn(persona("DOCTOR", org));
     assertThat(context.current().organizationId()).isEqualTo(org);
   }
 
@@ -94,7 +92,7 @@ class CurrentOrganizationContextTests {
   void revokedProfileIsRecheckedEvenWithPreviouslyAcceptedJwt() {
     authentication("DOCTOR");
     headers(profile, org);
-    when(resolver.resolve(subject, Set.of("PLATFORM_ADMIN", "DOCTOR", "PATIENT"), profile, org))
+    when(resolver.resolve(subject, Set.of(), profile, org))
         .thenThrow(new AccessDeniedException("PROFILE_INACTIVE"));
     assertThatThrownBy(context::current)
         .isInstanceOf(AccessDeniedException.class)
@@ -105,8 +103,7 @@ class CurrentOrganizationContextTests {
   void clinicalRoleRemovedByQualificationFilterIsNotRestoredByProfile() {
     authentication();
     headers(profile, org);
-    when(resolver.resolve(subject, Set.of("PLATFORM_ADMIN", "DOCTOR", "PATIENT"), profile, org))
-        .thenReturn(persona("DOCTOR", org));
+    when(resolver.resolve(subject, Set.of(), profile, org)).thenReturn(persona("DOCTOR", org));
     assertThat(context.current().roles()).isEmpty();
   }
 
@@ -114,8 +111,7 @@ class CurrentOrganizationContextTests {
   void patientPersonaContainsNoOrganizationOrStaffPermissions() {
     authentication("PATIENT");
     headers(profile, null);
-    when(resolver.resolve(subject, Set.of("PLATFORM_ADMIN", "DOCTOR", "PATIENT"), profile, null))
-        .thenReturn(persona("PATIENT", null));
+    when(resolver.resolve(subject, Set.of(), profile, null)).thenReturn(persona("PATIENT", null));
     assertThat(context.current().organizationId()).isNull();
     assertThat(context.current().roles()).containsExactly("PATIENT");
   }
@@ -125,7 +121,7 @@ class CurrentOrganizationContextTests {
     var child = UUID.randomUUID();
     authentication("PATIENT");
     headers(profile, null);
-    when(resolver.resolve(subject, Set.of("PLATFORM_ADMIN", "DOCTOR", "PATIENT"), profile, null))
+    when(resolver.resolve(subject, Set.of(), profile, null))
         .thenReturn(
             new AccessProfile(
                 profile, person, "PATIENT", "FAMILY_PATIENT", child, null, null, "Child", true));

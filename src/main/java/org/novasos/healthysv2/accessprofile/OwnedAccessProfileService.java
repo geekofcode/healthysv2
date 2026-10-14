@@ -41,23 +41,30 @@ class OwnedAccessProfileService implements AccessProfileResolver {
     if (people.size() != 1) throw denied("ACTIVE_ACCOUNT_REQUIRED");
     UUID person = people.getFirst();
     List<AccessProfile> profiles = new ArrayList<>(persisted(person));
-    if (originalRoles.contains("PLATFORM_ADMIN"))
-      profiles.addFirst(
-          new AccessProfile(
-              AccessProfileResolver.platformId(person),
-              person,
-              "PLATFORM_ADMIN",
-              "PLATFORM",
-              person,
-              null,
-              null,
-              "Administration HEALTH’YS",
-              true));
     return List.copyOf(profiles);
   }
 
   private List<AccessProfile> persisted(UUID person) {
     List<AccessProfile> result = new ArrayList<>();
+    var administrators =
+        jdbc.queryForList(
+            "select person_id from accessprofile.platform_administrator where person_id=? and"
+                + " status='ACTIVE'",
+            UUID.class,
+            person);
+    for (UUID administrator : administrators)
+      result.add(
+          new AccessProfile(
+              AccessProfileResolver.platformId(administrator),
+              administrator,
+              "PLATFORM_ADMIN",
+              "PLATFORM",
+              administrator,
+              null,
+              null,
+              "Administration HEALTH’YS",
+              true));
+
     var patients =
         jdbc.query(
             "select id from patient.patient where person_id=? and status='ACTIVE'",

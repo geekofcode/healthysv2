@@ -161,4 +161,44 @@ class ProfileContractTests {
             isNull(),
             eq("STAFF"));
   }
+
+  @Test
+  void activePersistedPlatformAdministratorCanUseOwnSignedContract() {
+    UUID person = UUID.randomUUID(), profile = AccessProfileResolver.platformId(person);
+    when(profiles.forPerson(person, profile))
+        .thenReturn(
+            new AccessProfileResolver.AccessProfile(
+                profile,
+                person,
+                "PLATFORM_ADMIN",
+                "PLATFORM",
+                person,
+                null,
+                null,
+                "Administration",
+                true));
+    when(db.queryForObject(
+            anyString(),
+            eq(Integer.class),
+            eq(person),
+            eq(profile),
+            eq("PLATFORM_ADMIN"),
+            eq("PLATFORM"),
+            eq(person),
+            isNull(),
+            eq("ADMIN")))
+        .thenReturn(1);
+    assertThatCode(() -> service.requireSigned(person, profile)).doesNotThrowAnyException();
+    verify(profiles).forPerson(person, profile);
+  }
+
+  @Test
+  void revokedPlatformAdministratorCannotReuseHistoricalSignedAgreement() {
+    UUID person = UUID.randomUUID(), profile = AccessProfileResolver.platformId(person);
+    when(profiles.forPerson(person, profile))
+        .thenThrow(new AccessDeniedException("PROFILE_NOT_OWNED_OR_INACTIVE"));
+    assertThatThrownBy(() -> service.requireSigned(person, profile))
+        .isInstanceOf(AccessDeniedException.class);
+    verifyNoInteractions(db);
+  }
 }

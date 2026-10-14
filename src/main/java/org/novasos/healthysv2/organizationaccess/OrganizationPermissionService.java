@@ -72,12 +72,7 @@ public class OrganizationPermissionService implements OrganizationPermissionAcce
               if (a.getAuthority().startsWith("ROLE_")) roles.add(a.getAuthority().substring(5));
             });
     UUID selectedProfile = null;
-    Object organizationClaim = jwt.getToken().getClaim("healthys_organization_id");
-    if (organizationClaim == null) organizationClaim = jwt.getToken().getClaim("organization_id");
-    UUID selectedOrg =
-        organizationClaim == null
-            ? null
-            : uuid(organizationClaim.toString(), "INVALID_ORGANIZATION_CONTEXT");
+    UUID selectedOrg = null;
     var attributes = RequestContextHolder.getRequestAttributes();
     if (attributes instanceof ServletRequestAttributes servlet) {
       String profileHeader = servlet.getRequest().getHeader("X-Profile-ID");

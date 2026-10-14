@@ -46,8 +46,7 @@ class OrganizationAuthoritiesTests {
   @Test
   void selectedDoctorProfileOfPlatformAccountDoesNotInheritPlatformOrOtherHospitalRoles() {
     headers(profile, org);
-    when(resolver.resolve(
-            subject, Set.of("PLATFORM_ADMIN", "DOCTOR", "CASHIER", "PATIENT"), profile, org))
+    when(resolver.resolve(subject, Set.of(), profile, org))
         .thenReturn(persona(profile, "DOCTOR", org));
     var result =
         new OrganizationAuthorities(resolver)
@@ -68,7 +67,7 @@ class OrganizationAuthoritiesTests {
   void platformProfileNeverInheritsDoctorAuthority() {
     UUID selectedPlatform = AccessProfileResolver.platformId(person);
     headers(selectedPlatform, null);
-    when(resolver.resolve(subject, Set.of("PLATFORM_ADMIN", "DOCTOR"), selectedPlatform, null))
+    when(resolver.resolve(subject, Set.of(), selectedPlatform, null))
         .thenReturn(persona(AccessProfileResolver.platformId(person), "PLATFORM_ADMIN", null));
     var result =
         new OrganizationAuthorities(resolver)
@@ -83,7 +82,7 @@ class OrganizationAuthoritiesTests {
   @Test
   void foreignProfileCannotBeSelectedByForgingHeader() {
     headers(profile, org);
-    when(resolver.resolve(subject, Set.of("DOCTOR"), profile, org))
+    when(resolver.resolve(subject, Set.of(), profile, org))
         .thenThrow(new AccessDeniedException("PROFILE_NOT_OWNED"));
     assertThatThrownBy(
             () ->
@@ -97,9 +96,9 @@ class OrganizationAuthoritiesTests {
   void twoHospitalProfilesAreResolvedIndividuallyWithoutUnion() {
     var org2 = UUID.randomUUID();
     var profile2 = UUID.randomUUID();
-    when(resolver.resolve(subject, Set.of("DOCTOR", "CASHIER"), profile, org))
+    when(resolver.resolve(subject, Set.of(), profile, org))
         .thenReturn(persona(profile, "DOCTOR", org));
-    when(resolver.resolve(subject, Set.of("DOCTOR", "CASHIER"), profile2, org2))
+    when(resolver.resolve(subject, Set.of(), profile2, org2))
         .thenReturn(persona(profile2, "CASHIER", org2));
     var original =
         List.<org.springframework.security.core.GrantedAuthority>of(
@@ -132,7 +131,7 @@ class OrganizationAuthoritiesTests {
   void firstOwnIdentityRequestCanBootstrapWithoutAnyAccountRole() {
     var request = new MockHttpServletRequest("GET", "/api/v1/persons/me");
     RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
-    when(resolver.resolve(subject, Set.of("PLATFORM_ADMIN"), null, null))
+    when(resolver.resolve(subject, Set.of(), null, null))
         .thenThrow(new AccessDeniedException("ACTIVE_ACCOUNT_REQUIRED"));
     assertThat(
             new OrganizationAuthorities(resolver)
@@ -149,7 +148,7 @@ class OrganizationAuthoritiesTests {
   void missingIdentityNeverBootstrapsAnOrganizationOperation() {
     var request = new MockHttpServletRequest("POST", "/api/v1/organizations");
     RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
-    when(resolver.resolve(subject, Set.of("PLATFORM_ADMIN"), null, null))
+    when(resolver.resolve(subject, Set.of(), null, null))
         .thenThrow(new AccessDeniedException("ACTIVE_ACCOUNT_REQUIRED"));
     assertThatThrownBy(
             () ->
@@ -164,7 +163,7 @@ class OrganizationAuthoritiesTests {
     var request = new MockHttpServletRequest("GET", "/api/v1/persons/me");
     request.addHeader("X-Profile-ID", profile.toString());
     RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
-    when(resolver.resolve(subject, Set.of("PLATFORM_ADMIN"), profile, null))
+    when(resolver.resolve(subject, Set.of(), profile, null))
         .thenThrow(new AccessDeniedException("ACTIVE_ACCOUNT_REQUIRED"));
     assertThatThrownBy(
             () ->
@@ -179,7 +178,7 @@ class OrganizationAuthoritiesTests {
     var request =
         new MockHttpServletRequest("GET", "/api/v1/me/data-deletion/" + UUID.randomUUID());
     RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
-    when(resolver.resolve(subject, Set.of("PATIENT"), null, null))
+    when(resolver.resolve(subject, Set.of(), null, null))
         .thenThrow(new AccessDeniedException("ACTIVE_ACCOUNT_REQUIRED"));
     assertThat(
             new OrganizationAuthorities(resolver)
@@ -191,7 +190,7 @@ class OrganizationAuthoritiesTests {
   void inactiveAccountCannotCreateAnotherDeletionRequestThroughReadOnlyException() {
     var request = new MockHttpServletRequest("POST", "/api/v1/me/data-deletion");
     RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
-    when(resolver.resolve(subject, Set.of("PATIENT"), null, null))
+    when(resolver.resolve(subject, Set.of(), null, null))
         .thenThrow(new AccessDeniedException("ACTIVE_ACCOUNT_REQUIRED"));
     assertThatThrownBy(
             () ->
@@ -202,7 +201,7 @@ class OrganizationAuthoritiesTests {
 
   @Test
   void noProfileSelectionNeverGrantsPlatformOrPatientAuthorities() {
-    when(resolver.resolve(subject, Set.of("PLATFORM_ADMIN", "PATIENT"), null, null))
+    when(resolver.resolve(subject, Set.of(), null, null))
         .thenReturn(
             new AccessProfile(
                 person, person, "ACCOUNT", "ACCOUNT", person, null, null, "Account", true));

@@ -76,16 +76,9 @@ class SecurityConfiguration {
 
   @Bean
   JwtAuthenticationConverter jwtAuthenticationConverter(
-      SecurityProperties properties,
-      KeycloakProfessionalAccess professionalAccess,
-      OrganizationAuthorities organizations) {
+      SecurityProperties properties, OrganizationAuthorities organizations) {
     JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-    converter.setJwtGrantedAuthoritiesConverter(
-        jwt ->
-            professionalAccess.filter(
-                jwt.getSubject(),
-                organizations.augment(
-                    jwt, keycloakAuthorities(properties.apiClientId()).convert(jwt))));
+    converter.setJwtGrantedAuthoritiesConverter(jwt -> organizations.augment(jwt, List.of()));
     return converter;
   }
 

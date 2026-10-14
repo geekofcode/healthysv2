@@ -4,7 +4,6 @@ import java.util.List;
 import java.util.UUID;
 import org.novasos.healthysv2.accessprofile.api.AccessProfileResolver;
 import org.novasos.healthysv2.accessprofile.api.AccessProfileResolver.AccessProfile;
-import org.novasos.healthysv2.shared.security.KeycloakRoles;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -29,6 +28,14 @@ class AccessProfilesController {
     this.apiClientId = apiClientId;
   }
 
+  private org.novasos.healthysv2.accessprofile.api.PlatformAdministratorProvisioning administrators;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  void administrators(
+      org.novasos.healthysv2.accessprofile.api.PlatformAdministratorProvisioning administrators) {
+    this.administrators = administrators;
+  }
+
   @GetMapping
   List<AccessProfile> profiles(@AuthenticationPrincipal Jwt jwt) {
     if (jwt == null) throw new AccessDeniedException("ACCOUNT_REQUIRED");
@@ -44,6 +51,7 @@ class AccessProfilesController {
         jwt.getClaimAsString("family_name"),
         jwt.getClaimAsString("email"),
         Boolean.TRUE.equals(jwt.getClaimAsBoolean("email_verified")));
-    return resolver.profiles(subject, KeycloakRoles.canonicalRoles(jwt, apiClientId));
+    administrators.bootstrap(subject);
+    return resolver.profiles(subject, java.util.Set.of());
   }
 }

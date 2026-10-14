@@ -9,7 +9,6 @@ import org.novasos.healthysv2.accessprofile.api.AccessProfileResolver;
 import org.novasos.healthysv2.profilecontract.api.*;
 import org.novasos.healthysv2.profilecontract.api.ContractDtos.*;
 import org.novasos.healthysv2.shared.api.error.*;
-import org.novasos.healthysv2.shared.security.KeycloakRoles;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.AccessDeniedException;
@@ -53,8 +52,7 @@ public class ProfileContractService implements ContractAccess {
   }
 
   private AccessProfileResolver.AccessProfile owned(UUID profileId) {
-    return profiles.resolve(
-        subject(), KeycloakRoles.canonicalRoles(auth().getToken(), clientId), profileId, null);
+    return profiles.resolve(subject(), Set.of(), profileId, null);
   }
 
   static String category(AccessProfileResolver.AccessProfile profile) {
@@ -140,20 +138,7 @@ public class ProfileContractService implements ContractAccess {
   public void requireSigned(UUID personId, UUID profileId) {
     if (personId == null || profileId == null)
       throw new AccessDeniedException("PROFILE_CONTRACT_REQUIRED");
-    AccessProfileResolver.AccessProfile profile;
-    if (profileId.equals(AccessProfileResolver.platformId(personId)))
-      profile =
-          new AccessProfileResolver.AccessProfile(
-              profileId,
-              personId,
-              "PLATFORM_ADMIN",
-              "PLATFORM",
-              personId,
-              null,
-              null,
-              "Administration HEALTH’YS",
-              true);
-    else profile = profiles.forPerson(personId, profileId);
+    var profile = profiles.forPerson(personId, profileId);
     if (profile == null || !profile.active())
       throw new AccessDeniedException("PROFILE_CONTRACT_REQUIRED");
     Integer signed =

@@ -10,11 +10,11 @@ Le parcours ci-dessous est implémenté pour `medecin`, `nurse` et `laboratoire`
 | Établissement | Invitation ou demande de rattachement | Vérification professionnelle et acceptation de l’affiliation |
 | Assisté | Création par un administrateur, puis invitation | Même procédure de vérification |
 
-Créer un compte authentifiable ne suffit pas à ouvrir l’accès aux dossiers des patients. Le formulaire recueille une demande de profession, jamais un rôle privilégié directement assigné. Après vérification, le backend attribue le rôle métier correspondant dans Keycloak via une intégration administrative autorisée.
+Créer un compte authentifiable ne suffit pas à ouvrir l’accès aux dossiers des patients. Le formulaire recueille une demande de profession, jamais un rôle privilégié directement assigné. Après vérification, le backend met à jour la qualification et les droits locaux dans PostgreSQL.
 
 ## Identité et affiliations
 
-Une identité Keycloak et une fiche Person peuvent porter à la fois un profil patient et un profil professionnel. Le profil professionnel doit pouvoir exister sans hôpital, pour l’exercice indépendant. Les affiliations sont séparées et peuvent être multiples : établissement, service, fonction, dates, statut et droits locaux.
+Une identité Keycloak et une fiche Person peuvent porter à la fois un profil patient et un profil professionnel. L’accès professionnel opérationnel passe par un profil d’établissement explicitement sélectionné. Les affiliations sont séparées et peuvent être multiples : établissement, service, fonction, dates, statut et droits locaux.
 
 Le rôle `medecin` ou `nurse` indique une capacité professionnelle. Il ne donne pas un accès global aux dossiers : les autorisations doivent également vérifier l’affiliation active, l’affectation ou la relation de soins. La fin d’une affiliation retire les accès de cet établissement sans supprimer le compte ni les autres affiliations. Les administrateurs d’organisation ne peuvent gérer que leur périmètre et ne peuvent attribuer les rôles de plateforme.
 
@@ -24,7 +24,7 @@ HEALTH’YS collecte la profession, une spécialité facultative, le numéro pro
 
 L’organisation propose l’affiliation par invitation ; le professionnel l’accepte avec son compte et un courriel vérifié correspondant. HEALTH’YS valide la qualité professionnelle. Une invitation d’établissement ne contourne pas cette vérification : le dossier doit être validé avant acceptation.
 
-Keycloak conserve les identifiants, les mécanismes de connexion et les rôles effectivement accordés. Les justificatifs, décisions, affiliations et données de santé restent dans HEALTH’YS.
+Keycloak conserve les identifiants et les mécanismes de connexion ; ses rôles ne sont pas une source d’autorisation métier. Les justificatifs, décisions, affiliations et données de santé restent dans HEALTH’YS.
 
 ## Entrées dans l’interface
 
@@ -36,23 +36,23 @@ Un professionnel déjà inscrit doit pouvoir accepter une invitation avec son co
 
 Les liens d’invitation expirent après sept jours. Leur secret est conservé sous forme de hash en base et transmis dans le fragment du lien, puis conservé temporairement dans la session du navigateur pendant la connexion. L’application fournit le lien à partager ; elle n’envoie pas de courriel d’invitation automatiquement. Pour une création assistée, l’administrateur peut créer le compte Keycloak puis accompagner le dépôt de la demande, ou inviter le professionnel depuis un établissement. Le mot de passe reste défini par son titulaire.
 
-Les professionnels sélectionnent leur contexte dans la sidebar. `X-Organization-ID` sélectionne un établissement avec affectation active ; `independent` sélectionne explicitement l’exercice indépendant. L’accès indépendant aux dossiers nécessite une relation personnelle active et un consentement nominatif au bon périmètre. Le patient peut gérer ces autorisations depuis **Mon profil → Autorisations de soins**. Les opérations de laboratoire et de facturation restent liées à un établissement ; elles ne deviennent pas globales lorsqu’aucun établissement n’est sélectionné.
+Chaque utilisateur sélectionne explicitement son profil. `X-Profile-ID` désigne sa source locale et `X-Organization-ID`, lorsqu’il est fourni, doit correspondre à ce profil. Aucun accès professionnel ou établissement n’est déduit des rôles du jeton. Le patient peut gérer ces autorisations depuis **Mon profil → Autorisations de soins**. Les opérations de laboratoire et de facturation restent liées à un établissement ; elles ne deviennent pas globales lorsqu’aucun établissement n’est sélectionné.
 
 Renseigner les pays dans le référentiel partagé avant les premières demandes. L’écran de validation administrative permet d’ajouter un pays (code ISO2 et nom). Les langues FR/EN sont initialisées par la migration V19. Les migrations V20 et V21 ajoutent le parcours professionnel et les relations/consultations indépendantes.
 
-## Attribution des rôles Keycloak
+## Autorisations locales
 
-L’approbation enregistre une livraison durable dans `professional.role_sync_outbox`, dans la même transaction que la décision. Le worker attribue uniquement `medecin`, `nurse` ou `laboratoire`. Une suspension enregistre le retrait du rôle. Les erreurs restent visibles (`PENDING`, `FAILED`, `SYNCED`) et sont réessayées toutes les 30 secondes au minimum ; aucun secret ni contenu de réponse Keycloak n’est journalisé dans l’état de synchronisation.
+Keycloak authentifie le compte. Les profils disponibles, rôles et accès sont définis dans PostgreSQL : administration plateforme accordée localement, adhésions aux établissements, qualifications approuvées et permissions personnalisées du profil sélectionné.
 
-Créer un client confidentiel dédié dans le realm `healthys`, activer son service account et limiter ses permissions d’administration à la consultation des rôles et à la gestion des mappings des utilisateurs concernés. Utiliser les permissions fines Keycloak pour limiter les rôles administrables aux trois rôles cliniques. Ne jamais fournir un compte administrateur global au backend. Configurer `KEYCLOAK_ADMIN_SERVER_URL` (URL HTTPS de Keycloak), `KEYCLOAK_ADMIN_REALM`, `KEYCLOAK_ADMIN_CLIENT_ID` et `KEYCLOAK_ADMIN_CLIENT_SECRET`, puis `PROFESSIONAL_ROLE_SYNC_ENABLED=true`. Docker Compose transmet déjà ces variables au backend via `env_file: .env`.
+L’approbation ou la suspension modifie les états professionnels locaux dans la transaction métier. Aucun rôle n’est attribué ou retiré dans Keycloak et aucune livraison de synchronisation des rôles n’est exécutée. Les anciens rôles d’un jeton n’accordent pas de droits supplémentaires. La table historique `professional.role_sync_outbox` reste conservée pour la compatibilité des migrations.
 
-Le worker est désactivé par défaut : une approbation demeure alors en attente de synchronisation et ne donne aucun rôle clinique. Après synchronisation, le professionnel doit renouveler son jeton ou se reconnecter. Le backend vérifie également l’état du dossier à chaque authentification : les rôles cliniques présents dans un ancien jeton sont immédiatement ignorés pour un dossier en attente, rejeté ou suspendu, même si Keycloak est indisponible. Les comptes professionnels historiques sans dossier restent compatibles avec les mappings administrés manuellement.
+Le client technique Keycloak est utile uniquement si la création assistée de comptes est activée (`STAFF_ACCOUNT_PROVISIONING_ENABLED`) ; il ne gère pas les droits HEALTH’YS.
 
 ## Justificatifs et référentiels
 
 Le candidat saisit une spécialité libre avec suggestions des spécialités actives existantes. Une nouvelle valeur est intégrée au catalogue seulement à l’approbation administrative. La profession d’inscription reste l’un des rôles cliniques pris en charge : `medecin`, `nurse`, `laboratoire`.
 
-Administration → Référentiels d’inscription (`/admin/registration-options`) permet d’ajouter, modifier et supprimer les pays. Un pays référencé par une adresse, une licence ou un dossier est protégé par les clés étrangères et ne peut être supprimé. Cette page affiche aussi les trois professions ; leur définition est dans `RegistrationReferenceController` et les contraintes de `ProfessionalOnboardingDtos`, avec les correspondances de rôles Keycloak. Ce ne sont pas les spécialités.
+Administration → Référentiels d’inscription (`/admin/registration-options`) permet d’ajouter, modifier et supprimer les pays. Un pays référencé par une adresse, une licence ou un dossier est protégé par les clés étrangères et ne peut être supprimé. Cette page affiche aussi les trois professions ; leur définition est dans `RegistrationReferenceController` et les contraintes de `ProfessionalOnboardingDtos`, avec les qualifications locales. Ce ne sont pas les spécialités.
 
 V23 ajoute le type de pièce (passeport, carte nationale, permis), l’expiration et les scans recto/verso. La licence à l’ordre utilise le justificatif professionnel existant. Les trois fichiers sont requis pour soumettre et approuver, y compris pour un passeport (page d’identité et autre face/page justificative). Chaque fichier est privé, PDF/JPEG/PNG, limité à 5 Mo et contrôlé par signature. La date doit être strictement postérieure à la date courante UTC plus trois mois calendaires. Changer les métadonnées d’identité invalide ses deux scans ; changer les titres professionnels invalide la licence.
 

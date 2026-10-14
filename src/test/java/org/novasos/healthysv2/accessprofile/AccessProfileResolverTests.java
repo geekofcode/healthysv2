@@ -139,6 +139,8 @@ class AccessProfileResolverTests {
     var resolver = mock(AccessProfileResolver.class);
     var identities = mock(org.novasos.healthysv2.identity.api.IdentityProvisioningService.class);
     var controller = new AccessProfilesController(resolver, identities, "healthys-backend");
+    controller.administrators(
+        mock(org.novasos.healthysv2.accessprofile.api.PlatformAdministratorProvisioning.class));
     var jwt =
         Jwt.withTokenValue("token")
             .header("alg", "none")
