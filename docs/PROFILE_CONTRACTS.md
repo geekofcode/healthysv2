@@ -8,7 +8,7 @@ Les variables de modèle admises sont `{{signerName}}`, `{{profileLabel}}`, `{{o
 
 ## Acceptation et génération
 
-`GET /api/v1/me/profile-contracts/{profileId}/template` fournit le modèle courant et `renderedBodyText`. `POST /api/v1/me/profile-contracts/{profileId}/sign` reçoit uniquement l’identifiant de modèle, `acceptTerms`, une signature PNG de canvas et `guardianAcknowledgement`. Le serveur vérifie la propriété du profil, le modèle publié, l’acceptation et une signature non blanche. Le PNG est limité, ses dimensions sont contrôlées avant décodage, puis il est réencodé sans métadonnées.
+`GET /api/v1/me/profile-contracts/{profileId}/template` fournit le modèle courant et `renderedBodyText`. `POST /api/v1/me/profile-contracts/{profileId}/sign` reçoit uniquement l’identifiant de modèle, `acceptTerms`, une signature personnelle dessinée dans le canvas ou importée en PNG/JPEG (convertie en PNG) et `guardianAcknowledgement`. Le serveur vérifie la propriété du profil, le modèle publié, l’acceptation et une signature non blanche. Le PNG est limité, ses dimensions sont contrôlées avant décodage, puis il est réencodé sans métadonnées.
 
 Le signataire est le compte authentifié, avec son nom en base et **l’adresse de son token Keycloak portant `email_verified=true`**. Aucun nom de signataire, destinataire, chemin de fichier ou acteur n’est accepté depuis le client. Pour le profil d’un mineur, le parent signe et doit confirmer sa qualité de représentant ; la relation parent/enfant et l’âge sont vérifiés par le résolveur de profils. L’identité de l’enfant est conservée dans le contenu signé sans remplacer le signataire.
 
@@ -17,6 +17,8 @@ Le contenu rendu, les conditions, leur version, le profil, l’horodatage, la si
 L’accord accepté autorise le profil dès la signature enregistrée ; un incident de génération ou de courriel ne bloque pas de nouveau le profil. Le PDF et le courriel sont repris séparément, avec réservation de job, bail, reprises bornées et erreurs génériques sans secrets. Les jobs IA vérifient également l’accord signé du profil d’origine avant exécution.
 
 ## Configuration de livraison
+
+Brevo est préconfiguré dans `.env.example` : `smtp-relay.brevo.com`, port 465 avec TLS implicite. Renseigner le login et la clé SMTP Brevo (distincte de la clé API), une adresse d’expédition vérifiée, puis activer `EMAIL_ENABLED`. Les secrets restent côté backend.
 
 | Variable | Défaut | Usage |
 |---|---|---|
