@@ -244,3 +244,12 @@ input[type="checkbox"],input[type="radio"] {width:16px;min-width:16px;height:16p
 .profile-choice {display: flex; flex-direction: column; gap: .5rem; text-align: left; color: inherit;}
 .contract-body {white-space: pre-wrap; padding: 1rem; border: 1px solid var(--border); border-radius: .5rem;}
 .signature-field canvas {display: block; width: 100%; max-width: 700px; height: auto; border: 1px solid #64748b; background: white; touch-action: none;}
+.contract-editor {border: 1px solid var(--border); border-radius: .5rem; padding: .75rem;}
+.contract-editor-toolbar, .contract-editor-variables {display: flex; flex-wrap: wrap; gap: .4rem; margin: .75rem 0; align-items: center;}
+.contract-editor-toolbar button, .contract-editor-variables button {padding: .35rem .6rem;}
+.contract-editor-surface {min-height: 260px; padding: 1rem; border: 1px solid var(--border); border-radius: .25rem; overflow-wrap: anywhere;}
+.contract-editor-surface:focus {outline: 2px solid var(--primary); outline-offset: 2px;}
+.contract-rich-content {white-space: normal; overflow-wrap: anywhere;}
+.contract-rich-content table, .contract-editor-surface table {border-collapse: collapse; width: 100%; margin: 1rem 0;}
+.contract-rich-content th, .contract-rich-content td, .contract-editor-surface th, .contract-editor-surface td {border: 1px solid #94a3b8; padding: .5rem;}
+.contract-rich-content h1, .contract-rich-content h2, .contract-rich-content h3 {margin: 1rem 0 .5rem;}

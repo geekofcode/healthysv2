@@ -4,10 +4,16 @@ import java.io.*;
 import java.sql.Timestamp;
 import java.util.*;
 import javax.imageio.ImageIO;
+import javax.swing.text.MutableAttributeSet;
+import javax.swing.text.html.HTML;
+import javax.swing.text.html.HTMLEditorKit;
+import javax.swing.text.html.parser.ParserDelegator;
 import org.apache.pdfbox.pdmodel.*;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
+import org.apache.pdfbox.pdmodel.graphics.state.RenderingMode;
+import org.apache.pdfbox.util.Matrix;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -31,7 +37,8 @@ class ContractPdf {
       if (!Objects.toString(agreement.get("organization_name"), "").isBlank())
         lines.addAll(wrap("Établissement : " + agreement.get("organization_name"), font));
       lines.add("");
-      lines.addAll(wrap(Objects.toString(agreement.get("body_snapshot"), ""), font));
+      boolean html = "HTML".equals(agreement.get("body_format"));
+      if (!html) lines.addAll(wrap(Objects.toString(agreement.get("body_snapshot"), ""), font));
       var proof = new ArrayList<String>();
       proof.add("Acceptation et signature");
       proof.add("");
@@ -46,7 +53,10 @@ class ContractPdf {
       proof.add("Conditions acceptées : version " + agreement.get("terms_version"));
       proof.addAll(wrap(Objects.toString(agreement.get("terms_url"), ""), font));
 
-      appendPages(document, font, lines);
+      if (html)
+        appendHtmlPages(
+            document, font, lines, Objects.toString(agreement.get("body_snapshot"), ""));
+      else appendPages(document, font, lines);
       appendPages(document, font, proof);
       var signaturePage = new PDPage(PDRectangle.A4);
       document.addPage(signaturePage);
@@ -165,5 +175,342 @@ class ContractPdf {
       lines.add(line.toString());
     }
     return lines;
+  }
+
+  private void appendHtmlPages(
+      PDDocument document, PDType0Font font, List<String> header, String html) throws IOException {
+    var parser = new RichParser();
+    new ParserDelegator().parse(new StringReader(ContractHtml.sanitize(html)), parser, true);
+    parser.flush();
+    try (var pages = new RichPages(document, font)) {
+      for (String line : header)
+        pages.paragraph(new Paragraph(List.of(new Span(line, Style.PLAIN)), 10, 0));
+      for (Block block : parser.blocks) {
+        if (block instanceof Paragraph paragraph) pages.paragraph(paragraph);
+        else if (block instanceof Table table) pages.table(table);
+      }
+    }
+  }
+
+  private interface Block {}
+
+  private record Style(boolean bold, boolean italic, boolean underline) {
+    static final Style PLAIN = new Style(false, false, false);
+  }
+
+  private record Span(String text, Style style) {}
+
+  private record Paragraph(List<Span> spans, float size, float indent) implements Block {}
+
+  private record Table(List<List<List<Span>>> rows) implements Block {}
+
+  private static class ListContext {
+    final boolean ordered;
+    int item;
+
+    ListContext(boolean ordered) {
+      this.ordered = ordered;
+    }
+  }
+
+  /** Parses only the supported document structure; no URL, CSS or image is ever resolved. */
+  private static class RichParser extends HTMLEditorKit.ParserCallback {
+    final List<Block> blocks = new ArrayList<>();
+    final Deque<ListContext> lists = new ArrayDeque<>();
+    List<Span> flow = new ArrayList<>(), cell;
+    List<List<List<Span>>> rows;
+    List<List<Span>> row;
+    int bold, italic, underline;
+    float size = 10, indent;
+    boolean suppressed;
+    int suppressedDepth;
+
+    Style style() {
+      return new Style(bold > 0, italic > 0, underline > 0);
+    }
+
+    void text(String value) {
+      if (!suppressed && !value.isEmpty())
+        (cell == null ? flow : cell).add(new Span(value, style()));
+    }
+
+    public void flush() {
+      if (!flow.isEmpty()) {
+        blocks.add(new Paragraph(List.copyOf(flow), size, indent));
+        flow = new ArrayList<>();
+      }
+    }
+
+    boolean heading(String tag) {
+      return tag.matches("h[1-6]");
+    }
+
+    @Override
+    public void handleStartTag(HTML.Tag tag, MutableAttributeSet attrs, int position) {
+      String name = tag.toString();
+      if (Set.of("script", "style", "iframe", "object").contains(name)) {
+        suppressedDepth++;
+        suppressed = true;
+        return;
+      }
+      if (suppressed) return;
+      if (Set.of("strong", "b").contains(name)) bold++;
+      else if (Set.of("em", "i").contains(name)) italic++;
+      else if (Set.of("u", "a").contains(name)) underline++;
+      else if (name.equals("table")) {
+        flush();
+        rows = new ArrayList<>();
+      } else if (name.equals("tr")) {
+        row = new ArrayList<>();
+      } else if (Set.of("td", "th").contains(name)) {
+        cell = new ArrayList<>();
+        if (name.equals("th")) bold++;
+      } else if (cell != null && (name.equals("p") || heading(name))) {
+        if (!cell.isEmpty()) text("\n");
+      } else if (heading(name)) {
+        flush();
+        size =
+            switch (name) {
+              case "h1" -> 18;
+              case "h2" -> 16;
+              case "h3" -> 14;
+              default -> 12;
+            };
+        bold++;
+      } else if (name.equals("ul") || name.equals("ol")) {
+        flush();
+        lists.push(new ListContext(name.equals("ol")));
+        indent = 16 * lists.size();
+      } else if (name.equals("li")) {
+        flush();
+        indent = 16 * lists.size();
+        var list = lists.peek();
+        text(list != null && list.ordered ? (++list.item) + ". " : "• ");
+      } else if (name.equals("blockquote")) {
+        flush();
+        indent += 18;
+      } else if (name.equals("p") || name.equals("div")) {
+        flush();
+      }
+    }
+
+    @Override
+    public void handleEndTag(HTML.Tag tag, int position) {
+      String name = tag.toString();
+      if (Set.of("script", "style", "iframe", "object").contains(name)) {
+        suppressedDepth = Math.max(0, suppressedDepth - 1);
+        suppressed = suppressedDepth > 0;
+        return;
+      }
+      if (suppressed) return;
+      if (Set.of("strong", "b").contains(name)) bold = Math.max(0, bold - 1);
+      else if (Set.of("em", "i").contains(name)) italic = Math.max(0, italic - 1);
+      else if (Set.of("u", "a").contains(name)) underline = Math.max(0, underline - 1);
+      else if (Set.of("td", "th").contains(name)) {
+        if (row != null && cell != null) row.add(List.copyOf(cell));
+        cell = null;
+        if (name.equals("th")) bold = Math.max(0, bold - 1);
+      } else if (name.equals("tr")) {
+        if (rows != null && row != null && !row.isEmpty()) rows.add(List.copyOf(row));
+        row = null;
+      } else if (name.equals("table")) {
+        if (rows != null && !rows.isEmpty()) blocks.add(new Table(List.copyOf(rows)));
+        rows = null;
+      } else if (cell != null && (name.equals("p") || heading(name))) {
+        text("\n");
+      } else if (heading(name)) {
+        flush();
+        size = 10;
+        bold = Math.max(0, bold - 1);
+      } else if (name.equals("ul") || name.equals("ol")) {
+        flush();
+        if (!lists.isEmpty()) lists.pop();
+        indent = 16 * lists.size();
+      } else if (name.equals("blockquote")) {
+        flush();
+        indent = Math.max(0, indent - 18);
+      } else if (name.equals("p") || name.equals("div") || name.equals("li")) {
+        flush();
+      }
+    }
+
+    @Override
+    public void handleSimpleTag(HTML.Tag tag, MutableAttributeSet attrs, int position) {
+      if (tag == HTML.Tag.BR) text("\n");
+    }
+
+    @Override
+    public void handleText(char[] chars, int position) {
+      text(new String(chars).replaceAll("[\\t\\r\\n ]+", " "));
+    }
+  }
+
+  /**
+   * A body paginator owns only its pages; proof and handwritten signature keep their existing
+   * pages.
+   */
+  private class RichPages implements AutoCloseable {
+    final PDDocument document;
+    final PDType0Font font;
+    PDPageContentStream content;
+    float y;
+
+    RichPages(PDDocument document, PDType0Font font) throws IOException {
+      this.document = document;
+      this.font = font;
+      nextPage();
+    }
+
+    void nextPage() throws IOException {
+      finishPage();
+      var page = new PDPage(PDRectangle.A4);
+      document.addPage(page);
+      content = new PDPageContentStream(document, page);
+      y = 790;
+    }
+
+    void finishPage() throws IOException {
+      if (content != null) {
+        content.beginText();
+        content.setRenderingMode(RenderingMode.FILL);
+        content.endText();
+        footer(content, font, document.getNumberOfPages());
+        content.close();
+        content = null;
+      }
+    }
+
+    void ensure(float height) throws IOException {
+      if (y - height < 64) nextPage();
+    }
+
+    void paragraph(Paragraph paragraph) throws IOException {
+      float indent = Math.min(140, paragraph.indent()), leading = paragraph.size() + 6;
+      for (var line : wrapped(paragraph.spans(), paragraph.size(), 495 - indent)) {
+        ensure(leading);
+        draw(line, 48 + indent, y, paragraph.size());
+        y -= leading;
+      }
+      y -= paragraph.size() > 10 ? 7 : 4;
+    }
+
+    void table(Table table) throws IOException {
+      int columns = table.rows().stream().mapToInt(List::size).max().orElse(1);
+      float columnWidth = 495f / columns, padding = 5, size = 9, leading = 13;
+      for (var row : table.rows()) {
+        var cells = new ArrayList<List<List<Span>>>();
+        int totalLines = 1;
+        for (int column = 0; column < columns; column++) {
+          var lines =
+              wrapped(
+                  column < row.size() ? row.get(column) : List.of(),
+                  size,
+                  Math.max(1, columnWidth - 2 * padding));
+          cells.add(lines);
+          totalLines = Math.max(totalLines, lines.size());
+        }
+        for (int offset = 0; offset < totalLines; ) {
+          ensure(leading + 2 * padding);
+          int capacity = Math.max(1, (int) ((y - 64 - 2 * padding) / leading));
+          int count = Math.min(capacity, totalLines - offset);
+          float height = count * leading + 2 * padding;
+          for (int column = 0; column < columns; column++) {
+            float x = 48 + column * columnWidth;
+            content.setLineWidth(.5f);
+            content.addRect(x, y - height, columnWidth, height);
+            content.stroke();
+            var lines = cells.get(column);
+            for (int index = 0; index < count && offset + index < lines.size(); index++)
+              draw(
+                  lines.get(offset + index),
+                  x + padding,
+                  y - padding - size - index * leading,
+                  size);
+          }
+          y -= height;
+          offset += count;
+          if (offset < totalLines) nextPage();
+        }
+      }
+      y -= 10;
+    }
+
+    void draw(List<Span> spans, float x, float baseline, float size) throws IOException {
+      for (Span span : spans) {
+        if (span.text().isEmpty()) continue;
+        content.beginText();
+        content.setFont(font, size);
+        content.setLineWidth(.22f);
+        content.setRenderingMode(
+            span.style().bold() ? RenderingMode.FILL_STROKE : RenderingMode.FILL);
+        content.setTextMatrix(new Matrix(1, 0, span.style().italic() ? .22f : 0, 1, x, baseline));
+        content.showText(span.text());
+        content.endText();
+        float width = width(span.text(), size);
+        if (span.style().underline()) {
+          content.setLineWidth(.5f);
+          content.moveTo(x, baseline - 2);
+          content.lineTo(x + width, baseline - 2);
+          content.stroke();
+        }
+        x += width;
+      }
+    }
+
+    float width(String value, float size) throws IOException {
+      return font.getStringWidth(value) * size / 1000f;
+    }
+
+    List<List<Span>> wrapped(List<Span> spans, float size, float available) throws IOException {
+      var lines = new ArrayList<List<Span>>();
+      var line = new ArrayList<Span>();
+      float used = 0;
+      for (Span span : spans) {
+        String value = span.text().replace('\r', '\n').replace('\t', ' ');
+        for (String token : value.split("(?<=\\s)|(?=\\s)")) {
+          if (token.isEmpty()) continue;
+          if (token.equals("\n")) {
+            lines.add(List.copyOf(line));
+            line.clear();
+            used = 0;
+            continue;
+          }
+          String word = token.chars().allMatch(Character::isWhitespace) ? " " : token;
+          float tokenWidth = width(word, size);
+          if (tokenWidth <= available) {
+            if (used + tokenWidth > available && !line.isEmpty()) {
+              lines.add(List.copyOf(line));
+              line.clear();
+              used = 0;
+            }
+            if (line.isEmpty() && word.equals(" ")) continue;
+            line.add(new Span(word, span.style()));
+            used += tokenWidth;
+          } else {
+            for (int at = 0; at < word.length(); ) {
+              int cp = word.codePointAt(at);
+              at += Character.charCount(cp);
+              if (Character.isISOControl(cp)) continue;
+              String ch = new String(Character.toChars(cp));
+              float w = width(ch, size);
+              if (used + w > available && !line.isEmpty()) {
+                lines.add(List.copyOf(line));
+                line.clear();
+                used = 0;
+              }
+              line.add(new Span(ch, span.style()));
+              used += w;
+            }
+          }
+        }
+      }
+      if (!line.isEmpty() || lines.isEmpty()) lines.add(List.copyOf(line));
+      return lines;
+    }
+
+    @Override
+    public void close() throws IOException {
+      finishPage();
+    }
   }
 }

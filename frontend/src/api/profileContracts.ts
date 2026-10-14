@@ -1,10 +1,11 @@
 import {apiRequest,ApiError} from './client';
 import {keycloak,validAccessToken} from '../auth/keycloak';
 import {selectedProfile} from '../auth/profileContext';
+export type ContractBodyFormat='TEXT'|'HTML';
 export type ContractCategory='PATIENT'|'HOSPITAL'|'STAFF'|'ADMIN';
-export type ContractTemplate={id:string;category:ContractCategory;version:number;termsUrl:string;termsVersion:string;bodyText:string;renderedBodyText?:string|null;publishedAt?:string};
+export type ContractTemplate={id:string;category:ContractCategory;version:number;termsUrl:string;termsVersion:string;bodyText:string;bodyFormat?:ContractBodyFormat;renderedBodyText?:string|null;publishedAt?:string};
 export type ContractState={profileId:string;signed:boolean;agreementId?:string;status:'UNSIGNED'|'SIGNED'|'PDF_READY';templateId?:string;templateVersion?:number;signedAt?:string;pdfReady:boolean;emailStatus?:'QUEUED'|'SENT'|'FAILED'};
-export type ContractDraft={category:ContractCategory;termsUrl:string;termsVersion:string;bodyText:string};
+export type ContractDraft={category:ContractCategory;termsUrl:string;termsVersion:string;bodyText:string;bodyFormat?:ContractBodyFormat};
 const base=(profile:string)=>`/me/profile-contracts/${profile}`;
 export const getProfileContract=(profile:string)=>apiRequest<ContractState>(base(profile));
 export const getProfileContractTemplate=(profile:string)=>apiRequest<ContractTemplate>(`${base(profile)}/template`);

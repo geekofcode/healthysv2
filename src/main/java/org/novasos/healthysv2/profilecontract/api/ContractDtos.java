@@ -11,7 +11,16 @@ public final class ContractDtos {
       @NotBlank @Pattern(regexp = "PATIENT|HOSPITAL|STAFF|ADMIN") String category,
       @NotBlank @Size(max = 2048) String termsUrl,
       @NotBlank @Size(max = 100) String termsVersion,
-      @NotBlank @Size(max = 60000) String bodyText) {}
+      @NotBlank @Size(max = 60000) String bodyText,
+      @Pattern(regexp = "TEXT|HTML") String bodyFormat) {
+    public TemplateRequest(String category, String termsUrl, String termsVersion, String bodyText) {
+      this(category, termsUrl, termsVersion, bodyText, "TEXT");
+    }
+
+    public TemplateRequest {
+      bodyFormat = bodyFormat == null ? "TEXT" : bodyFormat;
+    }
+  }
 
   public record Template(
       UUID id,
@@ -21,7 +30,33 @@ public final class ContractDtos {
       String termsVersion,
       String bodyText,
       Instant publishedAt,
-      String renderedBodyText) {}
+      String renderedBodyText,
+      String bodyFormat) {
+    public Template(
+        UUID id,
+        String category,
+        int version,
+        String termsUrl,
+        String termsVersion,
+        String bodyText,
+        Instant publishedAt,
+        String renderedBodyText) {
+      this(
+          id,
+          category,
+          version,
+          termsUrl,
+          termsVersion,
+          bodyText,
+          publishedAt,
+          renderedBodyText,
+          "TEXT");
+    }
+
+    public Template {
+      bodyFormat = bodyFormat == null ? "TEXT" : bodyFormat;
+    }
+  }
 
   public record SignRequest(
       @NotNull UUID templateId,
