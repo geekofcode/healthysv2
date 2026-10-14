@@ -1,7 +1,9 @@
+import i18n from '../i18n';
 // @vitest-environment jsdom
 import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {SignatureUpload} from './SignatureUpload';
+void i18n.changeLanguage('fr');
 afterEach(()=>{cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();});
 describe('SignatureUpload',()=>{
  it('refuses unsupported images before decoding',()=>{

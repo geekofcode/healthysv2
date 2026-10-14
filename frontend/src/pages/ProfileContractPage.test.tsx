@@ -6,7 +6,7 @@ import {MemoryRouter,Route,Routes} from 'react-router-dom';
 const mock=vi.hoisted(()=>({sign:vi.fn().mockResolvedValue({profileId:'family',signed:true,pdfReady:false,status:'SIGNED',emailStatus:'QUEUED'}),state:vi.fn().mockResolvedValue({profileId:'family',signed:false,pdfReady:false,status:'UNSIGNED'}),template:vi.fn().mockResolvedValue({id:'template',category:'PATIENT',version:2,termsUrl:'https://example.org/legal',termsVersion:'v2',bodyText:'Contrat réel\n{{signature}}'}),sourceType:'FAMILY_PATIENT',platform:false}));
 vi.mock('../auth/AuthContext',()=>({useAuth:()=>({profiles:[{id:'family',label:'Alice',sourceType:mock.sourceType}],activeProfile:{id:'family'},hasAnyRole:()=>mock.platform})}));
 vi.mock('../api/client',()=>({ApiError:class extends Error{}}));
-vi.mock('react-i18next',()=>({useTranslation:()=>({i18n:{language:'fr'}})}));
+vi.mock('react-i18next',async()=>{const {default:messages}=await import('../translations/accountFlow.json');return {useTranslation:()=>({t:(key:string)=>messages.fr[key.replace('accountFlow.','') as keyof typeof messages.fr]??key,i18n:{language:'fr'}})};});
 vi.mock('../api/profileContracts',()=>({getProfileContract:mock.state,getProfileContractTemplate:mock.template,signProfileContract:mock.sign,downloadProfileContract:vi.fn()}));
 vi.mock('../components/HandwrittenSignature',()=>({HandwrittenSignature:({onChange}:any)=><button type="button" onClick={()=>onChange('data:image/png;base64,signature')}>Dessiner la signature</button>}));
 import {ProfileContractPage} from './ProfileContractPage';

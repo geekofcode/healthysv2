@@ -6,7 +6,7 @@ import {MemoryRouter} from 'react-router-dom';
 const mock=vi.hoisted(()=>({create:vi.fn().mockResolvedValue({id:'family'}),me:vi.fn().mockResolvedValue({firstName:'Parent',lastName:'Dupont'})}));
 vi.mock('../auth/AuthContext',()=>({useAuth:()=>({username:'parent'})}));
 vi.mock('../api/client',()=>({ApiError:class extends Error{}}));
-vi.mock('react-i18next',()=>({useTranslation:()=>({i18n:{language:'fr'}})}));
+vi.mock('react-i18next',async()=>{const {default:messages}=await import('../translations/accountFlow.json');return {useTranslation:()=>({t:(key:string)=>messages.fr[key.replace('accountFlow.','') as keyof typeof messages.fr]??key,i18n:{language:'fr'}})};});
 vi.mock('../api/patientProfiles',()=>({createPersonalPatientProfile:mock.create}));
 vi.mock('../api/persons',()=>({getMe:mock.me}));
 import {PatientProfileCreatePage} from './PatientProfileCreatePage';

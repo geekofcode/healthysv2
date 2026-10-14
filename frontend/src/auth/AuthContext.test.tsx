@@ -7,7 +7,7 @@ const mock=vi.hoisted(()=>({profiles:[{id:'admin',personId:'person',type:'PLATFO
 vi.mock('./keycloak',()=>({keycloak:{tokenParsed:{sub:'person',realm_access:{roles:['admin','medecin','patient']}},login:vi.fn(),logout:vi.fn(),register:vi.fn(),clearToken:vi.fn(),updateToken:vi.fn()},initializeKeycloak:vi.fn().mockResolvedValue(true),validAccessToken:vi.fn().mockResolvedValue('token')}));
 vi.mock('../api/accessProfiles',()=>({listAccessProfiles:vi.fn(async()=>mock.profiles)}));
 vi.mock('../api/client',()=>({ApiError:class extends Error{}}));
-vi.mock('react-i18next',()=>({useTranslation:()=>({i18n:{language:'fr'}})}));
+vi.mock('react-i18next',async()=>{const {default:messages}=await import('../translations/accountFlow.json');return {useTranslation:()=>({t:(key:string)=>messages.fr[key.replace('accountFlow.','') as keyof typeof messages.fr]??key,i18n:{language:'fr'}})};});
 import {AuthProvider,useAuth} from './AuthContext';
 import {AccessProfileSelector} from '../components/AccessProfileSelector';
 import {selectedProfile,selectProfile} from './profileContext';

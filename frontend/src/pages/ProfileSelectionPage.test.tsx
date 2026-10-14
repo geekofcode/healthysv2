@@ -5,7 +5,7 @@ import {MemoryRouter,Route,Routes} from 'react-router-dom';
 const mock=vi.hoisted(()=>({choose:vi.fn().mockResolvedValue(undefined),profiles:[{id:'p',label:'Patient',type:'PATIENT'}]}));
 vi.mock('../auth/AuthContext',()=>({useAuth:()=>({profiles:mock.profiles,switchProfile:mock.choose,logout:vi.fn()})}));
 vi.mock('../api/client',()=>({ApiError:class extends Error{}}));
-vi.mock('react-i18next',()=>({useTranslation:()=>({i18n:{language:'fr'}})}));
+vi.mock('react-i18next',async()=>{const {default:messages}=await import('../translations/accountFlow.json');return {useTranslation:()=>({t:(key:string)=>messages.fr[key.replace('accountFlow.','') as keyof typeof messages.fr]??key,i18n:{language:'fr'}})};});
 import {ProfileSelectionPage} from './ProfileSelectionPage';
 afterEach(()=>{cleanup();vi.clearAllMocks();mock.profiles=[{id:'p',label:'Patient',type:'PATIENT'}];});
 it('requires clicking even a single profile before its contract opens',async()=>{render(<MemoryRouter initialEntries={['/profiles/select']}><Routes><Route path="/profiles/select" element={<ProfileSelectionPage/>}/><Route path="/profiles/p/contract" element={<p>Contrat patient</p>}/></Routes></MemoryRouter>);expect(mock.choose).not.toHaveBeenCalled();fireEvent.click(screen.getByRole('button',{name:'Patient'}));await waitFor(()=>expect(mock.choose).toHaveBeenCalledWith('p'));await screen.findByText('Contrat patient');});
