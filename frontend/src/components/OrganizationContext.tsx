@@ -1,7 +1,2 @@
-import {useQuery,useQueryClient} from '@tanstack/react-query';
-import {useEffect,useState} from 'react';
-import {useTranslation} from 'react-i18next';
-import {keycloak} from '../auth/keycloak';
-import {selectedOrganization,selectOrganization} from '../auth/organizationContext';
-import {listMyMemberships} from '../api/licensing';
-export function OrganizationContext(){const {t}=useTranslation();const client=useQueryClient();const subject=keycloak.tokenParsed?.sub;const [selected,setSelected]=useState(selectedOrganization(subject)??'');const query=useQuery({queryKey:['licensing','my-memberships',subject],queryFn:listMyMemberships,enabled:!!subject});const affiliations=Array.isArray(query.data)?query.data:[];useEffect(()=>{setSelected(selectedOrganization(subject)??'');},[subject]);useEffect(()=>{if(subject&&query.isSuccess&&selected&&selected!=='independent'&&!affiliations.some(a=>a.organizationId===selected)){selectOrganization(subject,'');setSelected('independent');void client.invalidateQueries();}},[subject,query.isSuccess,query.data,selected,client]);if(!subject||!affiliations.length)return null;return <label className="organization-context">{t('onboarding.context')}<select value={affiliations.some(a=>a.organizationId===selected)?selected:''} onChange={e=>{selectOrganization(subject,e.target.value);setSelected(e.target.value);void client.invalidateQueries();}}><option value="">{t('onboarding.independentContext')}</option>{affiliations.map(a=><option key={a.organizationId} value={a.organizationId}>{a.organizationName??a.organizationId}</option>)}</select></label>;}
+// Compatibility export: organization context is now selected through one access profile.
+export {AccessProfileSelector as OrganizationContext} from './AccessProfileSelector';

@@ -1,3 +1,4 @@
+import {useHospitalPermission} from '../auth/HospitalPermissions';
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiErrorMessage } from "./ApiErrorMessage";
@@ -35,6 +36,7 @@ export function VisitPrescription({
   fr: boolean;
   canWrite: boolean;
 }) {
+  const allowed=useHospitalPermission('prescriptions','UPDATE');
   const data = useQuery({
     queryKey: ["visit-prescription", id],
     queryFn: () => getVisitPrescription(id),
@@ -46,7 +48,7 @@ export function VisitPrescription({
       key={`${data.data.version}-${data.data.status}`}
       id={id}
       fr={fr}
-      canWrite={canWrite}
+      canWrite={canWrite&&allowed}
       value={data.data}
     />
   );

@@ -168,8 +168,11 @@ class AiWorker {
   }
 
   private void authorize(Map<String, Object> job) {
-    authorization.require(
-        (UUID) job.get("visit_id"), (UUID) job.get("actor_id"), (UUID) job.get("organization_id"));
+    authorization.requireExecution(
+        (UUID) job.get("visit_id"),
+        (UUID) job.get("actor_id"),
+        (UUID) job.get("organization_id"),
+        (UUID) job.get("created_profile_id"));
     if (job.get("audio_expires_at") instanceof Timestamp expiry
         && !expiry.toInstant().isAfter(Instant.now()))
       throw new AiPythonClient.Failure(false, "AI_AUDIO_EXPIRED");

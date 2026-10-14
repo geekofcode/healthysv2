@@ -36,7 +36,8 @@ class AiWorkerTests {
   private final UUID id = UUID.randomUUID(),
       visit = UUID.randomUUID(),
       actor = UUID.randomUUID(),
-      org = UUID.randomUUID();
+      org = UUID.randomUUID(),
+      profile = UUID.randomUUID();
 
   private Map<String, Object> job() {
     Map<String, Object> j = new HashMap<>();
@@ -44,6 +45,7 @@ class AiWorkerTests {
     j.put("visit_id", visit);
     j.put("actor_id", actor);
     j.put("organization_id", org);
+    j.put("created_profile_id", profile);
     j.put("kind", "REPORT");
     j.put("attempts", 0);
     j.put("notes", "Dictation");
@@ -59,7 +61,7 @@ class AiWorkerTests {
     when(db.queryForObject(
             contains("lease_until>clock_timestamp()"), eq(Integer.class), eq(id), any()))
         .thenReturn(1);
-    when(auth.require(visit, actor, org))
+    when(auth.requireExecution(visit, actor, org, profile))
         .thenReturn(new AiAuthorization.Context(visit, actor, org, UUID.randomUUID()));
     when(json.decode("{}")).thenReturn(Map.of("sources", List.of()));
     when(json.encode(any())).thenReturn("{}");
@@ -72,7 +74,7 @@ class AiWorkerTests {
   void queuedJobRechecksPermissionsBeforeProviderAndBeforePersistingOutput() {
     setup();
     worker.poll();
-    verify(auth, times(3)).require(visit, actor, org);
+    verify(auth, times(3)).requireExecution(visit, actor, org, profile);
     verify(python)
         .generate(eq(id), eq(AiDtos.Kind.REPORT), anyMap(), eq("Dictation"), isNull(), isNull());
     verify(db).update(contains("status='SUCCEEDED'"), eq("{}"), eq("model"), eq(id), any());
@@ -81,7 +83,7 @@ class AiWorkerTests {
   @Test
   void revokedPermissionDuringProviderCallDiscardsResultAndCancelsJob() {
     setup();
-    when(auth.require(visit, actor, org))
+    when(auth.requireExecution(visit, actor, org, profile))
         .thenReturn(
             new AiAuthorization.Context(visit, actor, org, UUID.randomUUID()),
             new AiAuthorization.Context(visit, actor, org, UUID.randomUUID()))

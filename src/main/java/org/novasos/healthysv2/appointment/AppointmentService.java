@@ -1,32 +1,471 @@
 package org.novasos.healthysv2.appointment;
+
 import static org.novasos.healthysv2.appointment.api.AppointmentDtos.*;
-import java.time.*;import java.util.*;import org.novasos.healthysv2.shared.api.dto.PageResponse;import org.novasos.healthysv2.shared.api.error.*;import org.springframework.data.domain.*;import org.springframework.jdbc.core.JdbcTemplate;import org.springframework.security.core.context.SecurityContextHolder;import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;import org.springframework.stereotype.Service;import org.springframework.transaction.annotation.Transactional;
-@Service @Transactional class AppointmentService{
- private static final Set<String> ACTIVE=Set.of("SCHEDULED","CONFIRMED","RESCHEDULED","CHECKED_IN","IN_PROGRESS");private static final Set<String> MANUAL=Set.of("CONFIRMED","IN_PROGRESS","COMPLETED","NO_SHOW");private final AppointmentRepository repository;private final JdbcTemplate jdbc;AppointmentService(AppointmentRepository repository,JdbcTemplate jdbc){this.repository=repository;this.jdbc=jdbc;}
- AppointmentResponse create(AppointmentRequest r){validateReferences(r.patientId(),r.professionalId(),r.organizationId(),r.departmentId());authorizePatientCreation(r.patientId());if(!hasAny("PLATFORM_ADMIN","HOSPITAL_ADMIN","HOSPITAL_AGENT","DOCTOR","NURSE")){if(!r.scheduledStart().isAfter(Instant.now())||!exists("select count(*) from patient.patient_registration where patient_id=? and organization_id=? and status='ACTIVE'",r.patientId(),r.organizationId()))throw new org.springframework.security.access.AccessDeniedException("Patient must be registered in the organization and book a future slot");}requireAvailability(r.professionalId(),r.organizationId(),r.scheduledStart(),r.scheduledEnd(),null);var appointment=Appointment.create(r.patientId(),r.professionalId(),r.organizationId(),r.departmentId(),r.type(),r.scheduledStart(),r.scheduledEnd(),r.reason(),actor());return response(repository.saveAndFlush(appointment));}
- AppointmentResponse update(UUID id,AppointmentUpdateRequest r){var a=lockedAppointment(id);authorizeMutation(a);authorizePatientSlot(a,r.scheduledStart(),r.scheduledEnd());validateReferences(a.getPatientId(),a.getProfessionalId(),a.getOrganizationId(),r.departmentId());requireAvailability(a.getProfessionalId(),a.getOrganizationId(),r.scheduledStart(),r.scheduledEnd(),id);a.update(r.departmentId(),r.type(),r.scheduledStart(),r.scheduledEnd(),r.reason());return response(a);}
- AppointmentResponse cancel(UUID id,CancelRequest r){var a=lockedAppointment(id);authorizeMutation(a);try{a.cancel(actor(),r.reason());}catch(IllegalStateException e){throw rule("APPOINTMENT_CANNOT_CANCEL","error.appointment.cannot-cancel");}return response(a);}
- AppointmentResponse reschedule(UUID id,RescheduleRequest r){var a=lockedAppointment(id);authorizeMutation(a);authorizePatientSlot(a,r.scheduledStart(),r.scheduledEnd());requireAvailability(a.getProfessionalId(),a.getOrganizationId(),r.scheduledStart(),r.scheduledEnd(),id);try{a.reschedule(r.scheduledStart(),r.scheduledEnd(),actor(),r.reason());}catch(IllegalStateException e){throw rule("APPOINTMENT_CANNOT_RESCHEDULE","error.appointment.cannot-reschedule");}return response(a);}
- AppointmentResponse status(UUID id,StatusRequest r){String next=r.status().toUpperCase();if(!MANUAL.contains(next))throw rule("INVALID_APPOINTMENT_STATUS","error.appointment.status");var a=appointment(id);a.changeStatus(next,actor(),r.reason());return response(a);}
- ParticipantResponse addParticipant(UUID id,ParticipantRequest r){require("identity.person",r.personId(),"Person");try{var a=appointment(id);authorizeMutation(a);var p=a.addParticipant(r.personId(),r.role());repository.flush();return participant(p);}catch(IllegalArgumentException e){throw new ConflictException("APPOINTMENT_PARTICIPANT_EXISTS","error.appointment.participant.exists");}}
- ParticipantResponse participantStatus(UUID appointment,UUID id,ParticipantStatusRequest r){var owned=appointment(appointment);authorizeMutation(owned);var p=owned.getParticipants().stream().filter(x->x.getId().equals(id)).findFirst().orElseThrow(()->notFound("AppointmentParticipant",id));p.status(r.status());return participant(p);}
- QueueResponse checkIn(UUID id){var a=appointment(id);try{var q=a.checkIn("Q-"+UUID.randomUUID().toString().substring(0,8).toUpperCase(),actor());repository.flush();return queue(q);}catch(IllegalStateException e){throw rule("APPOINTMENT_ALREADY_QUEUED","error.appointment.queued");}}
- QueueResponse call(UUID appointment,UUID queue){var q=queue(appointment,queue);try{q.call();return queue(q);}catch(IllegalStateException e){throw rule("QUEUE_NOT_WAITING","error.queue.not-waiting");}}
- QueueResponse complete(UUID appointment,UUID queue){var q=queue(appointment,queue);try{q.complete();return queue(q);}catch(IllegalStateException e){throw rule("QUEUE_CLOSED","error.queue.closed");}}
- @Transactional(readOnly=true)AppointmentResponse find(UUID id){var a=appointment(id);authorizeRead(a);return response(a);}@Transactional(readOnly=true)PageResponse<AppointmentSummary> search(UUID patient,UUID professional,String status,Instant from,Instant to,Pageable pageable){return PageResponse.from(repository.search(patient,professional,blank(status),from==null?Instant.now().minus(Duration.ofDays(30)):from,to==null?Instant.now().plus(Duration.ofDays(365)):to,pageable).map(this::summary));}
- @Transactional(readOnly=true)PageResponse<AppointmentSummary> mine(Instant from,Instant to,Pageable pageable){return mine(from,to,null,pageable);}
- @Transactional(readOnly=true)PageResponse<AppointmentSummary> mine(Instant from,Instant to,String status,Pageable pageable){UUID person=actor();if(person==null)return PageResponse.from(Page.empty(pageable));UUID patient=single("select id from patient.patient where person_id=?",person),professional=single("select id from professional.professional where person_id=?",person);if(patient==null&&(!hasAny("PLATFORM_ADMIN","HOSPITAL_ADMIN","HOSPITAL_AGENT","DOCTOR","NURSE")||professional==null))return PageResponse.from(Page.empty(pageable));return search(patient,patient==null?professional:null,status,from,to,pageable);}
- @Transactional(readOnly=true)AvailabilityResponse availability(UUID professional,UUID organization,Instant start,Instant end){String reason=availabilityReason(professional,organization,start,end,null);return new AvailabilityResponse(professional,organization,start,end,reason==null,reason);}
- private void requireAvailability(UUID p,UUID o,Instant s,Instant e,UUID exclude){jdbc.query("select id from professional.professional where id=? for update",rs->rs.next()?(UUID)rs.getObject(1):null,p);String reason=availabilityReason(p,o,s,e,exclude);if("SLOT_ALREADY_BOOKED".equals(reason))throw new ConflictException("SLOT_ALREADY_BOOKED","error.appointment.unavailable");if(reason!=null)throw rule("PROFESSIONAL_UNAVAILABLE","error.appointment.unavailable");}
- private String availabilityReason(UUID p,UUID o,Instant s,Instant e,UUID exclude){if(s==null||e==null||!e.isAfter(s))return"INVALID_TIME_RANGE";if(!exists("select count(*) from professional.professional_assignment where professional_id=? and organization_id=? and status='ACTIVE' and start_date<=? and (end_date is null or end_date>=?)",p,o,LocalDate.ofInstant(s,ZoneOffset.UTC),LocalDate.ofInstant(e,ZoneOffset.UTC)))return"NO_ACTIVE_ASSIGNMENT";if(!exists("select count(*) from professional.professional_availability pa join professional.professional_assignment a on a.id=pa.assignment_id where a.professional_id=? and a.organization_id=? and pa.status='AVAILABLE' and pa.start_at<=? and pa.end_at>=?",p,o,java.sql.Timestamp.from(s),java.sql.Timestamp.from(e)))return"OUTSIDE_AVAILABILITY";String sql="select count(*) from appointment.appointment where professional_id=? and status in ('SCHEDULED','CONFIRMED','RESCHEDULED','CHECKED_IN','IN_PROGRESS') and scheduled_start<? and scheduled_end>?"+(exclude==null?"":" and id<>?");boolean legacy=exists(sql,exclude==null?new Object[]{p,java.sql.Timestamp.from(e),java.sql.Timestamp.from(s)}:new Object[]{p,java.sql.Timestamp.from(e),java.sql.Timestamp.from(s),exclude});return legacy||exists("select count(*) from care.care_visit where professional_id=? and status in ('SCHEDULED','IN_PROGRESS') and scheduled_at<? and scheduled_at + slot_minutes * interval '1 minute'>?",p,java.sql.Timestamp.from(e),java.sql.Timestamp.from(s))?"SLOT_ALREADY_BOOKED":null;}
- private void validateReferences(UUID patient,UUID professional,UUID organization,UUID department){require("patient.patient",patient,"Patient");require("professional.professional",professional,"Professional");require("organization.organization",organization,"Organization");if(department!=null&&!exists("select count(*) from organization.department where id=? and organization_id=?",department,organization))throw notFound("Department",department);}
- private Appointment lockedAppointment(UUID id){return repository.findLockedById(id).orElseThrow(()->notFound("Appointment",id));}
- private Appointment appointment(UUID id){return repository.findById(id).orElseThrow(()->notFound("Appointment",id));}private WaitingQueueEntry queue(UUID appointment,UUID id){return appointment(appointment).getQueue().stream().filter(q->q.getId().equals(id)).findFirst().orElseThrow(()->notFound("WaitingQueue",id));}private void require(String table,UUID id,String resource){if(!exists("select count(*) from "+table+" where id=?",id))throw notFound(resource,id);}private boolean exists(String sql,Object...args){return Objects.requireNonNull(jdbc.queryForObject(sql,Integer.class,args))>0;}private UUID single(String sql,UUID id){return jdbc.query(sql,rs->rs.next()?(UUID)rs.getObject(1):null,id);}private UUID actor(){var auth=SecurityContextHolder.getContext().getAuthentication();if(!(auth instanceof JwtAuthenticationToken jwt))return null;try{UUID subject=UUID.fromString(jwt.getToken().getSubject());UUID person=single("select id from identity.person where keycloak_user_id=?",subject);return person;}catch(IllegalArgumentException e){return null;}}
- private void authorizePatientSlot(Appointment a,Instant start,Instant end){if(hasAny("PLATFORM_ADMIN","HOSPITAL_ADMIN","HOSPITAL_AGENT","DOCTOR","NURSE"))return;if(start==null||end==null||!start.isAfter(Instant.now())||!end.isAfter(start))throw rule("INVALID_APPOINTMENT_SLOT","error.appointment.unavailable");if(!exists("select count(*) from patient.patient_registration where patient_id=? and organization_id=? and status='ACTIVE'",a.getPatientId(),a.getOrganizationId()))throw new org.springframework.security.access.AccessDeniedException("Patient must be registered in the organization");}
- private void authorizeMutation(Appointment a){authorizeRead(a);if(!hasAny("PLATFORM_ADMIN","HOSPITAL_ADMIN","HOSPITAL_AGENT","DOCTOR","NURSE")&&(!Set.of("SCHEDULED","CONFIRMED","RESCHEDULED").contains(a.getStatus())||!a.getStart().isAfter(Instant.now())))throw rule("APPOINTMENT_CANNOT_CHANGE","error.appointment.cannot-reschedule");}
- private void authorizePatientCreation(UUID patient){if(hasAny("PLATFORM_ADMIN","HOSPITAL_ADMIN","HOSPITAL_AGENT","DOCTOR","NURSE"))return;UUID person=actor();if(person==null||!exists("select count(*) from patient.patient where id=? and person_id=?",patient,person))throw new org.springframework.security.access.AccessDeniedException("Patient can only book for self");}
- private void authorizeRead(Appointment a){if(hasAny("PLATFORM_ADMIN","HOSPITAL_ADMIN","HOSPITAL_AGENT","NURSE"))return;UUID person=actor();if(person!=null&&(exists("select count(*) from patient.patient where id=? and person_id=?",a.getPatientId(),person)||(hasAny("DOCTOR","NURSE")&&exists("select count(*) from professional.professional where id=? and person_id=?",a.getProfessionalId(),person))))return;throw new org.springframework.security.access.AccessDeniedException("Appointment access denied");}
- private boolean hasAny(String...roles){var auth=SecurityContextHolder.getContext().getAuthentication();return auth!=null&&Arrays.stream(roles).anyMatch(r->auth.getAuthorities().stream().anyMatch(a->a.getAuthority().equals("ROLE_"+r)));}
- private String blank(String v){return v==null||v.isBlank()?null:v.trim().toUpperCase(java.util.Locale.ROOT);}private ResourceNotFoundException notFound(String r,Object id){return new ResourceNotFoundException(r,id);}private BusinessRuleException rule(String code,String key){return new BusinessRuleException(code,key);}
- private AppointmentSummary summary(Appointment a){return new AppointmentSummary(a.getId(),a.getNumber(),a.getPatientId(),a.getProfessionalId(),a.getOrganizationId(),a.getType(),a.getStart(),a.getEnd(),a.getStatus());}private AppointmentResponse response(Appointment a){return new AppointmentResponse(a.getId(),a.getNumber(),a.getPatientId(),a.getProfessionalId(),a.getOrganizationId(),a.getDepartmentId(),a.getType(),a.getStart(),a.getEnd(),a.getReason(),a.getStatus(),a.getCreatedBy(),a.getCreatedAt(),a.getUpdatedAt(),a.getVersion(),a.getParticipants().stream().map(this::participant).toList(),a.getHistory().stream().map(this::history).toList(),a.getQueue().stream().map(this::queue).toList());}private ParticipantResponse participant(AppointmentParticipant p){return new ParticipantResponse(p.getId(),p.getPersonId(),p.getRole(),p.getStatus());}private StatusHistoryResponse history(AppointmentStatusHistory h){return new StatusHistoryResponse(h.getId(),h.getPrevious(),h.getNext(),h.getChangedBy(),h.getChangedAt(),h.getReason());}private QueueResponse queue(WaitingQueueEntry q){return new QueueResponse(q.getId(),q.getOrganizationId(),q.getNumber(),q.getCheckedInAt(),q.getCalledAt(),q.getCompletedAt(),q.getStatus());}
+
+import java.time.*;
+import java.util.*;
+import org.novasos.healthysv2.shared.api.dto.PageResponse;
+import org.novasos.healthysv2.shared.api.error.*;
+import org.springframework.data.domain.*;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@Transactional
+class AppointmentService {
+  private org.novasos.healthysv2.patient.CurrentUserContext users;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  public void configureContext(org.novasos.healthysv2.patient.CurrentUserContext users) {
+    this.users = java.util.Objects.requireNonNull(users);
+  }
+
+  private org.novasos.healthysv2.patient.CurrentUserContext.UserContext context() {
+    if (users == null)
+      throw new org.springframework.security.access.AccessDeniedException(
+          "SELECTED_PROFILE_REQUIRED");
+    return users.current();
+  }
+
+  private static final Set<String> ACTIVE =
+      Set.of("SCHEDULED", "CONFIRMED", "RESCHEDULED", "CHECKED_IN", "IN_PROGRESS");
+  private static final Set<String> MANUAL =
+      Set.of("CONFIRMED", "IN_PROGRESS", "COMPLETED", "NO_SHOW");
+  private final AppointmentRepository repository;
+  private final JdbcTemplate jdbc;
+
+  AppointmentService(AppointmentRepository repository, JdbcTemplate jdbc) {
+    this.repository = repository;
+    this.jdbc = jdbc;
+  }
+
+  AppointmentResponse create(AppointmentRequest r) {
+    validateReferences(r.patientId(), r.professionalId(), r.organizationId(), r.departmentId());
+    authorizePatientCreation(r.patientId(), r.organizationId());
+    if (!hasAny("HOSPITAL_ADMIN", "HOSPITAL_AGENT", "DOCTOR", "NURSE")) {
+      if (!r.scheduledStart().isAfter(Instant.now())
+          || !exists(
+              "select count(*) from patient.patient_registration where patient_id=? and"
+                  + " organization_id=? and status='ACTIVE'",
+              r.patientId(),
+              r.organizationId()))
+        throw new org.springframework.security.access.AccessDeniedException(
+            "Patient must be registered in the organization and book a future slot");
+    }
+    requireAvailability(
+        r.professionalId(), r.organizationId(), r.scheduledStart(), r.scheduledEnd(), null);
+    var appointment =
+        Appointment.create(
+            r.patientId(),
+            r.professionalId(),
+            r.organizationId(),
+            r.departmentId(),
+            r.type(),
+            r.scheduledStart(),
+            r.scheduledEnd(),
+            r.reason(),
+            actor());
+    return response(repository.saveAndFlush(appointment));
+  }
+
+  AppointmentResponse update(UUID id, AppointmentUpdateRequest r) {
+    var a = lockedAppointment(id);
+    authorizeMutation(a);
+    authorizePatientSlot(a, r.scheduledStart(), r.scheduledEnd());
+    validateReferences(
+        a.getPatientId(), a.getProfessionalId(), a.getOrganizationId(), r.departmentId());
+    requireAvailability(
+        a.getProfessionalId(), a.getOrganizationId(), r.scheduledStart(), r.scheduledEnd(), id);
+    a.update(r.departmentId(), r.type(), r.scheduledStart(), r.scheduledEnd(), r.reason());
+    return response(a);
+  }
+
+  AppointmentResponse cancel(UUID id, CancelRequest r) {
+    var a = lockedAppointment(id);
+    authorizeMutation(a);
+    try {
+      a.cancel(actor(), r.reason());
+    } catch (IllegalStateException e) {
+      throw rule("APPOINTMENT_CANNOT_CANCEL", "error.appointment.cannot-cancel");
+    }
+    return response(a);
+  }
+
+  AppointmentResponse reschedule(UUID id, RescheduleRequest r) {
+    var a = lockedAppointment(id);
+    authorizeMutation(a);
+    authorizePatientSlot(a, r.scheduledStart(), r.scheduledEnd());
+    requireAvailability(
+        a.getProfessionalId(), a.getOrganizationId(), r.scheduledStart(), r.scheduledEnd(), id);
+    try {
+      a.reschedule(r.scheduledStart(), r.scheduledEnd(), actor(), r.reason());
+    } catch (IllegalStateException e) {
+      throw rule("APPOINTMENT_CANNOT_RESCHEDULE", "error.appointment.cannot-reschedule");
+    }
+    return response(a);
+  }
+
+  AppointmentResponse status(UUID id, StatusRequest r) {
+    String next = r.status().toUpperCase();
+    if (!MANUAL.contains(next))
+      throw rule("INVALID_APPOINTMENT_STATUS", "error.appointment.status");
+    var a = appointment(id);
+    authorizeMutation(a);
+    a.changeStatus(next, actor(), r.reason());
+    return response(a);
+  }
+
+  ParticipantResponse addParticipant(UUID id, ParticipantRequest r) {
+    require("identity.person", r.personId(), "Person");
+    try {
+      var a = appointment(id);
+      authorizeMutation(a);
+      var p = a.addParticipant(r.personId(), r.role());
+      repository.flush();
+      return participant(p);
+    } catch (IllegalArgumentException e) {
+      throw new ConflictException(
+          "APPOINTMENT_PARTICIPANT_EXISTS", "error.appointment.participant.exists");
+    }
+  }
+
+  ParticipantResponse participantStatus(UUID appointment, UUID id, ParticipantStatusRequest r) {
+    var owned = appointment(appointment);
+    authorizeMutation(owned);
+    var p =
+        owned.getParticipants().stream()
+            .filter(x -> x.getId().equals(id))
+            .findFirst()
+            .orElseThrow(() -> notFound("AppointmentParticipant", id));
+    p.status(r.status());
+    return participant(p);
+  }
+
+  QueueResponse checkIn(UUID id) {
+    var a = appointment(id);
+    authorizeMutation(a);
+    try {
+      var q = a.checkIn("Q-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(), actor());
+      repository.flush();
+      return queue(q);
+    } catch (IllegalStateException e) {
+      throw rule("APPOINTMENT_ALREADY_QUEUED", "error.appointment.queued");
+    }
+  }
+
+  QueueResponse call(UUID appointment, UUID queue) {
+    var q = queue(appointment, queue);
+    try {
+      q.call();
+      return queue(q);
+    } catch (IllegalStateException e) {
+      throw rule("QUEUE_NOT_WAITING", "error.queue.not-waiting");
+    }
+  }
+
+  QueueResponse complete(UUID appointment, UUID queue) {
+    var q = queue(appointment, queue);
+    try {
+      q.complete();
+      return queue(q);
+    } catch (IllegalStateException e) {
+      throw rule("QUEUE_CLOSED", "error.queue.closed");
+    }
+  }
+
+  @Transactional(readOnly = true)
+  AppointmentResponse find(UUID id) {
+    var a = appointment(id);
+    authorizeRead(a);
+    return response(a);
+  }
+
+  @Transactional(readOnly = true)
+  PageResponse<AppointmentSummary> search(
+      UUID patient, UUID professional, String status, Instant from, Instant to, Pageable pageable) {
+    var user = context();
+    UUID org = user.organizationId();
+    if (user.has("PATIENT")) {
+      if (user.patientId() == null || (patient != null && !user.patientId().equals(patient)))
+        throw new org.springframework.security.access.AccessDeniedException(
+            "SELECTED_PATIENT_PROFILE_REQUIRED");
+      patient = user.patientId();
+      professional = null;
+      org = null;
+    } else if (org == null || !user.hasAny("HOSPITAL_ADMIN", "HOSPITAL_AGENT", "DOCTOR", "NURSE"))
+      throw new org.springframework.security.access.AccessDeniedException(
+          "SELECTED_HOSPITAL_PROFILE_REQUIRED");
+    return PageResponse.from(
+        repository
+            .searchScoped(
+                org,
+                patient,
+                professional,
+                blank(status),
+                from == null ? Instant.now().minus(Duration.ofDays(30)) : from,
+                to == null ? Instant.now().plus(Duration.ofDays(365)) : to,
+                pageable)
+            .map(this::summary));
+  }
+
+  @Transactional(readOnly = true)
+  PageResponse<AppointmentSummary> mine(Instant from, Instant to, Pageable pageable) {
+    return mine(from, to, null, pageable);
+  }
+
+  @Transactional(readOnly = true)
+  PageResponse<AppointmentSummary> mine(
+      Instant from, Instant to, String status, Pageable pageable) {
+    UUID person = actor();
+    if (person == null) return PageResponse.from(Page.empty(pageable));
+    var user = context();
+    if (user.has("PATIENT")) {
+      if (user.patientId() == null) return PageResponse.from(Page.empty(pageable));
+      return search(user.patientId(), null, status, from, to, pageable);
+    }
+    UUID professional =
+        user.has("DOCTOR")
+            ? single("select id from professional.professional where person_id=?", person)
+            : null;
+    if (professional == null) return PageResponse.from(Page.empty(pageable));
+    return search(null, professional, status, from, to, pageable);
+  }
+
+  @Transactional(readOnly = true)
+  AvailabilityResponse availability(
+      UUID professional, UUID organization, Instant start, Instant end) {
+    String reason = availabilityReason(professional, organization, start, end, null);
+    return new AvailabilityResponse(professional, organization, start, end, reason == null, reason);
+  }
+
+  private void requireAvailability(UUID p, UUID o, Instant s, Instant e, UUID exclude) {
+    jdbc.query(
+        "select id from professional.professional where id=? for update",
+        rs -> rs.next() ? (UUID) rs.getObject(1) : null,
+        p);
+    String reason = availabilityReason(p, o, s, e, exclude);
+    if ("SLOT_ALREADY_BOOKED".equals(reason))
+      throw new ConflictException("SLOT_ALREADY_BOOKED", "error.appointment.unavailable");
+    if (reason != null) throw rule("PROFESSIONAL_UNAVAILABLE", "error.appointment.unavailable");
+  }
+
+  private String availabilityReason(UUID p, UUID o, Instant s, Instant e, UUID exclude) {
+    if (s == null || e == null || !e.isAfter(s)) return "INVALID_TIME_RANGE";
+    if (!exists(
+        "select count(*) from professional.professional_assignment where professional_id=? and"
+            + " organization_id=? and status='ACTIVE' and start_date<=? and (end_date is null or"
+            + " end_date>=?)",
+        p,
+        o,
+        LocalDate.ofInstant(s, ZoneOffset.UTC),
+        LocalDate.ofInstant(e, ZoneOffset.UTC))) return "NO_ACTIVE_ASSIGNMENT";
+    if (!exists(
+        "select count(*) from professional.professional_availability pa join"
+            + " professional.professional_assignment a on a.id=pa.assignment_id where"
+            + " a.professional_id=? and a.organization_id=? and pa.status='AVAILABLE' and"
+            + " pa.start_at<=? and pa.end_at>=?",
+        p,
+        o,
+        java.sql.Timestamp.from(s),
+        java.sql.Timestamp.from(e))) return "OUTSIDE_AVAILABILITY";
+    String sql =
+        "select count(*) from appointment.appointment where professional_id=? and status in"
+            + " ('SCHEDULED','CONFIRMED','RESCHEDULED','CHECKED_IN','IN_PROGRESS') and"
+            + " scheduled_start<? and scheduled_end>?"
+            + (exclude == null ? "" : " and id<>?");
+    boolean legacy =
+        exists(
+            sql,
+            exclude == null
+                ? new Object[] {p, java.sql.Timestamp.from(e), java.sql.Timestamp.from(s)}
+                : new Object[] {
+                  p, java.sql.Timestamp.from(e), java.sql.Timestamp.from(s), exclude
+                });
+    return legacy
+            || exists(
+                "select count(*) from care.care_visit where professional_id=? and status in"
+                    + " ('SCHEDULED','IN_PROGRESS') and scheduled_at<? and scheduled_at +"
+                    + " slot_minutes * interval '1 minute'>?",
+                p,
+                java.sql.Timestamp.from(e),
+                java.sql.Timestamp.from(s))
+        ? "SLOT_ALREADY_BOOKED"
+        : null;
+  }
+
+  private void validateReferences(
+      UUID patient, UUID professional, UUID organization, UUID department) {
+    require("patient.patient", patient, "Patient");
+    require("professional.professional", professional, "Professional");
+    require("organization.organization", organization, "Organization");
+    if (department != null
+        && !exists(
+            "select count(*) from organization.department where id=? and organization_id=?",
+            department,
+            organization)) throw notFound("Department", department);
+  }
+
+  private Appointment lockedAppointment(UUID id) {
+    return repository.findLockedById(id).orElseThrow(() -> notFound("Appointment", id));
+  }
+
+  private Appointment appointment(UUID id) {
+    var a = repository.findById(id).orElseThrow(() -> notFound("Appointment", id));
+    authorizeRead(a);
+    return a;
+  }
+
+  private WaitingQueueEntry queue(UUID appointment, UUID id) {
+    return appointment(appointment).getQueue().stream()
+        .filter(q -> q.getId().equals(id))
+        .findFirst()
+        .orElseThrow(() -> notFound("WaitingQueue", id));
+  }
+
+  private void require(String table, UUID id, String resource) {
+    if (!exists("select count(*) from " + table + " where id=?", id)) throw notFound(resource, id);
+  }
+
+  private boolean exists(String sql, Object... args) {
+    return Objects.requireNonNull(jdbc.queryForObject(sql, Integer.class, args)) > 0;
+  }
+
+  private UUID single(String sql, UUID id) {
+    return jdbc.query(sql, rs -> rs.next() ? (UUID) rs.getObject(1) : null, id);
+  }
+
+  private UUID actor() {
+    var auth = SecurityContextHolder.getContext().getAuthentication();
+    if (!(auth instanceof JwtAuthenticationToken jwt)) return null;
+    try {
+      UUID subject = UUID.fromString(jwt.getToken().getSubject());
+      UUID person = single("select id from identity.person where keycloak_user_id=?", subject);
+      return person;
+    } catch (IllegalArgumentException e) {
+      return null;
+    }
+  }
+
+  private void authorizePatientSlot(Appointment a, Instant start, Instant end) {
+    if (hasAny("HOSPITAL_ADMIN", "HOSPITAL_AGENT", "DOCTOR", "NURSE")) return;
+    if (start == null || end == null || !start.isAfter(Instant.now()) || !end.isAfter(start))
+      throw rule("INVALID_APPOINTMENT_SLOT", "error.appointment.unavailable");
+    if (!exists(
+        "select count(*) from patient.patient_registration where patient_id=? and organization_id=?"
+            + " and status='ACTIVE'",
+        a.getPatientId(),
+        a.getOrganizationId()))
+      throw new org.springframework.security.access.AccessDeniedException(
+          "Patient must be registered in the organization");
+  }
+
+  private void authorizeMutation(Appointment a) {
+    authorizeRead(a);
+    if (!hasAny("HOSPITAL_ADMIN", "HOSPITAL_AGENT", "DOCTOR", "NURSE")
+        && (!Set.of("SCHEDULED", "CONFIRMED", "RESCHEDULED").contains(a.getStatus())
+            || !a.getStart().isAfter(Instant.now())))
+      throw rule("APPOINTMENT_CANNOT_CHANGE", "error.appointment.cannot-reschedule");
+  }
+
+  private void authorizePatientCreation(UUID patient, UUID org) {
+    var user = context();
+    if (user.organizationId() != null
+        && user.organizationId().equals(org)
+        && user.hasAny("HOSPITAL_ADMIN", "HOSPITAL_AGENT", "DOCTOR", "NURSE")) return;
+    if (!user.isPatient(patient))
+      throw new org.springframework.security.access.AccessDeniedException(
+          "Patient can only book for selected patient profile");
+  }
+
+  private void authorizeRead(Appointment a) {
+    var user = context();
+    if (user.isPatient(a.getPatientId())) return;
+    if (user.organizationId() == null || !user.organizationId().equals(a.getOrganizationId()))
+      throw new org.springframework.security.access.AccessDeniedException(
+          "APPOINTMENT_ORGANIZATION_DENIED");
+    if (user.hasAny("HOSPITAL_ADMIN", "HOSPITAL_AGENT", "NURSE")) return;
+    UUID person = user.personId();
+    if (user.has("DOCTOR")
+        && person != null
+        && exists(
+            "select count(*) from professional.professional where id=? and person_id=?",
+            a.getProfessionalId(),
+            person)) return;
+    throw new org.springframework.security.access.AccessDeniedException(
+        "Appointment access denied");
+  }
+
+  private boolean hasAny(String... roles) {
+    return context().hasAny(roles);
+  }
+
+  private String blank(String v) {
+    return v == null || v.isBlank() ? null : v.trim().toUpperCase(java.util.Locale.ROOT);
+  }
+
+  private ResourceNotFoundException notFound(String r, Object id) {
+    return new ResourceNotFoundException(r, id);
+  }
+
+  private BusinessRuleException rule(String code, String key) {
+    return new BusinessRuleException(code, key);
+  }
+
+  private AppointmentSummary summary(Appointment a) {
+    return new AppointmentSummary(
+        a.getId(),
+        a.getNumber(),
+        a.getPatientId(),
+        a.getProfessionalId(),
+        a.getOrganizationId(),
+        a.getType(),
+        a.getStart(),
+        a.getEnd(),
+        a.getStatus());
+  }
+
+  private AppointmentResponse response(Appointment a) {
+    return new AppointmentResponse(
+        a.getId(),
+        a.getNumber(),
+        a.getPatientId(),
+        a.getProfessionalId(),
+        a.getOrganizationId(),
+        a.getDepartmentId(),
+        a.getType(),
+        a.getStart(),
+        a.getEnd(),
+        a.getReason(),
+        a.getStatus(),
+        a.getCreatedBy(),
+        a.getCreatedAt(),
+        a.getUpdatedAt(),
+        a.getVersion(),
+        a.getParticipants().stream().map(this::participant).toList(),
+        a.getHistory().stream().map(this::history).toList(),
+        a.getQueue().stream().map(this::queue).toList());
+  }
+
+  private ParticipantResponse participant(AppointmentParticipant p) {
+    return new ParticipantResponse(p.getId(), p.getPersonId(), p.getRole(), p.getStatus());
+  }
+
+  private StatusHistoryResponse history(AppointmentStatusHistory h) {
+    return new StatusHistoryResponse(
+        h.getId(), h.getPrevious(), h.getNext(), h.getChangedBy(), h.getChangedAt(), h.getReason());
+  }
+
+  private QueueResponse queue(WaitingQueueEntry q) {
+    return new QueueResponse(
+        q.getId(),
+        q.getOrganizationId(),
+        q.getNumber(),
+        q.getCheckedInAt(),
+        q.getCalledAt(),
+        q.getCompletedAt(),
+        q.getStatus());
+  }
 }

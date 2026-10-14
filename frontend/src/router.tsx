@@ -1,3 +1,10 @@
+import {ProfileSelectionPage} from './pages/ProfileSelectionPage';
+import {PatientProfileCreatePage} from './pages/PatientProfileCreatePage';
+import {ProfileContractPage} from './pages/ProfileContractPage';
+import {ContractTemplatesPage} from './pages/ContractTemplatesPage';
+import {PlatformAccountsPage} from './pages/PlatformAccountsPage';
+import {HospitalEmployeesPage} from './pages/HospitalEmployeesPage';
+import {HospitalRolesPage} from './pages/HospitalRolesPage';
 import {DataDeletionPage} from './pages/DataDeletionPage';
 import {LegacyCareBoundary} from './components/LegacyCareBoundary';
 import {CashManagementPage} from './pages/CashManagementPage';
@@ -52,19 +59,27 @@ export const router = createBrowserRouter([
   {
     element: <ProtectedRoute />,
         children: [
+          {path: '/profiles/select', element: <ProfileSelectionPage />},
+          {path: '/profiles/patient/new', element: <PatientProfileCreatePage />},
+          {path: '/profiles/:id/contract', element: <ProfileContractPage />},
           {path: '/registration/complete', element: <RegistrationCompletePage />},
+          {path: '/me/team-invitations', element: <MyTeamInvitationsPage />},
           {path: '/me/data-deletion', element: <DataDeletionPage />},
           {
         element: <MainLayout />,
         children: [
           {path: '/', element: <DashboardPage />},
-          {path: '/me/team-invitations', element: <MyTeamInvitationsPage />},
           {path: '/me', element: <MePage />},
           {path: '/me/access', element: <MyPatientAccessPage />},
           {path: '/professional-onboarding', element: <ProfessionalOnboardingPage />},
           {path: '/professional-invitation', element: <ProfessionalInvitationPage />},
           {path: '/admin/registration-options', element: <RegistrationOptionsPage />},
           {path: '/admin/professional-requests', element: <ProfessionalReviewPage />},
+          {path: '/employees', element: <HospitalEmployeesPage />},
+          {path: '/employees/requests', element: <ProfessionalReviewPage />},
+          {path: '/employees/roles', element: <HospitalRolesPage />},
+          {path: '/organizations/:id/employees', element: <HospitalEmployeesPage />},
+          {path: '/organizations/:id/roles', element: <HospitalRolesPage />},
           {path: '/organizations', element: <OrganizationsPage />},
           {path: '/organizations/new', element: <OrganizationFormPage />},
           {path: '/organizations/:id', element: <OrganizationDetailPage />},
@@ -95,6 +110,8 @@ export const router = createBrowserRouter([
           {path: '/billing/tariffs', element: <CareTariffsPage />},
           {path: '/billing/cash', element: <CashManagementPage />},
           {path: '/billing/invoices/:id', element: <InvoiceDetailPage />},
+          {path: '/admin/contract-templates', element: <ContractTemplatesPage />},
+          {path: '/admin/accounts', element: <PlatformAccountsPage />},
           {path: '/admin', element: <AdminPlatformPage />},
           {path: '/admin/audit-security', element: <AuditSecurityDashboardPage />},
         ],

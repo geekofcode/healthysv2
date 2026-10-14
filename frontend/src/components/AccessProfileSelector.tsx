@@ -1,0 +1,6 @@
+import {useState} from 'react';
+import {useNavigate} from 'react-router-dom';
+import {useTranslation} from 'react-i18next';
+import {useAuth} from '../auth/AuthContext';
+import {ApiErrorMessage} from './ApiErrorMessage';
+export function AccessProfileSelector(){const auth=useAuth();const {i18n}=useTranslation();const fr=i18n.language.startsWith('fr');const navigate=useNavigate();const [switching,setSwitching]=useState(false);const [error,setError]=useState<unknown>();const profiles=auth.profiles??[];if(!profiles.length)return auth.profilesError?<ApiErrorMessage error={auth.profilesError}/>:null;const change=async(id:string)=>{setError(undefined);setSwitching(true);try{await auth.switchProfile(id);navigate('/',{replace:true});}catch(e){setError(e);}finally{setSwitching(false);}};return <div className="profile-selector"><label>{fr?'Profil actif':'Active profile'}<select aria-label={fr?'Profil actif':'Active profile'} value={auth.activeProfile?.id??''} disabled={switching} onChange={e=>void change(e.target.value)}><option value="" disabled>{fr?'Choisir un profil':'Choose a profile'}</option>{profiles.map(profile=><option key={profile.id} value={profile.id}>{profile.label}{profile.organizationName&&!profile.label.includes(profile.organizationName)?` — ${profile.organizationName}`:''}</option>)}</select></label>{!!error&&<ApiErrorMessage error={error}/>}</div>;}

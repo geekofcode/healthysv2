@@ -1,58 +1,95 @@
 package org.novasos.healthysv2.patient;
 
 import java.util.*;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.novasos.healthysv2.accessprofile.api.AccessProfileResolver;
+import org.novasos.healthysv2.shared.security.KeycloakRoles;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 @Component
 public class CurrentUserContext {
-    private final JdbcTemplate jdbc;
-    CurrentUserContext(JdbcTemplate jdbc){this.jdbc=jdbc;}
+  private final AccessProfileResolver profiles;
+  private final String apiClientId;
 
-    public UserContext current(){
-        var authentication=SecurityContextHolder.getContext().getAuthentication();
-        if(!(authentication instanceof JwtAuthenticationToken jwt))return new UserContext(null,null,Set.of());
-        UUID subject=uuid(jwt.getToken().getSubject());
-        UUID person=subject==null?null:jdbc.query("select id from identity.person where keycloak_user_id=? limit 1",rs->rs.next()?(UUID)rs.getObject(1):null,subject);
-        UUID organization=claimUuid(jwt,"healthys_organization_id");if(organization==null)organization=claimUuid(jwt,"organization_id");
-        Set<String> roles=new HashSet<>();jwt.getAuthorities().forEach(a->{if(a.getAuthority().startsWith("ROLE_"))roles.add(a.getAuthority().substring(5));});
-        var attributes = org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
-        if (attributes instanceof org.springframework.web.context.request.ServletRequestAttributes servlet) {
-            String uri = servlet.getRequest().getRequestURI();
-            var selfControl = java.util.regex.Pattern.compile("/api/v1/patients/([0-9a-fA-F-]{36})/(access-requests|access-grants|access-revocations|consents)(/.*)?").matcher(uri);
-            if (person != null && roles.contains("PATIENT") && selfControl.matches()) {
-                UUID patientId = uuid(selfControl.group(1));
-                Integer owner = jdbc.queryForObject("select count(*) from patient.patient where id=? and person_id=?", Integer.class, patientId, person);
-                if (Integer.valueOf(1).equals(owner)) return new UserContext(person, null, Set.copyOf(roles));
-            }
-            String selected = servlet.getRequest().getHeader("X-Organization-ID");
-            if (selected != null && !selected.isBlank()) {
-                if ("independent".equalsIgnoreCase(selected.trim())) {
-                    if (roles.stream().noneMatch(Set.of("DOCTOR", "NURSE", "PHARMACIST", "LAB_TECHNICIAN")::contains)
-                            || roles.stream().anyMatch(Set.of("HOSPITAL_ADMIN", "HOSPITAL_VIEWER", "HOSPITAL_AGENT")::contains)) {
-                        throw new org.springframework.security.access.AccessDeniedException("INDEPENDENT_CONTEXT_DENIED");
-                    }
-                    organization = null;
-                } else {
-                    organization = uuid(selected);
-                    if (organization == null) throw new org.springframework.security.access.AccessDeniedException("INVALID_ORGANIZATION_CONTEXT");
-                }
-            }
-        }
-        if (organization != null && !roles.contains("PLATFORM_ADMIN")) {
-            Integer member=person==null?0:jdbc.queryForObject("""
-                    select count(*) from licensing.member where organization_id=? and person_id=? and status='ACTIVE'
-                    """,Integer.class,organization,person);
-            Integer localAdmin=person==null?0:jdbc.queryForObject("select count(*) from organization.organization where id=? and administrator_person_id=?",Integer.class,organization,person);
-            if ((member==null||member==0) && (localAdmin==null||localAdmin==0)) {
-                throw new org.springframework.security.access.AccessDeniedException("ORGANIZATION_MEMBERSHIP_REQUIRED");
-            }
-        }
-        return new UserContext(person,organization,Set.copyOf(roles));
+  public CurrentUserContext(
+      AccessProfileResolver profiles,
+      @Value("${healthys.security.api-client-id:healthys-backend}") String apiClientId) {
+    this.profiles = profiles;
+    this.apiClientId = apiClientId;
+  }
+
+  public UserContext current() {
+    var authentication = SecurityContextHolder.getContext().getAuthentication();
+    if (!(authentication instanceof JwtAuthenticationToken jwt))
+      return new UserContext(null, null, Set.of(), null);
+    UUID subject = uuid(jwt.getToken().getSubject(), "INVALID_IDENTITY_SUBJECT");
+    UUID org = null, profileId = null;
+    if (RequestContextHolder.getRequestAttributes()
+        instanceof ServletRequestAttributes attributes) {
+      var request = attributes.getRequest();
+      profileId = uuid(request.getHeader("X-Profile-ID"), "INVALID_PROFILE_CONTEXT");
+      if (profileId != null) org = null;
+      String header = request.getHeader("X-Organization-ID");
+      if (header != null && !header.isBlank()) org = uuid(header, "INVALID_ORGANIZATION_CONTEXT");
     }
-    private UUID claimUuid(JwtAuthenticationToken jwt,String name){Object value=jwt.getToken().getClaim(name);return value==null?null:uuid(value.toString());}
-    private UUID uuid(String value){try{return value==null?null:UUID.fromString(value);}catch(IllegalArgumentException ignored){return null;}}
-    public record UserContext(UUID personId,UUID organizationId,Set<String> roles){public boolean has(String role){return roles.contains(role);}public boolean hasAny(String...values){return Arrays.stream(values).anyMatch(roles::contains);}}
+    var profile =
+        profiles.resolve(
+            subject, KeycloakRoles.canonicalRoles(jwt.getToken(), apiClientId), profileId, org);
+    if (profile == null) return new UserContext(null, null, Set.of(), null);
+    Set<String> activeRoles = new LinkedHashSet<>();
+    jwt.getAuthorities().stream()
+        .map(a -> a.getAuthority())
+        .filter(a -> a.equals("ROLE_" + profile.type()))
+        .forEach(a -> activeRoles.add(profile.type()));
+    return new UserContext(
+        profile.personId(),
+        profile.organizationId(),
+        Set.copyOf(activeRoles),
+        profile.id(),
+        "PATIENT".equals(profile.type())
+                && Set.of("PATIENT", "FAMILY_PATIENT").contains(profile.sourceType())
+            ? profile.sourceId()
+            : null);
+  }
+
+  private UUID uuid(String value, String code) {
+    if (value == null || value.isBlank()) return null;
+    try {
+      return UUID.fromString(value);
+    } catch (IllegalArgumentException e) {
+      throw new AccessDeniedException(code);
+    }
+  }
+
+  public record UserContext(
+      UUID personId, UUID organizationId, Set<String> roles, UUID profileId, UUID patientId) {
+    public UserContext(UUID personId, UUID organizationId, Set<String> roles) {
+      this(personId, organizationId, roles, null, null);
+    }
+
+    public UserContext(UUID personId, UUID organizationId, Set<String> roles, UUID profileId) {
+      this(personId, organizationId, roles, profileId, null);
+    }
+
+    public boolean isPatient(UUID requested) {
+      return has("PATIENT")
+          && personId != null
+          && profileId != null
+          && patientId != null
+          && patientId.equals(requested);
+    }
+
+    public boolean has(String role) {
+      return roles.contains(role);
+    }
+
+    public boolean hasAny(String... values) {
+      return Arrays.stream(values).anyMatch(roles::contains);
+    }
+  }
 }

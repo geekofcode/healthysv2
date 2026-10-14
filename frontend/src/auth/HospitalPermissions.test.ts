@@ -1,0 +1,10 @@
+import {describe,expect,it} from 'vitest';
+import {allowsPermission,pathPermission} from './HospitalPermissions';
+import {canAccessPath} from './roles';
+const access={organizationId:'a',administrator:false,permissions:[{resource:'cashreports',actions:['READ'] as const},{resource:'invoices',actions:['READ','CREATE'] as const}]};
+describe('hospital permissions',()=>{
+ it('keeps platform administration away from all organization operations',()=>{for(const path of ['/patients','/professionals','/care/visits/v','/agenda','/consultations','/documents','/billing','/employees','/notifications','/admin/audit-security'])expect(canAccessPath(['PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR'],path)).toBe(false);expect(canAccessPath(['PLATFORM_ADMIN'],'/organizations')).toBe(true);expect(canAccessPath(['PLATFORM_ADMIN'],'/admin/accounts')).toBe(true);});
+ it('fails closed while effective permissions are unavailable',()=>expect(allowsPermission(undefined,'invoices','READ')).toBe(false));
+ it('separates read access from each write action',()=>{const typed={...access,permissions:access.permissions.map(p=>({...p,actions:[...p.actions]}))};expect(allowsPermission(typed,'cashreports','READ')).toBe(true);expect(allowsPermission(typed,'cashreports','CREATE')).toBe(false);expect(allowsPermission(typed,'invoices','CREATE')).toBe(true);expect(allowsPermission(typed,'invoices','UPDATE')).toBe(false);expect(allowsPermission(typed,'patients','READ')).toBe(false);});
+ it('maps every hospital screen to its functional permission',()=>{expect(pathPermission('/billing/cash')).toEqual({resource:'cashreports',action:'READ'});expect(pathPermission('/patients/new')).toEqual({resource:'patients',action:'CREATE'});expect(pathPermission('/patients/p')).toEqual({resource:'clinicalrecords',action:'READ'});expect(pathPermission('/employees/roles')).toEqual({resource:'roles',action:'READ'});expect(pathPermission('/care/visits/v')).toEqual({resource:'reports',action:'READ'});expect(pathPermission('/admin/accounts')).toBeUndefined();});
+});

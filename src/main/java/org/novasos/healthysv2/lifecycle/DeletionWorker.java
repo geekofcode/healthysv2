@@ -120,6 +120,8 @@ class DeletionWorker {
             "select count(*) from lifecycle.purge_event where request_id=? and outcome='REMOVED'",
             Integer.class,
             lease.id());
+    removed +=
+        jdbc.update("delete from identity.staff_account_outbox where person_id=?", lease.person());
     removed += jdbc.update("delete from identity.person_contact where person_id=?", lease.person());
     removed +=
         jdbc.update("delete from identity.emergency_contact where person_id=?", lease.person());

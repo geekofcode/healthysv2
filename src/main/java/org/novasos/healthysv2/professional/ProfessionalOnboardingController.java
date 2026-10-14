@@ -1,93 +1,132 @@
 package org.novasos.healthysv2.professional;
+
 import static org.novasos.healthysv2.professional.api.ProfessionalOnboardingDtos.*;
-import java.util.*;
+
 import jakarta.validation.Valid;
+import java.util.*;
+import org.novasos.healthysv2.shared.api.ApiPaths;
 import org.springframework.http.*;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import org.novasos.healthysv2.shared.api.ApiPaths;
 
-@RestController @RequestMapping(ApiPaths.V1+"/professional-onboarding")
+@RestController
+@RequestMapping(ApiPaths.V1 + "/professional-onboarding")
 @PreAuthorize("isAuthenticated()")
 class ProfessionalOnboardingController {
-    private final ProfessionalOnboardingService service;
-    ProfessionalOnboardingController(ProfessionalOnboardingService service) {
-        this.service=service;
-    }
+  private final ProfessionalOnboardingService service;
 
-    @GetMapping("/directory") List<DirectoryEntry> directory() {
-        return service.directory();
-    }
+  ProfessionalOnboardingController(ProfessionalOnboardingService service) {
+    this.service = service;
+  }
 
-    @GetMapping("/me") ResponseEntity<?> mine(JwtAuthenticationToken auth) {
-        var dossier = service.mine(auth);
-        return dossier == null
-                ? ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body("null")
-                : ResponseEntity.ok(dossier);
-    }
+  @GetMapping("/directory")
+  List<DirectoryEntry> directory() {
+    return service.directory();
+  }
 
-    @GetMapping("/me/affiliations") List<MyAffiliationResponse> myAffiliations(JwtAuthenticationToken auth) {
-        return service.myAffiliations(auth);
-    }
+  @GetMapping("/me")
+  ResponseEntity<?> mine(JwtAuthenticationToken auth) {
+    var dossier = service.mine(auth);
+    return dossier == null
+        ? ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body("null")
+        : ResponseEntity.ok(dossier);
+  }
 
-    @PutMapping("/me") DossierResponse draft(JwtAuthenticationToken auth,@Valid @RequestBody DraftRequest input) {
-        return service.draft(auth,input);
-    }
+  @GetMapping("/me/affiliations")
+  List<MyAffiliationResponse> myAffiliations(JwtAuthenticationToken auth) {
+    return service.myAffiliations(auth);
+  }
 
-    @PostMapping(value="/me/proof",consumes=MediaType.MULTIPART_FORM_DATA_VALUE) DossierResponse proof(JwtAuthenticationToken auth,@RequestParam MultipartFile file) {
-        return service.upload(auth,file);
-    }
+  @PutMapping("/me")
+  DossierResponse draft(JwtAuthenticationToken auth, @Valid @RequestBody DraftRequest input) {
+    return service.draft(auth, input);
+  }
 
-    @PostMapping(value="/me/documents/{kind}",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
-    DossierResponse document(JwtAuthenticationToken auth,@PathVariable String kind,@RequestParam MultipartFile file) {
-        return service.uploadDocument(auth,kind,file);
-    }
+  @PostMapping(value = "/me/proof", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  DossierResponse proof(JwtAuthenticationToken auth, @RequestParam MultipartFile file) {
+    return service.upload(auth, file);
+  }
 
-    @GetMapping("/requests/{id}/documents/{kind}")
-    ResponseEntity<byte[]> documentDownload(@PathVariable UUID id,@PathVariable String kind,JwtAuthenticationToken auth) {
-        var document=service.document(id,kind,auth);
-        return ResponseEntity.ok().contentType(MediaType.parseMediaType(document.contentType()))
-                .header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment().filename(document.filename()).build().toString())
-                .header(HttpHeaders.CACHE_CONTROL,"no-store").header("X-Content-Type-Options","nosniff").body(document.bytes());
-    }
+  @PostMapping(value = "/me/documents/{kind}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  DossierResponse document(
+      JwtAuthenticationToken auth, @PathVariable String kind, @RequestParam MultipartFile file) {
+    return service.uploadDocument(auth, kind, file);
+  }
 
-    @PostMapping("/me/submit") DossierResponse submit(JwtAuthenticationToken auth) {
-        return service.submit(auth);
-    }
+  @GetMapping("/requests/{id}/documents/{kind}")
+  ResponseEntity<byte[]> documentDownload(
+      @PathVariable UUID id, @PathVariable String kind, JwtAuthenticationToken auth) {
+    var document = service.document(id, kind, auth);
+    return ResponseEntity.ok()
+        .contentType(MediaType.parseMediaType(document.contentType()))
+        .header(
+            HttpHeaders.CONTENT_DISPOSITION,
+            ContentDisposition.attachment().filename(document.filename()).build().toString())
+        .header(HttpHeaders.CACHE_CONTROL, "no-store")
+        .header("X-Content-Type-Options", "nosniff")
+        .body(document.bytes());
+  }
 
-    @GetMapping("/requests") @PreAuthorize("hasRole('PLATFORM_ADMIN')") List<DossierResponse> requests() {
-        return service.requests();
-    }
+  @PostMapping("/me/submit")
+  DossierResponse submit(JwtAuthenticationToken auth) {
+    return service.submit(auth);
+  }
 
-    @PostMapping("/requests/{id}/review") @PreAuthorize("hasRole('PLATFORM_ADMIN')") DossierResponse review(@PathVariable UUID id,@Valid @RequestBody ReviewRequest input) {
-        return service.review(id,input);
-    }
+  @GetMapping("/requests")
+  @PreAuthorize("isAuthenticated()")
+  List<DossierResponse> requests() {
+    return service.requests();
+  }
 
-    @GetMapping("/requests/{id}/proof") ResponseEntity<byte[]> download(@PathVariable UUID id,JwtAuthenticationToken auth) {
-        var proof=service.proof(id,auth);
-        return ResponseEntity.ok().contentType(MediaType.parseMediaType(proof.contentType())).header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment().filename(proof.filename()).build().toString()).header(HttpHeaders.CACHE_CONTROL,"no-store").header("X-Content-Type-Options","nosniff").body(proof.bytes());
-    }
+  @PostMapping("/requests/{id}/review")
+  @PreAuthorize("isAuthenticated()")
+  DossierResponse review(@PathVariable UUID id, @Valid @RequestBody ReviewRequest input) {
+    return service.review(id, input);
+  }
 
-    @PostMapping("/invitations") @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN')") InvitationResponse invite(@Valid @RequestBody InvitationRequest input) {
-        return service.invite(input);
-    }
+  @GetMapping("/requests/{id}/proof")
+  ResponseEntity<byte[]> download(@PathVariable UUID id, JwtAuthenticationToken auth) {
+    var proof = service.proof(id, auth);
+    return ResponseEntity.ok()
+        .contentType(MediaType.parseMediaType(proof.contentType()))
+        .header(
+            HttpHeaders.CONTENT_DISPOSITION,
+            ContentDisposition.attachment().filename(proof.filename()).build().toString())
+        .header(HttpHeaders.CACHE_CONTROL, "no-store")
+        .header("X-Content-Type-Options", "nosniff")
+        .body(proof.bytes());
+  }
 
-    @GetMapping("/invitations") @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN')") List<InvitationResponse> invitations() {
-        return service.invitations();
-    }
+  @PostMapping("/invitations")
+  @PreAuthorize("isAuthenticated()")
+  InvitationResponse invite(@Valid @RequestBody InvitationRequest input) {
+    return service.invite(input);
+  }
 
-    @PostMapping("/invitations/accept") AffiliationResponse accept(JwtAuthenticationToken auth,@Valid @RequestBody AcceptanceRequest input) {
-        return service.accept(auth,input);
-    }
+  @GetMapping("/invitations")
+  @PreAuthorize("isAuthenticated()")
+  List<InvitationResponse> invitations() {
+    return service.invitations();
+  }
 
-    @GetMapping("/affiliations") @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN')") List<AffiliationResponse> affiliations() {
-        return service.affiliations();
-    }
+  @PostMapping("/invitations/accept")
+  AffiliationResponse accept(
+      JwtAuthenticationToken auth, @Valid @RequestBody AcceptanceRequest input) {
+    return service.accept(auth, input);
+  }
 
-    @DeleteMapping("/affiliations/{id}") @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN')") ResponseEntity<Void> end(@PathVariable UUID id) {
-        service.endAffiliation(id);
-        return ResponseEntity.noContent().build();
-    }
+  @GetMapping("/affiliations")
+  @PreAuthorize("isAuthenticated()")
+  List<AffiliationResponse> affiliations() {
+    return service.affiliations();
+  }
+
+  @DeleteMapping("/affiliations/{id}")
+  @PreAuthorize("isAuthenticated()")
+  ResponseEntity<Void> end(@PathVariable UUID id) {
+    service.endAffiliation(id);
+    return ResponseEntity.noContent().build();
+  }
 }

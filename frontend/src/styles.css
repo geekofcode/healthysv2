@@ -232,3 +232,15 @@ input[type="checkbox"],input[type="radio"] {width:16px;min-width:16px;height:16p
   .cash-receipt { border: 1px solid black; padding: 1rem; }
   .table-scroll { overflow: visible; }
 }
+
+.profile-selector {min-width: 0; max-width: 260px;}
+.profile-selector label {display: flex; flex-direction: column; gap: .2rem; font-size: .75rem;}
+.profile-selector select {max-width: 100%; min-width: 120px; padding: .35rem .5rem;}
+@media (max-width: 640px) {
+  .profile-selector {max-width: 175px;}
+  .profile-selector select {font-size: .8rem; min-width: 0;}
+}
+.profile-gate {width: min(100% - 2rem, 1000px); margin: 2rem auto;}
+.profile-choice {display: flex; flex-direction: column; gap: .5rem; text-align: left; color: inherit;}
+.contract-body {white-space: pre-wrap; padding: 1rem; border: 1px solid var(--border); border-radius: .5rem;}
+.signature-field canvas {display: block; width: 100%; max-width: 700px; height: auto; border: 1px solid #64748b; background: white; touch-action: none;}

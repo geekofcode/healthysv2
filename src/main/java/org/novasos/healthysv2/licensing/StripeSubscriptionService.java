@@ -34,7 +34,7 @@ class StripeSubscriptionService {
 
   @Transactional
   Map<String, String> checkout(UUID org, UUID plan) {
-    licensing.requireAdministrator(org);
+    licensing.requireSubscriptionAdministrator(org);
     lock(org);
     var p = db.queryForMap("select * from licensing.plan where id=? and active=true", plan);
     validatePrice(p);
@@ -105,7 +105,7 @@ class StripeSubscriptionService {
   }
 
   Map<String, String> portal(UUID org) {
-    licensing.requireAdministrator(org);
+    licensing.requireSubscriptionAdministrator(org);
     String customer =
         db.queryForObject(
             "select stripe_customer_id from licensing.subscription where organization_id=?",

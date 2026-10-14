@@ -3,12 +3,15 @@ package org.novasos.healthysv2.licensing;
 import java.util.*;
 import org.novasos.healthysv2.licensing.api.*;
 import org.novasos.healthysv2.licensing.api.LicensingDtos.*;
+import org.novasos.healthysv2.shared.security.KeycloakRoles;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 @Service
 public class LicensingService implements LicensingAccess {
@@ -30,7 +33,7 @@ public class LicensingService implements LicensingAccess {
     if (!(a instanceof JwtAuthenticationToken j)) throw denied("IDENTITY_REQUIRED");
     try {
       return db.query(
-          "select id from identity.person where keycloak_user_id=?",
+          "select id from identity.person where keycloak_user_id=? and status='ACTIVE'",
           r -> r.next() ? (UUID) r.getObject(1) : null,
           UUID.fromString(j.getToken().getSubject()));
     } catch (IllegalArgumentException e) {
@@ -52,8 +55,61 @@ public class LicensingService implements LicensingAccess {
     return new AccessDeniedException(code);
   }
 
+  private org.novasos.healthysv2.accessprofile.api.AccessProfileResolver profiles;
+  private String apiClientId;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  void profiles(
+      org.novasos.healthysv2.accessprofile.api.AccessProfileResolver profiles,
+      @org.springframework.beans.factory.annotation.Value(
+              "${healthys.security.api-client-id:healthys-backend}")
+          String apiClientId) {
+    this.profiles = profiles;
+    this.apiClientId = apiClientId;
+  }
+
+  private org.novasos.healthysv2.accessprofile.api.AccessProfileResolver.AccessProfile
+      activeProfile() {
+    var auth = SecurityContextHolder.getContext().getAuthentication();
+    if (!(auth instanceof JwtAuthenticationToken jwt)) throw denied("IDENTITY_REQUIRED");
+    UUID profileId = null, org = null;
+    if (RequestContextHolder.getRequestAttributes()
+        instanceof ServletRequestAttributes attributes) {
+      try {
+        var request = attributes.getRequest();
+        if (request.getHeader("X-Profile-ID") != null)
+          profileId = UUID.fromString(request.getHeader("X-Profile-ID"));
+        if (request.getHeader("X-Organization-ID") != null)
+          org = UUID.fromString(request.getHeader("X-Organization-ID"));
+      } catch (IllegalArgumentException e) {
+        throw denied("INVALID_PROFILE_CONTEXT");
+      }
+    }
+    return profiles.resolve(
+        UUID.fromString(jwt.getToken().getSubject()),
+        KeycloakRoles.canonicalRoles(jwt.getToken(), apiClientId),
+        profileId,
+        org);
+  }
+
+  private void profileOrganization(UUID org, boolean administrator) {
+    if (profiles == null)
+      return; // Direct constructor fixtures; Spring requires the resolver setter.
+    var profile = activeProfile();
+    if (profile == null
+        || !org.equals(profile.organizationId())
+        || (administrator && !profile.type().equals("HOSPITAL_ADMIN")))
+      throw denied("SELECTED_ORGANIZATION_PROFILE_REQUIRED");
+  }
+
   public void requireAdministrator(UUID org) {
-    if (platform()) return;
+    if (platform()) throw denied("PLATFORM_OPERATIONS_FORBIDDEN");
+    profileOrganization(org, true);
+    var authentication = SecurityContextHolder.getContext().getAuthentication();
+    if (authentication == null
+        || authentication.getAuthorities().stream()
+            .noneMatch(a -> a.getAuthority().equals("ROLE_HOSPITAL_ADMIN")))
+      throw denied("SELECTED_ADMINISTRATOR_PROFILE_REQUIRED");
     UUID p = person();
     if (isLocalAdministrator(org, p)) return;
     Integer n =
@@ -66,8 +122,13 @@ public class LicensingService implements LicensingAccess {
     if (n == null || n == 0) throw denied("ORGANIZATION_ADMIN_REQUIRED");
   }
 
+  public void requireSubscriptionAdministrator(UUID org) {
+    if (!platform()) requireAdministrator(org);
+  }
+
   public void requireMember(UUID org) {
-    if (platform()) return;
+    if (platform()) throw denied("PLATFORM_OPERATIONS_FORBIDDEN");
+    profileOrganization(org, false);
     UUID p = person();
     if (isLocalAdministrator(org, p)) return;
     Integer n =
@@ -199,7 +260,7 @@ public class LicensingService implements LicensingAccess {
   }
 
   Map<String, Object> entitlements(UUID org) {
-    requireMember(org);
+    if (!platform()) requireMember(org);
     var rows = db.queryForList("select * from licensing.subscription where organization_id=?", org);
     Map<String, Object> result = new LinkedHashMap<>();
     if (!rows.isEmpty()) result.putAll(rows.getFirst());
@@ -258,20 +319,182 @@ public class LicensingService implements LicensingAccess {
       throw new IllegalArgumentException("QUOTA_EXCEEDED_" + b.toUpperCase(Locale.ROOT));
   }
 
+  private org.novasos.healthysv2.organizationaccess.api.OrganizationPermissionAccess permissions;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  void permissions(
+      org.novasos.healthysv2.organizationaccess.api.OrganizationPermissionAccess permissions) {
+    this.permissions = permissions;
+  }
+
+  private void employeePermission(UUID org, String action) {
+    if (platform()) throw denied("PLATFORM_OPERATIONS_FORBIDDEN");
+    if (permissions == null) requireAdministrator(org);
+    else permissions.require(org, "employees", action);
+  }
+
+  private org.novasos.healthysv2.identity.api.EmployeeAccountProvisioning accounts;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  void accounts(org.novasos.healthysv2.identity.api.EmployeeAccountProvisioning accounts) {
+    this.accounts = accounts;
+  }
+
+  @Transactional
+  Map<String, Object> createEmployee(UUID org, EmployeeRequest request) {
+    employeePermission(org, "CREATE");
+    if (request.role().equals("HOSPITAL_ADMIN")) requireAdministrator(org);
+    lock(org);
+    employeePermission(org, "CREATE");
+    if (request.role().equals("HOSPITAL_ADMIN")) requireAdministrator(org);
+    requireActive(org);
+    expireInvitations(org);
+    UUID personId = request.personId();
+    if (personId == null) {
+      if (request.firstName() == null
+          || request.firstName().isBlank()
+          || request.lastName() == null
+          || request.lastName().isBlank()
+          || request.email() == null
+          || request.email().isBlank())
+        throw new IllegalArgumentException("EMPLOYEE_IDENTITY_REQUIRED");
+      personId =
+          accounts
+              .ensureAccount(request.firstName(), request.lastName(), request.email())
+              .personId();
+    } else if (!Boolean.TRUE.equals(
+        db.queryForObject(
+            "select exists(select 1 from identity.person p where id=? and status='ACTIVE' and"
+                + " (keycloak_user_id is not null or exists(select 1 from"
+                + " identity.staff_account_outbox a where a.person_id=p.id)))",
+            Boolean.class,
+            personId))) {
+      throw denied("ACTIVE_ACCOUNT_REQUIRED");
+    }
+    ensureDistinctProfile(org, personId, request.email(), request.role(), null);
+    capacity(org, request.role());
+    db.queryForObject(
+        "select id from identity.person where id=? and status='ACTIVE' for update",
+        UUID.class,
+        personId);
+    boolean pendingClinical =
+        Set.of("DOCTOR", "NURSE").contains(request.role())
+            && Boolean.TRUE.equals(
+                db.queryForObject(
+                    "select exists(select 1 from professional.registration_request where"
+                        + " person_id=? and status<>'APPROVED')",
+                    Boolean.class,
+                    personId));
+    if (!pendingClinical && Set.of("DOCTOR", "NURSE").contains(request.role())) {
+      var profiles =
+          db.queryForList(
+              "select id,professional_type,status from professional.professional where person_id=?",
+              personId);
+      if (profiles.isEmpty()) {
+        String number =
+            request.professionalNumber() == null || request.professionalNumber().isBlank()
+                ? "STAFF-" + UUID.randomUUID()
+                : request.professionalNumber().trim();
+        db.update(
+            "insert into"
+                + " professional.professional(id,person_id,professional_number,professional_type,status)"
+                + " values(?,?,?,?,'ACTIVE')",
+            UUID.randomUUID(),
+            personId,
+            number,
+            request.role());
+      }
+      synchronizeClinical(org, personId, request.role(), true);
+    }
+    UUID memberId = UUID.randomUUID();
+    db.update(
+        "insert into licensing.member(id,organization_id,person_id,email,role,status,expires_at)"
+            + " values(?,?,?,?,?,?,case when ?='INVITED' then now()+interval '7 days' else null"
+            + " end)",
+        memberId,
+        org,
+        personId,
+        request.email(),
+        request.role(),
+        pendingClinical ? "INVITED" : "ACTIVE",
+        pendingClinical ? "INVITED" : "ACTIVE");
+    var roleIds = request.customRoleIds() == null ? Set.<UUID>of() : request.customRoleIds();
+    if (!roleIds.isEmpty()) requireAdministrator(org);
+    initializeMemberPolicy(org, memberId);
+    for (UUID roleId : roleIds) {
+      if (!Boolean.TRUE.equals(
+          db.queryForObject(
+              "select exists(select 1 from organizationaccess.role where id=? and"
+                  + " organization_id=?)",
+              Boolean.class,
+              roleId,
+              org))) throw new IllegalArgumentException("ROLE_TENANT_MISMATCH");
+      db.update(
+          "insert into organizationaccess.member_role(member_id,organization_id,role_id)"
+              + " values(?,?,?)",
+          memberId,
+          org,
+          roleId);
+    }
+    audit(org, "EMPLOYEE_CREATED", memberId);
+    return db.queryForMap(
+        "select m.*,p.id professional_id from licensing.member m left join"
+            + " professional.professional p on p.person_id=m.person_id where m.id=?",
+        memberId);
+  }
+
+  private void initializeMemberPolicy(UUID org, UUID memberId) {
+    // A deliberately empty policy prevents implicit legacy CRUD grants for new profiles.
+    db.update(
+        "insert into organizationaccess.member_policy(member_id,organization_id) values(?,?) on"
+            + " conflict(member_id) do nothing",
+        memberId,
+        org);
+  }
+
+  private void ensureDistinctProfile(
+      UUID org, UUID personId, String email, String role, UUID excludedId) {
+    String normalized =
+        email == null || email.isBlank() ? null : email.trim().toLowerCase(Locale.ROOT);
+    List<Object> arguments = new ArrayList<>(Arrays.asList(org, role, personId, normalized));
+    String sql =
+        "select id from licensing.member where organization_id=? and role=? and status<>'INACTIVE'"
+            + " and (person_id=? or lower(trim(email))=?)";
+    if (excludedId != null) {
+      sql += " and id<>?";
+      arguments.add(excludedId);
+    }
+    var existing = db.queryForList(sql + " limit 1", arguments.toArray());
+    if (!existing.isEmpty())
+      throw new org.novasos.healthysv2.shared.api.error.ConflictException(
+          "EMPLOYEE_ALREADY_ATTACHED",
+          "This account already has this profile in this organization");
+  }
+
+  Object lookupEmployeeAccount(UUID org, String email) {
+    employeePermission(org, "READ");
+    return accounts.lookupExactEmail(email).orElse(null);
+  }
+
   List<Map<String, Object>> team(UUID org) {
-    requireAdministrator(org);
+    employeePermission(org, "READ");
     return db.queryForList(
-        "select m.*,p.first_name,p.last_name from licensing.member m left join identity.person p on"
-            + " p.id=m.person_id where m.organization_id=? order by m.invited_at",
+        "select m.*,p.first_name,p.last_name,pr.id professional_id from licensing.member m left"
+            + " join identity.person p on p.id=m.person_id left join professional.professional pr"
+            + " on pr.person_id=m.person_id where m.organization_id=? order by m.invited_at",
         org);
   }
 
   @Transactional
   Map<String, Object> invite(UUID org, TeamRequest r) {
-    requireAdministrator(org);
+    employeePermission(org, "CREATE");
+    if (r.role().equals("HOSPITAL_ADMIN")) requireAdministrator(org);
     lock(org);
+    employeePermission(org, "CREATE");
+    if (r.role().equals("HOSPITAL_ADMIN")) requireAdministrator(org);
     requireActive(org);
     expireInvitations(org);
+    ensureDistinctProfile(org, r.personId(), r.email(), r.role(), null);
     capacity(org, r.role());
     if (r.personId() == null && (r.email() == null || r.email().isBlank()))
       throw new IllegalArgumentException("PERSON_OR_EMAIL_REQUIRED");
@@ -284,25 +507,39 @@ public class LicensingService implements LicensingAccess {
         r.personId(),
         r.email(),
         r.role());
+    initializeMemberPolicy(org, id);
     audit(org, "MEMBER_CHANGED", id);
     return db.queryForMap("select * from licensing.member where id=?", id);
   }
 
   @Transactional
   Map<String, Object> update(UUID org, UUID id, TeamUpdate r) {
-    requireAdministrator(org);
+    employeePermission(org, r.status().equals("INACTIVE") ? "DELETE" : "UPDATE");
+    if (r.role().equals("HOSPITAL_ADMIN")) requireAdministrator(org);
     lock(org);
+    employeePermission(org, r.status().equals("INACTIVE") ? "DELETE" : "UPDATE");
+    if (r.role().equals("HOSPITAL_ADMIN")) requireAdministrator(org);
     var old =
         db.queryForMap("select * from licensing.member where id=? and organization_id=?", id, org);
+    if ("HOSPITAL_ADMIN".equals(old.get("role"))) requireAdministrator(org);
+    if (r.status().equals("INACTIVE")
+        && "HOSPITAL_ADMIN".equals(old.get("role"))
+        && isLocalAdministrator(org, (UUID) old.get("person_id")))
+      throw new IllegalArgumentException("TRANSFER_ORGANIZATION_ADMINISTRATOR_FIRST");
     if (!Set.of("ACTIVE", "INACTIVE").contains(r.status()))
       throw new IllegalArgumentException("INVALID_MEMBER_STATUS");
     if (r.status().equals("ACTIVE")) {
       if (old.get("person_id") == null)
         throw new IllegalArgumentException("ACCEPT_INVITATION_FIRST");
       requireActive(org);
+      expireInvitations(org);
+      ensureDistinctProfile(
+          org, (UUID) old.get("person_id"), (String) old.get("email"), r.role(), id);
       db.update("update licensing.member set status='INACTIVE' where id=?", id);
       capacity(org, r.role());
     }
+    if (!r.role().equals(old.get("role")))
+      synchronizeClinical(org, (UUID) old.get("person_id"), (String) old.get("role"), false);
     synchronizeClinical(org, (UUID) old.get("person_id"), r.role(), r.status().equals("ACTIVE"));
     db.update(
         "update licensing.member set role=?,status=?,updated_at=now() where id=?",
@@ -335,8 +572,11 @@ public class LicensingService implements LicensingAccess {
               && email.equalsIgnoreCase((String) r.get("email"));
     }
     if (!matches) throw denied("INVITATION_IDENTITY_MISMATCH");
+    expireInvitations(org);
+    ensureDistinctProfile(org, p, (String) r.get("email"), (String) r.get("role"), id);
     db.update("update licensing.member set status='INACTIVE' where id=?", id);
     capacity(org, (String) r.get("role"));
+    initializeMemberPolicy(org, id);
     synchronizeClinical(org, p, (String) r.get("role"), true);
     db.update(
         "update licensing.member set person_id=?,status='ACTIVE',updated_at=now() where id=?",
@@ -348,41 +588,51 @@ public class LicensingService implements LicensingAccess {
 
   @Transactional
   public void reserveProfessionalAssignment(UUID org, UUID person, String role) {
-    requireAdministrator(org);
+    employeePermission(org, "CREATE");
     lock(org);
+    employeePermission(org, "CREATE");
     expireInvitations(org);
     requireActive(org);
     verifiedProfessional(person, role);
     var existing =
         db.queryForList(
             "select id,role from licensing.member where organization_id=? and person_id=? and"
-                + " status='ACTIVE'",
+                + " role=? and status='ACTIVE'",
             org,
-            person);
+            person,
+            role);
     if (!existing.isEmpty() && existing.getFirst().get("role").equals(role)) return;
     db.update(
         "update licensing.member set status='INACTIVE' where organization_id=? and person_id=? and"
-            + " status<>'INACTIVE'",
-        org,
-        person);
-    capacity(org, role);
-    db.update(
-        "insert into licensing.member(organization_id,person_id,role,status)"
-            + " values(?,?,?,'ACTIVE')",
+            + " role=? and status<>'INACTIVE'",
         org,
         person,
         role);
+    capacity(org, role);
+    UUID memberId = UUID.randomUUID();
+    db.update(
+        "insert into licensing.member(id,organization_id,person_id,role,status)"
+            + " values(?,?,?,?,'ACTIVE')",
+        memberId,
+        org,
+        person,
+        role);
+    initializeMemberPolicy(org, memberId);
     audit(org, "ASSIGNMENT_RESERVED", person);
   }
 
   @Transactional
   public void releaseProfessionalAssignment(UUID org, UUID person) {
-    requireAdministrator(org);
+    employeePermission(org, "DELETE");
     lock(org);
+    employeePermission(org, "DELETE");
     db.update(
         "update licensing.member set status='INACTIVE',updated_at=now() where organization_id=? and"
-            + " person_id=? and role in ('DOCTOR','NURSE','HOSPITAL_AGENT')",
+            + " person_id=? and role in ('DOCTOR','NURSE') and role=(select case when"
+            + " professional_type='MEDECIN' then 'DOCTOR' else professional_type end from"
+            + " professional.professional where person_id=?)",
         org,
+        person,
         person);
     audit(org, "ASSIGNMENT_RELEASED", person);
   }
@@ -418,7 +668,8 @@ public class LicensingService implements LicensingAccess {
 
   private void synchronizeClinical(UUID org, UUID person, String role, boolean active) {
     if (person == null) return;
-    if (!active || !Set.of("DOCTOR", "NURSE").contains(role)) {
+    if (!Set.of("DOCTOR", "NURSE").contains(role)) return;
+    if (!active) {
       db.update(
           "update professional.professional_assignment set"
               + " status='INACTIVE',end_date=greatest(start_date,current_date) where"
@@ -465,7 +716,7 @@ public class LicensingService implements LicensingAccess {
   }
 
   List<Map<String, Object>> invoices(UUID org) {
-    requireAdministrator(org);
+    requireSubscriptionAdministrator(org);
     return db.queryForList(
         "select * from licensing.subscription_invoice where organization_id=? order by created_at"
             + " desc",

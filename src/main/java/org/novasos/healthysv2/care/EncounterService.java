@@ -26,6 +26,13 @@ public class EncounterService implements VisitReportReader {
   private final CarePolicy policy;
   private final Duration inProgressDuration;
   private AiJobService aiJobs;
+  private org.novasos.healthysv2.organizationaccess.api.OrganizationPermissionAccess permissions;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  void configurePermissions(
+      org.novasos.healthysv2.organizationaccess.api.OrganizationPermissionAccess permissions) {
+    this.permissions = permissions;
+  }
 
   @org.springframework.beans.factory.annotation.Autowired
   void setAiJobs(AiJobService aiJobs) {
@@ -59,6 +66,7 @@ public class EncounterService implements VisitReportReader {
 
   public EncounterDtos.Started start(UUID id, long version) {
     var visit = lockedDoctorVisit(id);
+    permissions.require(visit.episode().getOrganizationId(), "visits", "UPDATE");
     checkVersion(visit.getVersion(), version);
     Instant now = Instant.now();
     String timezone =
@@ -225,15 +233,7 @@ public class EncounterService implements VisitReportReader {
             .reduce((a, b) -> b)
             .orElseThrow(() -> rule("REPORT_NOT_VALIDATED", "A validated report is required"));
     var user = users.current();
-    Integer owner =
-        user.personId() == null
-            ? 0
-            : jdbc.queryForObject(
-                "select count(*) from patient.patient where id=? and person_id=?",
-                Integer.class,
-                visit.episode().getPatientId(),
-                user.personId());
-    if (Integer.valueOf(1).equals(owner) && !report.patientVisible())
+    if (user.isPatient(visit.episode().getPatientId()) && !report.patientVisible())
       throw new AccessDeniedException("REPORT_NOT_PATIENT_VISIBLE");
     return report;
   }
@@ -256,15 +256,7 @@ public class EncounterService implements VisitReportReader {
   @Transactional(readOnly = true)
   public List<HistoryReport> history(UUID patientId) {
     var user = users.current();
-    boolean self =
-        user.personId() != null
-            && Integer.valueOf(1)
-                .equals(
-                    jdbc.queryForObject(
-                        "select count(*) from patient.patient where id=? and person_id=?",
-                        Integer.class,
-                        patientId,
-                        user.personId()));
+    boolean self = user.isPatient(patientId);
     if (!self) requireClinicalReader();
     access.requireAccess(patientId, "MEDICAL_RECORD", "READ");
     return jdbc.query(
@@ -381,6 +373,7 @@ public class EncounterService implements VisitReportReader {
   }
 
   private void requireClinicalWrite(CareVisit visit) {
+    permissions.require(visit.episode().getOrganizationId(), "reports", "UPDATE");
     if (visit.getStatus() != CareVisit.Status.IN_PROGRESS
         && visit.getStatus() != CareVisit.Status.COMPLETED)
       throw rule("VISIT_NOT_STARTED", "Start the encounter before writing a report");

@@ -1,3 +1,4 @@
+import {useHospitalPermission} from '../auth/HospitalPermissions';
 import {useState} from 'react';
 import {useQuery,useMutation,useQueryClient} from '@tanstack/react-query';
 import {useTranslation} from 'react-i18next';
@@ -13,15 +14,16 @@ export function CareTariffsPage(){
  const [form,setForm]=useState<TariffInput>(blank);
  const tariffs=useQuery({queryKey:['care-tariffs',organizationId],queryFn:()=>listCareTariffs(organizationId),enabled:!!organizationId});
  const save=useMutation({mutationFn:()=>editing?updateCareTariff(editing.id,{...form,organizationId,version:editing.version}):createCareTariff({...form,organizationId}),onSuccess:()=>{setEditing(undefined);setForm(blank);void cache.invalidateQueries({queryKey:['care-tariffs',organizationId]});}});
+ const tariffCreate=useHospitalPermission('tariffs','CREATE');const tariffUpdate=useHospitalPermission('tariffs','UPDATE');
  const canManage=auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','ACCOUNTANT');
  return <section>
   <h1>{fr?'Tarifs de soins':'Care tariffs'}</h1>
   <BillingOrganizationSelect label={fr?'Établissement':'Organization'} value={organizationId} onChange={id=>{setOrganizationId(id);setEditing(undefined);setForm({...blank,organizationId:id});}}/>
   {tariffs.isError&&<ApiErrorMessage error={tariffs.error}/>}
   <div className="table-scroll"><table><thead><tr><th>Code</th><th>{fr?'Prestation':'Service'}</th><th>{fr?'Prix':'Price'}</th><th>{fr?'Taxe (%)':'Tax (%)'}</th><th>{fr?'Actif':'Active'}</th><th/></tr></thead><tbody>
-   {tariffs.data?.map(tariff=><tr key={tariff.id}><td>{tariff.code}</td><td>{tariff.description}</td><td>{new Intl.NumberFormat(i18n.language,{style:'currency',currency:tariff.currency}).format(tariff.unitPrice)}</td><td>{tariff.taxRate}</td><td>{tariff.active?'✓':'—'}</td><td>{canManage&&<button onClick={()=>{setEditing(tariff);setForm(tariff);}}>{fr?'Modifier':'Edit'}</button>}</td></tr>)}
+   {tariffs.data?.map(tariff=><tr key={tariff.id}><td>{tariff.code}</td><td>{tariff.description}</td><td>{new Intl.NumberFormat(i18n.language,{style:'currency',currency:tariff.currency}).format(tariff.unitPrice)}</td><td>{tariff.taxRate}</td><td>{tariff.active?'✓':'—'}</td><td>{canManage&&tariffUpdate&&<button onClick={()=>{setEditing(tariff);setForm(tariff);}}>{fr?'Modifier':'Edit'}</button>}</td></tr>)}
   </tbody></table></div>
-  {canManage&&organizationId&&<form className="entity-form form-grid" onSubmit={event=>{event.preventDefault();save.mutate();}}>
+  {canManage&&(editing?tariffUpdate:tariffCreate)&&organizationId&&<form className="entity-form form-grid" onSubmit={event=>{event.preventDefault();save.mutate();}}>
    <h2>{editing?(fr?'Modifier le tarif':'Edit tariff'):(fr?'Créer un tarif':'Create tariff')}</h2>
    <label>Code<input required maxLength={80} value={form.code} onChange={e=>setForm({...form,code:e.target.value})}/></label>
    <label>{fr?'Prestation':'Service'}<input required maxLength={500} value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></label>

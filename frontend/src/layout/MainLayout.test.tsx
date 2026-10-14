@@ -1,3 +1,6 @@
+vi.mock('../auth/ProfileContractBoundary',()=>({ProfileContractBoundary:({children}:any)=>children}));
+vi.mock('../api/client',()=>({ApiError:class extends Error{}}));
+vi.mock('../api/hospitalAccess',()=>({getHospitalAccess:vi.fn()}));
 vi.mock('../components/LicenseBoundary',()=>({LicenseBoundary:({children}:any)=>children}));
 // @vitest-environment jsdom
 import {afterEach, describe, expect, it, vi} from 'vitest';

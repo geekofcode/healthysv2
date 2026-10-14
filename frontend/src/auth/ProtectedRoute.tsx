@@ -26,6 +26,9 @@ export function ProtectedRoute() {
     );
   }
 
+  const bootstrap=location.pathname.startsWith('/profiles/')||location.pathname==='/me/data-deletion'||location.pathname==='/me/team-invitations';
+  if(!auth.activeProfile&&!bootstrap)return <Navigate to="/profiles/select" replace/>;
+
   if (!canAccessPath(auth.roles, location.pathname)) {
     return <Navigate to="/" replace />;
   }

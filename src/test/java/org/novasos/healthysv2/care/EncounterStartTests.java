@@ -37,6 +37,15 @@ class EncounterStartTests {
           policy,
           Duration.ofHours(4));
 
+  private final org.novasos.healthysv2.organizationaccess.api.OrganizationPermissionAccess
+      permissions =
+          mock(org.novasos.healthysv2.organizationaccess.api.OrganizationPermissionAccess.class);
+
+  @org.junit.jupiter.api.BeforeEach
+  void configurePermissions() {
+    service.configurePermissions(permissions);
+  }
+
   private CareVisit visit() {
     Instant yesterday = Instant.now().minus(Duration.ofDays(1));
     var episode = CareEpisode.create(UUID.randomUUID(), org, "Fever", policy, yesterday);
@@ -220,7 +229,13 @@ class EncounterStartTests {
     var visit = visit();
     when(visits.findById(visit.getId())).thenReturn(Optional.of(visit));
     when(users.current())
-        .thenReturn(new CurrentUserContext.UserContext(person, null, Set.of("PATIENT")));
+        .thenReturn(
+            new CurrentUserContext.UserContext(
+                person,
+                null,
+                Set.of("PATIENT"),
+                UUID.randomUUID(),
+                visit.episode().getPatientId()));
     var revision =
         new org.novasos.healthysv2.care.api.VisitReportReader.ValidatedVisitReport(
             visit.getId(),
@@ -294,5 +309,20 @@ class EncounterStartTests {
     verify(access).requireAccess(patient, "MEDICAL_RECORD", "READ");
     verify(licensing, times(2)).requireActive(org);
     verify(licensing, times(2)).requireMember(org);
+  }
+
+  @Test
+  void reportPermissionRevokedWhileWaitingForTheTenantLockStopsMutation() {
+    var visit = visit();
+    service.start(visit.getId(), 0);
+    doThrow(new AccessDeniedException("REPORT_PERMISSION_REVOKED"))
+        .when(permissions)
+        .require(org, "reports", "UPDATE");
+    assertThrows(
+        AccessDeniedException.class,
+        () ->
+            service.save(
+                visit.getId(), new EncounterDtos.Draft(0, "Fever", "Exam", "Diagnosis", "", "")));
+    verify(jdbc, never()).update(contains("visit_report"), any(Object[].class));
   }
 }

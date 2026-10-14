@@ -1,36 +1,271 @@
 package org.novasos.healthysv2.patient;
 
 import static org.novasos.healthysv2.patient.api.PatientAuthorizationDtos.*;
-import java.time.Instant; import java.util.*;
-import org.novasos.healthysv2.shared.api.error.*; import org.springframework.jdbc.core.JdbcTemplate; import org.springframework.stereotype.Service; import org.springframework.transaction.annotation.Transactional;
 
-@Service @Transactional
+import java.time.Instant;
+import java.util.*;
+import org.novasos.healthysv2.shared.api.error.*;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@Transactional
 class PatientAuthorizationService {
- private final CareRelationshipRepository relationships;private final ConsentRepository consents;private final JdbcTemplate jdbc;private final CurrentUserContext users;private final PatientAuditService audit;private final PatientAccessPolicy accessPolicy;
- PatientAuthorizationService(CareRelationshipRepository relationships,ConsentRepository consents,JdbcTemplate jdbc,CurrentUserContext users,PatientAuditService audit,PatientAccessPolicy accessPolicy){this.relationships=relationships;this.consents=consents;this.jdbc=jdbc;this.users=users;this.audit=audit;this.accessPolicy=accessPolicy;}
- CareRelationshipResponse createRelationship(UUID patientId,CareRelationshipRequest r){require("patient.patient",patientId,"Patient");require("professional.professional",r.professionalId(),"Professional");authorizeRelationship(patientId,r.organizationId());if(r.organizationId()!=null){require("organization.organization",r.organizationId(),"Organization");if(!exists("select count(*) from professional.professional_assignment where professional_id=? and organization_id=? and status='ACTIVE' and start_date<=current_date and (end_date is null or end_date>=current_date)",r.professionalId(),r.organizationId()))throw new BusinessRuleException("PROFESSIONAL_NOT_ASSIGNED","error.care-relationship.assignment");if(!exists("select count(*) from patient.patient_registration where patient_id=? and organization_id=? and status='ACTIVE'",patientId,r.organizationId()))throw new BusinessRuleException("PATIENT_NOT_REGISTERED","error.care-relationship.registration");}else if(!exists("select count(*) from professional.professional where id=? and status='ACTIVE'",r.professionalId()))throw new org.springframework.security.access.AccessDeniedException("PROFESSIONAL_PROFILE_INACTIVE");var x=relationships.saveAndFlush(CareRelationship.create(patientId,r.professionalId(),r.organizationId(),r.relationshipType(),r.startDate(),r.endDate()));audit.change(users.current().personId(),r.organizationId(),"CareRelationship",x.getId(),"CREATE",Map.of("patientId",patientId,"professionalId",r.professionalId(),"type",x.getRelationshipType()));return response(x);}
- List<CareRelationshipResponse> relationships(UUID patientId){require("patient.patient",patientId,"Patient");return relationships.findByPatientIdOrderByCreatedAtDesc(patientId).stream().filter(x->relationshipVisible(patientId,x.getOrganizationId())).map(this::response).toList();}
- CareRelationshipResponse endRelationship(UUID patientId,UUID id,EndCareRelationshipRequest r){var x=relationship(patientId,id);authorizeRelationship(patientId,x.getOrganizationId());try{x.end(r.endedAt());}catch(IllegalStateException e){throw new BusinessRuleException("CARE_RELATIONSHIP_NOT_ACTIVE","error.care-relationship.not-active");}audit.change(users.current().personId(),x.getOrganizationId(),"CareRelationship",id,"END",Map.of("endedAt",x.getEndDate()));return response(x);}
- ConsentResponse grant(UUID patientId,GrantConsentRequest r){require("patient.patient",patientId,"Patient");authorizeConsentOwner(patientId);if(r.granteePersonId()!=null)require("identity.person",r.granteePersonId(),"Person");if(r.granteeOrganizationId()!=null)require("organization.organization",r.granteeOrganizationId(),"Organization");var x=consents.saveAndFlush(Consent.grant(patientId,r.granteePersonId(),r.granteeOrganizationId(),"DOCUMENTS".equalsIgnoreCase(r.scope())?"DOCUMENT":r.scope(),r.purpose(),r.reason(),Instant.now(),boundedExpiry(r.expiresAt())));var u=users.current();audit.change(u.personId(),u.organizationId(),"Consent",x.getId(),"GRANT",Map.of("patientId",patientId,"scope",x.getScope()));return response(x);}
- List<ConsentResponse> consents(UUID patientId){require("patient.patient",patientId,"Patient");authorizeConsentOwner(patientId);var values=consents.findByPatientIdOrderByGrantedAtDesc(patientId);values.forEach(this::expire);return values.stream().map(this::response).toList();}
- ConsentResponse revoke(UUID patientId,UUID id,RevokeConsentRequest r){authorizeConsentOwner(patientId);var x=consent(patientId,id);try{x.revoke(r.revokedAt(),r.reason());}catch(IllegalStateException e){throw new BusinessRuleException("CONSENT_NOT_ACTIVE","error.consent.not-active");}var u=users.current();audit.change(u.personId(),u.organizationId(),"Consent",id,"REVOKE",Map.of("revokedAt",x.getRevokedAt(),"scope",x.getScope()));return response(x);}
- private void expire(Consent x){if(x.refreshStatus(Instant.now())){var u=users.current();audit.change(u.personId(),u.organizationId(),"Consent",x.getId(),"EXPIRE",Map.of("expiredAt",x.getExpiresAt(),"scope",x.getScope()));}}
- private Instant boundedExpiry(Instant requested) {Instant maximum=Instant.now().plus(accessPolicy.requestDuration); return requested==null||requested.isAfter(maximum)?maximum:requested;}
- private void authorizeConsentOwner(UUID patientId){var u=users.current();if(u.personId()!=null&&exists("select count(*) from patient.patient where id=? and person_id=?",patientId,u.personId()))return;throw new org.springframework.security.access.AccessDeniedException("Consent owner required");}
- private boolean relationshipVisible(UUID patientId,UUID organization){
-  var u=users.current();
-  return u.has("PLATFORM_ADMIN") || (u.has("HOSPITAL_ADMIN") && organization!=null && organization.equals(u.organizationId()))
-    || (u.has("PATIENT") && u.personId()!=null && exists("select count(*) from patient.patient where id=? and person_id=?",patientId,u.personId()));
- }
- private void authorizeRelationship(UUID patientId,UUID organization){
-  var u=users.current();
-  if(u.has("PLATFORM_ADMIN"))return;
-  if(organization!=null && u.has("HOSPITAL_ADMIN") && organization.equals(u.organizationId()))return;
-  if(organization==null && u.has("PATIENT") && u.personId()!=null && exists("select count(*) from patient.patient where id=? and person_id=?",patientId,u.personId()))return;
-  throw new org.springframework.security.access.AccessDeniedException("CARE_RELATIONSHIP_ORGANIZATION_DENIED");
- }
- private CareRelationship relationship(UUID p,UUID id){var x=relationships.findById(id).orElseThrow(()->notFound("CareRelationship",id));if(!x.getPatientId().equals(p))throw notFound("CareRelationship",id);return x;}private Consent consent(UUID p,UUID id){var x=consents.findById(id).orElseThrow(()->notFound("Consent",id));if(!x.getPatientId().equals(p))throw notFound("Consent",id);return x;}
- private void require(String table,UUID id,String resource){if(!exists("select count(*) from "+table+" where id=?",id))throw notFound(resource,id);}private boolean exists(String sql,Object...args){return Objects.requireNonNull(jdbc.queryForObject(sql,Integer.class,args))>0;}private ResourceNotFoundException notFound(String r,Object id){return new ResourceNotFoundException(r,id);}
- private CareRelationshipResponse response(CareRelationship x){return new CareRelationshipResponse(x.getId(),x.getPatientId(),x.getProfessionalId(),x.getOrganizationId(),x.getRelationshipType(),x.getStartDate(),x.getEndDate(),x.getStatus(),x.getCreatedAt());}
- private ConsentResponse response(Consent x){return new ConsentResponse(x.getId(),x.getPatientId(),x.getGranteePersonId(),x.getGranteeOrganizationId(),x.getScope(),x.getPurpose(),x.getReason(),x.getGrantedAt(),x.getExpiresAt(),x.getRevokedAt(),x.getStatus(),x.getCreatedAt(),x.getUpdatedAt(),x.getCreatedBy(),x.getUpdatedBy(),x.getVersion());}
+  private final CareRelationshipRepository relationships;
+  private final ConsentRepository consents;
+  private final JdbcTemplate jdbc;
+  private final CurrentUserContext users;
+  private final PatientAuditService audit;
+  private final PatientAccessPolicy accessPolicy;
+
+  PatientAuthorizationService(
+      CareRelationshipRepository relationships,
+      ConsentRepository consents,
+      JdbcTemplate jdbc,
+      CurrentUserContext users,
+      PatientAuditService audit,
+      PatientAccessPolicy accessPolicy) {
+    this.relationships = relationships;
+    this.consents = consents;
+    this.jdbc = jdbc;
+    this.users = users;
+    this.audit = audit;
+    this.accessPolicy = accessPolicy;
+  }
+
+  CareRelationshipResponse createRelationship(UUID patientId, CareRelationshipRequest r) {
+    require("patient.patient", patientId, "Patient");
+    require("professional.professional", r.professionalId(), "Professional");
+    authorizeRelationship(patientId, r.organizationId());
+    if (r.organizationId() != null) {
+      require("organization.organization", r.organizationId(), "Organization");
+      if (!exists(
+          "select count(*) from professional.professional_assignment where professional_id=? and"
+              + " organization_id=? and status='ACTIVE' and start_date<=current_date and (end_date"
+              + " is null or end_date>=current_date)",
+          r.professionalId(),
+          r.organizationId()))
+        throw new BusinessRuleException(
+            "PROFESSIONAL_NOT_ASSIGNED", "error.care-relationship.assignment");
+      if (!exists(
+          "select count(*) from patient.patient_registration where patient_id=? and"
+              + " organization_id=? and status='ACTIVE'",
+          patientId,
+          r.organizationId()))
+        throw new BusinessRuleException(
+            "PATIENT_NOT_REGISTERED", "error.care-relationship.registration");
+    } else if (!exists(
+        "select count(*) from professional.professional where id=? and status='ACTIVE'",
+        r.professionalId()))
+      throw new org.springframework.security.access.AccessDeniedException(
+          "PROFESSIONAL_PROFILE_INACTIVE");
+    var x =
+        relationships.saveAndFlush(
+            CareRelationship.create(
+                patientId,
+                r.professionalId(),
+                r.organizationId(),
+                r.relationshipType(),
+                r.startDate(),
+                r.endDate()));
+    audit.change(
+        users.current().personId(),
+        r.organizationId(),
+        "CareRelationship",
+        x.getId(),
+        "CREATE",
+        Map.of(
+            "patientId",
+            patientId,
+            "professionalId",
+            r.professionalId(),
+            "type",
+            x.getRelationshipType()));
+    return response(x);
+  }
+
+  List<CareRelationshipResponse> relationships(UUID patientId) {
+    require("patient.patient", patientId, "Patient");
+    return relationships.findByPatientIdOrderByCreatedAtDesc(patientId).stream()
+        .filter(x -> relationshipVisible(patientId, x.getOrganizationId()))
+        .map(this::response)
+        .toList();
+  }
+
+  CareRelationshipResponse endRelationship(UUID patientId, UUID id, EndCareRelationshipRequest r) {
+    var x = relationship(patientId, id);
+    authorizeRelationship(patientId, x.getOrganizationId());
+    try {
+      x.end(r.endedAt());
+    } catch (IllegalStateException e) {
+      throw new BusinessRuleException(
+          "CARE_RELATIONSHIP_NOT_ACTIVE", "error.care-relationship.not-active");
+    }
+    audit.change(
+        users.current().personId(),
+        x.getOrganizationId(),
+        "CareRelationship",
+        id,
+        "END",
+        Map.of("endedAt", x.getEndDate()));
+    return response(x);
+  }
+
+  ConsentResponse grant(UUID patientId, GrantConsentRequest r) {
+    require("patient.patient", patientId, "Patient");
+    authorizeConsentOwner(patientId);
+    if (r.granteePersonId() != null) require("identity.person", r.granteePersonId(), "Person");
+    if (r.granteeOrganizationId() != null)
+      require("organization.organization", r.granteeOrganizationId(), "Organization");
+    var x =
+        consents.saveAndFlush(
+            Consent.grant(
+                patientId,
+                r.granteePersonId(),
+                r.granteeOrganizationId(),
+                "DOCUMENTS".equalsIgnoreCase(r.scope()) ? "DOCUMENT" : r.scope(),
+                r.purpose(),
+                r.reason(),
+                Instant.now(),
+                boundedExpiry(r.expiresAt())));
+    var u = users.current();
+    audit.change(
+        u.personId(),
+        u.organizationId(),
+        "Consent",
+        x.getId(),
+        "GRANT",
+        Map.of("patientId", patientId, "scope", x.getScope()));
+    return response(x);
+  }
+
+  List<ConsentResponse> consents(UUID patientId) {
+    require("patient.patient", patientId, "Patient");
+    authorizeConsentOwner(patientId);
+    var values = consents.findByPatientIdOrderByGrantedAtDesc(patientId);
+    values.forEach(this::expire);
+    return values.stream().map(this::response).toList();
+  }
+
+  ConsentResponse revoke(UUID patientId, UUID id, RevokeConsentRequest r) {
+    authorizeConsentOwner(patientId);
+    var x = consent(patientId, id);
+    try {
+      x.revoke(r.revokedAt(), r.reason());
+    } catch (IllegalStateException e) {
+      throw new BusinessRuleException("CONSENT_NOT_ACTIVE", "error.consent.not-active");
+    }
+    var u = users.current();
+    audit.change(
+        u.personId(),
+        u.organizationId(),
+        "Consent",
+        id,
+        "REVOKE",
+        Map.of("revokedAt", x.getRevokedAt(), "scope", x.getScope()));
+    return response(x);
+  }
+
+  private void expire(Consent x) {
+    if (x.refreshStatus(Instant.now())) {
+      var u = users.current();
+      audit.change(
+          u.personId(),
+          u.organizationId(),
+          "Consent",
+          x.getId(),
+          "EXPIRE",
+          Map.of("expiredAt", x.getExpiresAt(), "scope", x.getScope()));
+    }
+  }
+
+  private Instant boundedExpiry(Instant requested) {
+    Instant maximum = Instant.now().plus(accessPolicy.requestDuration);
+    return requested == null || requested.isAfter(maximum) ? maximum : requested;
+  }
+
+  private void authorizeConsentOwner(UUID patientId) {
+    var u = users.current();
+    if (u.isPatient(patientId)) return;
+    throw new org.springframework.security.access.AccessDeniedException("Consent owner required");
+  }
+
+  private boolean relationshipVisible(UUID patientId, UUID organization) {
+    var u = users.current();
+    return !u.has("PLATFORM_ADMIN")
+        && ((u.has("HOSPITAL_ADMIN")
+                && organization != null
+                && organization.equals(u.organizationId()))
+            || (u.isPatient(patientId)));
+  }
+
+  private void authorizeRelationship(UUID patientId, UUID organization) {
+    var u = users.current();
+    if (u.has("PLATFORM_ADMIN"))
+      throw new org.springframework.security.access.AccessDeniedException(
+          "PLATFORM_OPERATION_DENIED");
+    if (organization != null && u.has("HOSPITAL_ADMIN") && organization.equals(u.organizationId()))
+      return;
+    if (organization == null && u.isPatient(patientId)) return;
+    throw new org.springframework.security.access.AccessDeniedException(
+        "CARE_RELATIONSHIP_ORGANIZATION_DENIED");
+  }
+
+  private CareRelationship relationship(UUID p, UUID id) {
+    var x = relationships.findById(id).orElseThrow(() -> notFound("CareRelationship", id));
+    if (!x.getPatientId().equals(p)) throw notFound("CareRelationship", id);
+    return x;
+  }
+
+  private Consent consent(UUID p, UUID id) {
+    var x = consents.findById(id).orElseThrow(() -> notFound("Consent", id));
+    if (!x.getPatientId().equals(p)) throw notFound("Consent", id);
+    return x;
+  }
+
+  private void require(String table, UUID id, String resource) {
+    if (!exists("select count(*) from " + table + " where id=?", id)) throw notFound(resource, id);
+  }
+
+  private boolean exists(String sql, Object... args) {
+    return Objects.requireNonNull(jdbc.queryForObject(sql, Integer.class, args)) > 0;
+  }
+
+  private ResourceNotFoundException notFound(String r, Object id) {
+    return new ResourceNotFoundException(r, id);
+  }
+
+  private CareRelationshipResponse response(CareRelationship x) {
+    return new CareRelationshipResponse(
+        x.getId(),
+        x.getPatientId(),
+        x.getProfessionalId(),
+        x.getOrganizationId(),
+        x.getRelationshipType(),
+        x.getStartDate(),
+        x.getEndDate(),
+        x.getStatus(),
+        x.getCreatedAt());
+  }
+
+  private ConsentResponse response(Consent x) {
+    return new ConsentResponse(
+        x.getId(),
+        x.getPatientId(),
+        x.getGranteePersonId(),
+        x.getGranteeOrganizationId(),
+        x.getScope(),
+        x.getPurpose(),
+        x.getReason(),
+        x.getGrantedAt(),
+        x.getExpiresAt(),
+        x.getRevokedAt(),
+        x.getStatus(),
+        x.getCreatedAt(),
+        x.getUpdatedAt(),
+        x.getCreatedBy(),
+        x.getUpdatedBy(),
+        x.getVersion());
+  }
 }

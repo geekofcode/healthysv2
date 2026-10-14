@@ -39,6 +39,8 @@ class ProfessionalOnboardingService {
       from professional.registration_request
       """;
 
+  private final org.novasos.healthysv2.organizationaccess.api.OrganizationPermissionAccess
+      permissions;
   private final JdbcTemplate jdbc;
   private final IdentityProvisioningService identities;
   private final ProfessionalRepository professionals;
@@ -57,7 +59,9 @@ class ProfessionalOnboardingService {
       AuditTrail audit,
       ProfessionalRoleProvisioning roles,
       org.novasos.healthysv2.notification.api.ProfessionalRegistrationNotifications notifications,
-      org.novasos.healthysv2.licensing.api.LicensingAccess licensing) {
+      org.novasos.healthysv2.licensing.api.LicensingAccess licensing,
+      org.novasos.healthysv2.organizationaccess.api.OrganizationPermissionAccess permissions) {
+    this.permissions = permissions;
     this.jdbc = jdbc;
     this.licensing = licensing;
     this.identities = identities;
@@ -211,16 +215,48 @@ class ProfessionalOnboardingService {
   }
 
   List<DossierResponse> requests() {
-    return jdbc.query(DOSSIER_QUERY + " order by updated_at desc limit 500", this::dossier);
+    UUID org = organizationScope();
+    return jdbc.query(
+        DOSSIER_QUERY
+            + " where person_id in (select person_id from licensing.member where organization_id=?"
+            + " and (status='ACTIVE' or (status='INVITED' and expires_at>now()))) order by"
+            + " updated_at desc limit 500",
+        this::dossier,
+        org);
   }
 
   DossierResponse review(UUID id, ReviewRequest input) {
+    UUID org = organizationScope();
+    permissions.require(org, "employees", "UPDATE");
     var before = byId(id, true);
+    requireLocalApplicant(org, before.personId());
+    if (Integer.valueOf(0)
+            .compareTo(
+                jdbc.queryForObject(
+                    "select count(distinct organization_id) from"
+                        + " professional.professional_assignment a join professional.professional p"
+                        + " on p.id=a.professional_id where p.person_id=? and organization_id<>?",
+                    Integer.class,
+                    before.personId(),
+                    org))
+        < 0) throw new AccessDeniedException("SHARED_PROFESSIONAL_REVIEW_DENIED");
     String status = reviewStatus(input.decision());
     if (status.equals(before.status())) return before;
     requireReviewTransition(before.status(), status);
     UUID professional = before.professionalId();
     if ("APPROVED".equals(status)) {
+      String licensedRole = "nurse".equals(before.profession()) ? "NURSE" : "DOCTOR";
+      if (!Integer.valueOf(1)
+          .equals(
+              jdbc.queryForObject(
+                  "select count(*) from licensing.member where organization_id=? and person_id=?"
+                      + " and (status='ACTIVE' or (status='INVITED' and expires_at>now())) and"
+                      + " role=?",
+                  Integer.class,
+                  org,
+                  before.personId(),
+                  licensedRole)))
+        throw new AccessDeniedException("LICENSED_PROFESSIONAL_MEMBER_REQUIRED");
       requireDocuments(before);
       if (professional == null) professional = createProfessional(before);
       else {
@@ -303,8 +339,10 @@ class ProfessionalOnboardingService {
   Proof document(UUID id, String kind, JwtAuthenticationToken auth) {
     String prefix = documentPrefix(kind);
     var d = byId(id, false);
-    if (!users.current().has("PLATFORM_ADMIN") && !d.keycloakUserId().equals(subject(auth)))
-      throw new AccessDeniedException("Document belongs to another applicant");
+    if (users.current().has("PLATFORM_ADMIN"))
+      throw new AccessDeniedException("PLATFORM_OPERATIONAL_ACCESS_DENIED");
+    if (!d.keycloakUserId().equals(subject(auth)))
+      requireLocalApplicant(organizationScope(), d.personId());
     audit.access(
         users.current().personId(),
         null,
@@ -384,11 +422,14 @@ class ProfessionalOnboardingService {
   }
 
   List<DirectoryEntry> directory() {
+    UUID org = organizationScope();
     return jdbc.query(
         "select p.id,p.person_id,person.first_name,person.last_name,r.profession from"
             + " professional.professional p join professional.registration_request r on"
             + " r.professional_id=p.id join identity.person person on person.id=p.person_id where"
-            + " r.status='APPROVED' and p.status='ACTIVE' and person.status='ACTIVE' order by"
+            + " r.status='APPROVED' and p.status='ACTIVE' and person.status='ACTIVE' and"
+            + " exists(select 1 from licensing.member m where m.person_id=p.person_id and"
+            + " m.organization_id=? and m.status='ACTIVE') order by"
             + " person.last_name,person.first_name limit 500",
         (rs, n) ->
             new DirectoryEntry(
@@ -396,7 +437,8 @@ class ProfessionalOnboardingService {
                 rs.getObject(2, UUID.class),
                 rs.getString(3),
                 rs.getString(4),
-                rs.getString(5)));
+                rs.getString(5)),
+        org);
   }
 
   InvitationResponse invite(InvitationRequest input) {
@@ -480,6 +522,7 @@ class ProfessionalOnboardingService {
   }
 
   void endAffiliation(UUID id) {
+    permissions.require(organizationScope(), "employees", "DELETE");
     var rows =
         jdbc.query(
             "select professional_id,organization_id from professional.professional_assignment where"
@@ -542,10 +585,21 @@ class ProfessionalOnboardingService {
 
   private UUID organizationScope() {
     var u = users.current();
-    if (u.has("PLATFORM_ADMIN")) return null;
-    if (!u.has("HOSPITAL_ADMIN") || u.organizationId() == null)
-      throw new AccessDeniedException("Organization administrator scope required");
+    if (u.has("PLATFORM_ADMIN") || u.organizationId() == null)
+      throw new AccessDeniedException("ORGANIZATION_CONTEXT_REQUIRED");
+    permissions.require(u.organizationId(), "employees", "READ");
     return u.organizationId();
+  }
+
+  void requireLocalApplicant(UUID org, UUID person) {
+    if (!Integer.valueOf(1)
+        .equals(
+            jdbc.queryForObject(
+                "select count(*) from licensing.member where organization_id=? and person_id=? and"
+                    + " (status='ACTIVE' or (status='INVITED' and expires_at>now()))",
+                Integer.class,
+                org,
+                person))) throw new AccessDeniedException("LOCAL_APPLICANT_REQUIRED");
   }
 
   private void requireOrganization(UUID org) {
@@ -555,6 +609,9 @@ class ProfessionalOnboardingService {
   }
 
   private UUID subject(JwtAuthenticationToken auth) {
+    if (auth.getAuthorities().stream()
+        .anyMatch(a -> a.getAuthority().equals("ROLE_PLATFORM_ADMIN")))
+      throw new AccessDeniedException("PLATFORM_OPERATIONAL_ACCESS_DENIED");
     try {
       return UUID.fromString(auth.getToken().getSubject());
     } catch (IllegalArgumentException e) {

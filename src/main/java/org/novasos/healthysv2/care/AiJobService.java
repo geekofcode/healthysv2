@@ -16,6 +16,8 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 @Transactional
 public class AiJobService {
+  private final org.novasos.healthysv2.organizationaccess.api.OrganizationPermissionAccess
+      permissions;
   private final JdbcTemplate db;
   private final CurrentUserContext users;
   private final AiAuthorization authorization;
@@ -33,7 +35,9 @@ public class AiJobService {
       AiPolicy policy,
       AiAudioStorage audio,
       CarePolicy care,
-      AuditTrail audit) {
+      AuditTrail audit,
+      org.novasos.healthysv2.organizationaccess.api.OrganizationPermissionAccess permissions) {
+    this.permissions = permissions;
     this.db = db;
     this.users = users;
     this.authorization = authorization;
@@ -47,11 +51,11 @@ public class AiJobService {
   public AiDtos.Job create(UUID visitId, String key, AiDtos.Request request, MultipartFile file) {
     if (!policy.enabled())
       throw new BusinessRuleException("AI_UNAVAILABLE", "The assistant is temporarily unavailable");
-    var context = current(visitId);
+    var context = current(visitId, "CREATE");
     lock(context.organizationId());
     db.queryForObject(
         "select id from identity.person where id=? for update", UUID.class, context.actorId());
-    context = current(visitId);
+    context = current(visitId, "CREATE");
     if (key == null || !key.matches("[A-Za-z0-9._:-]{1,128}"))
       throw new IllegalArgumentException("INVALID_IDEMPOTENCY_KEY");
     if (request == null || request.kind() == null)
@@ -78,6 +82,8 @@ public class AiJobService {
             context.actorId(),
             key);
     if (!existing.isEmpty()) {
+      if (!Objects.equals(context.profileId(), existing.getFirst().get("created_profile_id")))
+        throw new AccessDeniedException("AI_JOB_PROFILE_MISMATCH");
       if (!fingerprint.equals(existing.getFirst().get("request_hash")))
         throw new ConflictException(
             "AI_IDEMPOTENCY_CONFLICT", "The key was used for another request");
@@ -105,8 +111,8 @@ public class AiJobService {
     db.update(
         """
         insert into care.ai_job(id,visit_id,actor_id,organization_id,kind,idempotency_key,request_hash,snapshot,snapshot_hash,notes,
-        created_at,deadline_at,audio_key,audio_mime_type,audio_expires_at,retention_expires_at)
-        values(?,?,?,?,?,?,?,?::jsonb,?,?,?,?,?,?,?,?)
+        created_at,deadline_at,audio_key,audio_mime_type,audio_expires_at,retention_expires_at,created_profile_id)
+        values(?,?,?,?,?,?,?,?::jsonb,?,?,?,?,?,?,?,?,?)
         """,
         id,
         visitId,
@@ -123,7 +129,8 @@ public class AiJobService {
         audioKey,
         mime,
         bytes == null ? null : Timestamp.from(now.plus(policy.audioTtl())),
-        Timestamp.from(now.atZone(ZoneOffset.UTC).plusYears(care.retentionYears()).toInstant()));
+        Timestamp.from(now.atZone(ZoneOffset.UTC).plusYears(care.retentionYears()).toInstant()),
+        context.profileId());
     audit.change(
         context.actorId(),
         context.organizationId(),
@@ -138,15 +145,16 @@ public class AiJobService {
 
   @Transactional(readOnly = true)
   public List<AiDtos.Job> list(UUID visitId) {
-    var c = current(visitId);
+    var c = current(visitId, "READ");
     String currentHash = snapshots.hash(snapshots.build(c));
     return db
         .queryForList(
-            "select * from care.ai_job where visit_id=? and actor_id=? and organization_id=? order"
-                + " by created_at desc limit 50",
+            "select * from care.ai_job where visit_id=? and actor_id=? and organization_id=? and"
+                + " created_profile_id=? order by created_at desc limit 50",
             visitId,
             c.actorId(),
-            c.organizationId())
+            c.organizationId(),
+            c.profileId())
         .stream()
         .map(r -> response(r, c, currentHash))
         .toList();
@@ -154,12 +162,12 @@ public class AiJobService {
 
   @Transactional(readOnly = true)
   public AiDtos.Job get(UUID visitId, UUID jobId) {
-    var c = current(visitId);
+    var c = current(visitId, "READ");
     return response(row(visitId, jobId, c), c);
   }
 
   public UUID requireReportProvenance(UUID visitId, UUID jobId) {
-    var c = current(visitId);
+    var c = current(visitId, "READ");
     var r = row(visitId, jobId, c);
     if (!"REPORT".equals(r.get("kind")) || !"SUCCEEDED".equals(r.get("status")))
       throw new BusinessRuleException(
@@ -174,19 +182,23 @@ public class AiJobService {
     var rows =
         db.queryForList(
             "select * from care.ai_job where id=? and visit_id=? and actor_id=? and"
-                + " organization_id=?",
+                + " organization_id=? and created_profile_id=?",
             job,
             visit,
             c.actorId(),
-            c.organizationId());
+            c.organizationId(),
+            c.profileId());
     if (rows.isEmpty()) throw new ResourceNotFoundException("AiJob", job);
     return rows.getFirst();
   }
 
-  private AiAuthorization.Context current(UUID visit) {
+  private AiAuthorization.Context current(UUID visit, String action) {
     var u = users.current();
-    if (!u.has("DOCTOR")) throw new AccessDeniedException("ASSIGNED_DOCTOR_REQUIRED");
-    return authorization.require(visit, u.personId(), u.organizationId());
+    if (u.has("PLATFORM_ADMIN") || !u.has("DOCTOR"))
+      throw new AccessDeniedException("ASSIGNED_DOCTOR_REQUIRED");
+    permissions.require(u.organizationId(), "ai", action);
+    permissions.require(u.organizationId(), "clinicalrecords", "READ");
+    return authorization.require(visit, u.personId(), u.organizationId(), u.profileId());
   }
 
   private void lock(UUID org) {

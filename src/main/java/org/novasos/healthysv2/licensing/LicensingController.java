@@ -55,6 +55,17 @@ class LicensingController {
     return service.team(org);
   }
 
+  @PostMapping("/organizations/{org}/employees")
+  Map<String, Object> createEmployee(
+      @PathVariable UUID org, @Valid @RequestBody EmployeeRequest request) {
+    return service.createEmployee(org, request);
+  }
+
+  @GetMapping("/organizations/{org}/employee-accounts")
+  Object lookupEmployeeAccount(@PathVariable UUID org, @RequestParam String email) {
+    return service.lookupEmployeeAccount(org, email);
+  }
+
   @PostMapping("/organizations/{org}/team")
   Map<String, Object> invite(@PathVariable UUID org, @Valid @RequestBody TeamRequest r) {
     return service.invite(org, r);

@@ -1,70 +1,487 @@
 package org.novasos.healthysv2.professional;
 
 import static org.novasos.healthysv2.professional.api.ProfessionalDtos.*;
+
 import java.util.*;
+import org.novasos.healthysv2.shared.api.dto.PageResponse;
+import org.novasos.healthysv2.shared.api.error.ConflictException;
+import org.novasos.healthysv2.shared.api.error.ResourceNotFoundException;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.data.domain.Pageable;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.novasos.healthysv2.shared.api.dto.PageResponse;
-import org.novasos.healthysv2.shared.api.error.ConflictException;
-import org.novasos.healthysv2.shared.api.error.ResourceNotFoundException;
 
-@Service @Transactional
+@Service
+@Transactional
 class ProfessionalService {
- private final org.novasos.healthysv2.patient.CurrentUserContext users;
- private final org.novasos.healthysv2.licensing.api.LicensingAccess licensing;
- private final ProfessionalRepository professionals; private final ProfessionalLicenseRepository licenses; private final ProfessionalSpecialityRepository specialities; private final ProfessionalAssignmentRepository assignments; private final ProfessionalScheduleRepository schedules; private final ProfessionalAvailabilityRepository availabilities; private final JdbcTemplate jdbc;
- ProfessionalService(ProfessionalRepository p,ProfessionalLicenseRepository l,ProfessionalSpecialityRepository s,ProfessionalAssignmentRepository a,ProfessionalScheduleRepository sc,ProfessionalAvailabilityRepository av,JdbcTemplate jdbc,org.novasos.healthysv2.patient.CurrentUserContext users,org.novasos.healthysv2.licensing.api.LicensingAccess licensing){this.licensing=licensing;this.users=users;professionals=p;licenses=l;specialities=s;assignments=a;schedules=sc;availabilities=av;this.jdbc=jdbc;}
+  private final org.novasos.healthysv2.organizationaccess.api.OrganizationPermissionAccess
+      permissions;
+  private final org.novasos.healthysv2.patient.CurrentUserContext users;
+  private final org.novasos.healthysv2.licensing.api.LicensingAccess licensing;
+  private final ProfessionalRepository professionals;
+  private final ProfessionalLicenseRepository licenses;
+  private final ProfessionalSpecialityRepository specialities;
+  private final ProfessionalAssignmentRepository assignments;
+  private final ProfessionalScheduleRepository schedules;
+  private final ProfessionalAvailabilityRepository availabilities;
+  private final JdbcTemplate jdbc;
 
- ProfessionalResponse create(ProfessionalRequest r){requireExists("identity.person",r.personId(),"Person");if(professionals.existsByPersonId(r.personId()))conflict("PERSON_ALREADY_PROFESSIONAL","error.professional.person.exists");if(professionals.existsByNumber(r.professionalNumber()))conflict("PROFESSIONAL_NUMBER_ALREADY_EXISTS","error.professional.number.exists");return response(professionals.save(Professional.create(r.personId(),r.professionalNumber(),r.professionalType(),r.status())));}
- @Transactional(readOnly=true) PageResponse<ProfessionalSummary> findAll(String query,Pageable pageable){UUID organization=viewerOrganization();String search=query==null?"":query.trim();var page=organization==null?professionals.search(search,pageable):professionals.searchInOrganization(search,organization,pageable);return PageResponse.from(page.map(this::summary));}
- @Transactional(readOnly=true) ProfessionalResponse find(UUID id){var person=professional(id);UUID organization=viewerOrganization();if(organization!=null&&person.getAssignments().stream().noneMatch(a->organization.equals(a.getOrganizationId())))throw new org.springframework.security.access.AccessDeniedException("Professional outside viewer scope");return response(person);}
- ProfessionalResponse update(UUID id,ProfessionalUpdateRequest r){var p=professional(id);p.update(r.professionalType(),r.status());return response(p);}
- void delete(UUID id){professionals.delete(professional(id));}
-
- LicenseResponse addLicense(UUID professionalId,LicenseRequest r){var p=professional(professionalId);if(licenses.existsByNumberAndAuthority(r.licenseNumber(),r.issuingAuthority()))conflict("PROFESSIONAL_LICENSE_ALREADY_EXISTS","error.professional.license.exists");return license(licenses.saveAndFlush(p.addLicense(r.licenseNumber(),r.issuingAuthority(),r.countryId(),r.issuedAt(),r.expiresAt(),r.status())));}
- LicenseResponse updateLicense(UUID professionalId,UUID id,LicenseRequest r){var x=licenseEntity(professionalId,id);x.update(r.licenseNumber(),r.issuingAuthority(),r.countryId(),r.issuedAt(),r.expiresAt(),r.status());return license(x);}
- void deleteLicense(UUID professionalId,UUID id){professional(professionalId).removeLicense(licenseEntity(professionalId,id));}
-
- SpecialityResponse addSpeciality(UUID professionalId,SpecialityRequest r){var p=professional(professionalId);specialityInfo(r.specialityCatalogId());if(specialities.findByProfessionalIdAndSpecialityCatalogId(professionalId,r.specialityCatalogId()).isPresent())conflict("PROFESSIONAL_SPECIALITY_ALREADY_EXISTS","error.professional.speciality.exists");var child=p.addSpeciality(r.specialityCatalogId(),r.primary());professionals.flush();return speciality(child);}
- void deleteSpeciality(UUID professionalId,UUID catalogueId){professional(professionalId).removeSpeciality(specialities.findByProfessionalIdAndSpecialityCatalogId(professionalId,catalogueId).orElseThrow(()->notFound("ProfessionalSpeciality",catalogueId)));}
- @Transactional(readOnly=true) List<SpecialityCatalogResponse> specialityCatalog(){return jdbc.query("select id,code,name from catalog.speciality_catalog where active=true order by name",(rs,n)->new SpecialityCatalogResponse(rs.getObject("id",UUID.class),rs.getString("code"),rs.getString("name")));}
-
- AssignmentResponse addAssignment(UUID professionalId,AssignmentRequest r){validateAssignment(r);var p=professional(professionalId);reserve(p,r);return assignment(assignments.saveAndFlush(p.addAssignment(r.organizationId(),r.departmentId(),r.serviceId(),r.position(),r.employeeNumber(),r.startDate(),r.endDate(),r.status())));}
- AssignmentResponse updateAssignment(UUID professionalId,UUID id,AssignmentRequest r){validateAssignment(r);var x=assignmentEntity(professionalId,id);if(!x.getOrganizationId().equals(r.organizationId()))throw new ProfessionalInputException("ASSIGNMENT_ORGANIZATION_IMMUTABLE","Assignment organization is immutable");var p=professional(professionalId);licensing.requireAdministrator(r.organizationId());reserve(p,r);x.update(r.organizationId(),r.departmentId(),r.serviceId(),r.position(),r.employeeNumber(),r.startDate(),r.endDate(),r.status());if(!"ACTIVE".equals(x.getStatus()))releaseIfLast(p,x.getOrganizationId(),x.getId());return assignment(x);}
- void deleteAssignment(UUID professionalId,UUID id){var p=professional(professionalId);var assignment=assignmentEntity(professionalId,id);licensing.requireAdministrator(assignment.getOrganizationId());releaseIfLast(p,assignment.getOrganizationId(),id);p.removeAssignment(assignment);}
-
- ScheduleResponse addSchedule(UUID professionalId,UUID assignmentId,ScheduleRequest r){var a=assignmentEntity(professionalId,assignmentId);return schedule(schedules.saveAndFlush(a.addSchedule(r.dayOfWeek(),r.startTime(),r.endTime(),r.slotDurationMinutes())));}
- ScheduleResponse updateSchedule(UUID professionalId,UUID assignmentId,UUID id,ScheduleRequest r){assignmentEntity(professionalId,assignmentId);var x=schedules.findByIdAndAssignmentId(id,assignmentId).orElseThrow(()->notFound("ProfessionalSchedule",id));x.update(r.dayOfWeek(),r.startTime(),r.endTime(),r.slotDurationMinutes());return schedule(x);}
- void deleteSchedule(UUID professionalId,UUID assignmentId,UUID id){var a=assignmentEntity(professionalId,assignmentId);var x=schedules.findByIdAndAssignmentId(id,assignmentId).orElseThrow(()->notFound("ProfessionalSchedule",id));a.removeSchedule(x);}
-
- AvailabilityResponse addAvailability(UUID professionalId,UUID assignmentId,AvailabilityRequest r){var a=assignmentEntity(professionalId,assignmentId);return availability(availabilities.saveAndFlush(a.addAvailability(r.startAt(),r.endAt(),r.availabilityType(),r.status())));}
- AvailabilityResponse updateAvailability(UUID professionalId,UUID assignmentId,UUID id,AvailabilityRequest r){assignmentEntity(professionalId,assignmentId);var x=availabilities.findByIdAndAssignmentId(id,assignmentId).orElseThrow(()->notFound("ProfessionalAvailability",id));x.update(r.startAt(),r.endAt(),r.availabilityType(),r.status());return availability(x);}
- void deleteAvailability(UUID professionalId,UUID assignmentId,UUID id){var a=assignmentEntity(professionalId,assignmentId);var x=availabilities.findByIdAndAssignmentId(id,assignmentId).orElseThrow(()->notFound("ProfessionalAvailability",id));a.removeAvailability(x);}
-
- private void reserve(Professional p,AssignmentRequest r){
-  licensing.requireAdministrator(r.organizationId());
-  try {
-  if(r.status()==null||"ACTIVE".equalsIgnoreCase(r.status())) licensing.reserveProfessionalAssignment(r.organizationId(),p.getPersonId(), switch(p.getType()){case "DOCTOR","MEDECIN"->"DOCTOR";case "NURSE"->"NURSE";default->throw new IllegalArgumentException("Unsupported licensed professional role");});
-  } catch (IllegalArgumentException exception) {
-   throw new ProfessionalInputException("INVALID_LICENSED_ASSIGNMENT", exception.getMessage());
+  ProfessionalService(
+      ProfessionalRepository p,
+      ProfessionalLicenseRepository l,
+      ProfessionalSpecialityRepository s,
+      ProfessionalAssignmentRepository a,
+      ProfessionalScheduleRepository sc,
+      ProfessionalAvailabilityRepository av,
+      JdbcTemplate jdbc,
+      org.novasos.healthysv2.patient.CurrentUserContext users,
+      org.novasos.healthysv2.licensing.api.LicensingAccess licensing,
+      org.novasos.healthysv2.organizationaccess.api.OrganizationPermissionAccess permissions) {
+    this.permissions = permissions;
+    this.licensing = licensing;
+    this.users = users;
+    professionals = p;
+    licenses = l;
+    specialities = s;
+    assignments = a;
+    schedules = sc;
+    availabilities = av;
+    this.jdbc = jdbc;
   }
- }
- private void releaseIfLast(Professional p,UUID organization,UUID excluded){if(p.getAssignments().stream().noneMatch(a->!Objects.equals(a.getId(),excluded)&&organization.equals(a.getOrganizationId())&&"ACTIVE".equals(a.getStatus())))licensing.releaseProfessionalAssignment(organization,p.getPersonId());}
- private UUID viewerOrganization(){var user=users.current();if(!user.hasAny("HOSPITAL_VIEWER","HOSPITAL_ADMIN")||user.has("PLATFORM_ADMIN"))return null;if(user.organizationId()==null)throw new org.springframework.security.access.AccessDeniedException("Organization context required for gestionnaire");return user.organizationId();}
- private void validateAssignment(AssignmentRequest r){requireExists("organization.organization",r.organizationId(),"Organization");if(r.departmentId()!=null&&!exists("select count(*) from organization.department where id=? and organization_id=?",r.departmentId(),r.organizationId()))throw notFound("Department",r.departmentId());if(r.serviceId()!=null&&!exists("select count(*) from organization.service where id=? and department_id=?",r.serviceId(),r.departmentId()))throw notFound("Service",r.serviceId());}
- private void requireExists(String table,UUID id,String resource){if(!exists("select count(*) from "+table+" where id=?",id))throw notFound(resource,id);}
- private boolean exists(String sql,Object...args){return Boolean.TRUE.equals(jdbc.queryForObject(sql,Integer.class,args)>0);}
- private String[] specialityInfo(UUID id){try{return jdbc.queryForObject("select code,name from catalog.speciality_catalog where id=? and active=true",(rs,n)->new String[]{rs.getString(1),rs.getString(2)},id);}catch(EmptyResultDataAccessException e){throw notFound("Speciality",id);}}
- private Professional professional(UUID id){return professionals.findById(id).orElseThrow(()->notFound("Professional",id));} private ProfessionalLicense licenseEntity(UUID p,UUID id){return licenses.findByIdAndProfessionalId(id,p).orElseThrow(()->notFound("ProfessionalLicense",id));} private ProfessionalAssignment assignmentEntity(UUID p,UUID id){var assignment=assignments.findByIdAndProfessionalId(id,p).orElseThrow(()->notFound("ProfessionalAssignment",id));UUID scope=viewerOrganization();if(scope!=null&&!scope.equals(assignment.getOrganizationId()))throw new org.springframework.security.access.AccessDeniedException("Assignment outside organization scope");return assignment;}
- private ResourceNotFoundException notFound(String r,Object id){return new ResourceNotFoundException(r,id);} private void conflict(String c,String k){throw new ConflictException(c,k);}
- private ProfessionalSummary summary(Professional p){return new ProfessionalSummary(p.getId(),p.getPersonId(),p.getNumber(),p.getType(),p.getStatus());}
- private ProfessionalResponse response(Professional p){UUID viewer=viewerOrganization();return new ProfessionalResponse(p.getId(),p.getPersonId(),p.getNumber(),p.getType(),p.getStatus(),p.getCreatedAt(),p.getUpdatedAt(),p.getLicenses().stream().map(this::license).toList(),p.getSpecialities().stream().map(this::speciality).toList(),p.getAssignments().stream().filter(a->viewer==null||viewer.equals(a.getOrganizationId())).map(this::assignment).toList());}
- private LicenseResponse license(ProfessionalLicense x){return new LicenseResponse(x.getId(),x.getNumber(),x.getAuthority(),x.getCountryId(),x.getIssuedAt(),x.getExpiresAt(),x.getStatus());}
- private SpecialityResponse speciality(ProfessionalSpeciality x){var i=specialityInfo(x.getSpecialityCatalogId());return new SpecialityResponse(x.getSpecialityCatalogId(),i[0],i[1],x.isPrimary());}
- private AssignmentResponse assignment(ProfessionalAssignment x){return new AssignmentResponse(x.getId(),x.getOrganizationId(),x.getDepartmentId(),x.getServiceId(),x.getPosition(),x.getEmployeeNumber(),x.getStartDate(),x.getEndDate(),x.getStatus(),x.getSchedules().stream().map(this::schedule).toList(),x.getAvailabilities().stream().map(this::availability).toList());}
- private ScheduleResponse schedule(ProfessionalSchedule x){return new ScheduleResponse(x.getId(),x.getDayOfWeek(),x.getStartTime(),x.getEndTime(),x.getSlotDurationMinutes());}
- private AvailabilityResponse availability(ProfessionalAvailability x){return new AvailabilityResponse(x.getId(),x.getStartAt(),x.getEndAt(),x.getType(),x.getStatus());}
+
+  ProfessionalResponse create(ProfessionalRequest r) {
+    UUID org = operation("employees", "CREATE");
+    if (!exists(
+        "select count(*) from licensing.member where organization_id=? and person_id=? and"
+            + " status='ACTIVE'",
+        org,
+        r.personId()))
+      throw new org.springframework.security.access.AccessDeniedException("LOCAL_MEMBER_REQUIRED");
+    String licensedRole = "NURSE".equals(r.professionalType()) ? "NURSE" : "DOCTOR";
+    if (!exists(
+        "select count(*) from licensing.member where organization_id=? and person_id=? and"
+            + " status='ACTIVE' and role=?",
+        org,
+        r.personId(),
+        licensedRole))
+      throw new org.springframework.security.access.AccessDeniedException(
+          "LICENSED_PROFESSIONAL_MEMBER_REQUIRED");
+    requireExists("identity.person", r.personId(), "Person");
+    if (professionals.existsByPersonId(r.personId()))
+      conflict("PERSON_ALREADY_PROFESSIONAL", "error.professional.person.exists");
+    if (professionals.existsByNumber(r.professionalNumber()))
+      conflict("PROFESSIONAL_NUMBER_ALREADY_EXISTS", "error.professional.number.exists");
+    return response(
+        professionals.save(
+            Professional.create(
+                r.personId(), r.professionalNumber(), r.professionalType(), r.status())));
+  }
+
+  @Transactional(readOnly = true)
+  PageResponse<ProfessionalSummary> findAll(String query, Pageable pageable) {
+    UUID organization = viewerOrganization();
+    String search = query == null ? "" : query.trim();
+    var page = professionals.searchInOrganization(search, organization, pageable);
+    return PageResponse.from(page.map(this::summary));
+  }
+
+  @Transactional(readOnly = true)
+  ProfessionalResponse find(UUID id) {
+    var person = professional(id);
+    UUID organization = viewerOrganization();
+    if (organization != null
+        && person.getAssignments().stream()
+            .noneMatch(a -> organization.equals(a.getOrganizationId())))
+      throw new org.springframework.security.access.AccessDeniedException(
+          "Professional outside viewer scope");
+    return response(person);
+  }
+
+  ProfessionalResponse update(UUID id, ProfessionalUpdateRequest r) {
+    var p = professional(id);
+    globalMutation(p, "UPDATE");
+    if (!p.getType().equals(r.professionalType()))
+      throw new org.springframework.security.access.AccessDeniedException(
+          "USE_LICENSED_EMPLOYEE_ROLE_CHANGE");
+    p.update(r.professionalType(), r.status());
+    return response(p);
+  }
+
+  void delete(UUID id) {
+    operation("employees", "DELETE");
+    professional(id);
+    throw new org.springframework.security.access.AccessDeniedException(
+        "USE_ORGANIZATION_MEMBER_DEACTIVATION");
+  }
+
+  LicenseResponse addLicense(UUID professionalId, LicenseRequest r) {
+    var p = professional(professionalId);
+    globalMutation(p, "CREATE");
+    if (licenses.existsByNumberAndAuthority(r.licenseNumber(), r.issuingAuthority()))
+      conflict("PROFESSIONAL_LICENSE_ALREADY_EXISTS", "error.professional.license.exists");
+    return license(
+        licenses.saveAndFlush(
+            p.addLicense(
+                r.licenseNumber(),
+                r.issuingAuthority(),
+                r.countryId(),
+                r.issuedAt(),
+                r.expiresAt(),
+                r.status())));
+  }
+
+  LicenseResponse updateLicense(UUID professionalId, UUID id, LicenseRequest r) {
+    globalMutation(professional(professionalId), "UPDATE");
+    var x = licenseEntity(professionalId, id);
+    x.update(
+        r.licenseNumber(),
+        r.issuingAuthority(),
+        r.countryId(),
+        r.issuedAt(),
+        r.expiresAt(),
+        r.status());
+    return license(x);
+  }
+
+  void deleteLicense(UUID professionalId, UUID id) {
+    globalMutation(professional(professionalId), "DELETE");
+    professional(professionalId).removeLicense(licenseEntity(professionalId, id));
+  }
+
+  SpecialityResponse addSpeciality(UUID professionalId, SpecialityRequest r) {
+    var p = professional(professionalId);
+    globalMutation(p, "CREATE");
+    specialityInfo(r.specialityCatalogId());
+    if (specialities
+        .findByProfessionalIdAndSpecialityCatalogId(professionalId, r.specialityCatalogId())
+        .isPresent())
+      conflict("PROFESSIONAL_SPECIALITY_ALREADY_EXISTS", "error.professional.speciality.exists");
+    var child = p.addSpeciality(r.specialityCatalogId(), r.primary());
+    professionals.flush();
+    return speciality(child);
+  }
+
+  void deleteSpeciality(UUID professionalId, UUID catalogueId) {
+    globalMutation(professional(professionalId), "DELETE");
+    professional(professionalId)
+        .removeSpeciality(
+            specialities
+                .findByProfessionalIdAndSpecialityCatalogId(professionalId, catalogueId)
+                .orElseThrow(() -> notFound("ProfessionalSpeciality", catalogueId)));
+  }
+
+  @Transactional(readOnly = true)
+  List<SpecialityCatalogResponse> specialityCatalog() {
+    operation("employees", "READ");
+    return jdbc.query(
+        "select id,code,name from catalog.speciality_catalog where active=true order by name",
+        (rs, n) ->
+            new SpecialityCatalogResponse(
+                rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name")));
+  }
+
+  AssignmentResponse addAssignment(UUID professionalId, AssignmentRequest r) {
+    requireAssignmentTenant(r.organizationId(), "CREATE");
+    validateAssignment(r);
+    var p = professional(professionalId);
+    reserve(p, r);
+    return assignment(
+        assignments.saveAndFlush(
+            p.addAssignment(
+                r.organizationId(),
+                r.departmentId(),
+                r.serviceId(),
+                r.position(),
+                r.employeeNumber(),
+                r.startDate(),
+                r.endDate(),
+                r.status())));
+  }
+
+  AssignmentResponse updateAssignment(UUID professionalId, UUID id, AssignmentRequest r) {
+    requireAssignmentTenant(r.organizationId(), "UPDATE");
+    validateAssignment(r);
+    var x = assignmentEntity(professionalId, id);
+    if (!x.getOrganizationId().equals(r.organizationId()))
+      throw new ProfessionalInputException(
+          "ASSIGNMENT_ORGANIZATION_IMMUTABLE", "Assignment organization is immutable");
+    var p = professional(professionalId);
+    licensing.requireAdministrator(r.organizationId());
+    reserve(p, r);
+    x.update(
+        r.organizationId(),
+        r.departmentId(),
+        r.serviceId(),
+        r.position(),
+        r.employeeNumber(),
+        r.startDate(),
+        r.endDate(),
+        r.status());
+    if (!"ACTIVE".equals(x.getStatus())) releaseIfLast(p, x.getOrganizationId(), x.getId());
+    return assignment(x);
+  }
+
+  void deleteAssignment(UUID professionalId, UUID id) {
+    operation("employees", "DELETE");
+    var p = professional(professionalId);
+    var assignment = assignmentEntity(professionalId, id);
+    licensing.requireAdministrator(assignment.getOrganizationId());
+    releaseIfLast(p, assignment.getOrganizationId(), id);
+    p.removeAssignment(assignment);
+  }
+
+  ScheduleResponse addSchedule(UUID professionalId, UUID assignmentId, ScheduleRequest r) {
+    operation("professionalavailability", "CREATE");
+    var a = assignmentEntity(professionalId, assignmentId);
+    return schedule(
+        schedules.saveAndFlush(
+            a.addSchedule(r.dayOfWeek(), r.startTime(), r.endTime(), r.slotDurationMinutes())));
+  }
+
+  ScheduleResponse updateSchedule(
+      UUID professionalId, UUID assignmentId, UUID id, ScheduleRequest r) {
+    operation("professionalavailability", "UPDATE");
+    assignmentEntity(professionalId, assignmentId);
+    var x =
+        schedules
+            .findByIdAndAssignmentId(id, assignmentId)
+            .orElseThrow(() -> notFound("ProfessionalSchedule", id));
+    x.update(r.dayOfWeek(), r.startTime(), r.endTime(), r.slotDurationMinutes());
+    return schedule(x);
+  }
+
+  void deleteSchedule(UUID professionalId, UUID assignmentId, UUID id) {
+    operation("professionalavailability", "DELETE");
+    var a = assignmentEntity(professionalId, assignmentId);
+    var x =
+        schedules
+            .findByIdAndAssignmentId(id, assignmentId)
+            .orElseThrow(() -> notFound("ProfessionalSchedule", id));
+    a.removeSchedule(x);
+  }
+
+  AvailabilityResponse addAvailability(
+      UUID professionalId, UUID assignmentId, AvailabilityRequest r) {
+    operation("professionalavailability", "CREATE");
+    var a = assignmentEntity(professionalId, assignmentId);
+    return availability(
+        availabilities.saveAndFlush(
+            a.addAvailability(r.startAt(), r.endAt(), r.availabilityType(), r.status())));
+  }
+
+  AvailabilityResponse updateAvailability(
+      UUID professionalId, UUID assignmentId, UUID id, AvailabilityRequest r) {
+    operation("professionalavailability", "UPDATE");
+    assignmentEntity(professionalId, assignmentId);
+    var x =
+        availabilities
+            .findByIdAndAssignmentId(id, assignmentId)
+            .orElseThrow(() -> notFound("ProfessionalAvailability", id));
+    x.update(r.startAt(), r.endAt(), r.availabilityType(), r.status());
+    return availability(x);
+  }
+
+  void deleteAvailability(UUID professionalId, UUID assignmentId, UUID id) {
+    operation("professionalavailability", "DELETE");
+    var a = assignmentEntity(professionalId, assignmentId);
+    var x =
+        availabilities
+            .findByIdAndAssignmentId(id, assignmentId)
+            .orElseThrow(() -> notFound("ProfessionalAvailability", id));
+    a.removeAvailability(x);
+  }
+
+  private void reserve(Professional p, AssignmentRequest r) {
+    licensing.requireAdministrator(r.organizationId());
+    try {
+      if (r.status() == null || "ACTIVE".equalsIgnoreCase(r.status()))
+        licensing.reserveProfessionalAssignment(
+            r.organizationId(),
+            p.getPersonId(),
+            switch (p.getType()) {
+              case "DOCTOR", "MEDECIN" -> "DOCTOR";
+              case "NURSE" -> "NURSE";
+              default ->
+                  throw new IllegalArgumentException("Unsupported licensed professional role");
+            });
+    } catch (IllegalArgumentException exception) {
+      throw new ProfessionalInputException("INVALID_LICENSED_ASSIGNMENT", exception.getMessage());
+    }
+  }
+
+  private void releaseIfLast(Professional p, UUID organization, UUID excluded) {
+    if (p.getAssignments().stream()
+        .noneMatch(
+            a ->
+                !Objects.equals(a.getId(), excluded)
+                    && organization.equals(a.getOrganizationId())
+                    && "ACTIVE".equals(a.getStatus())))
+      licensing.releaseProfessionalAssignment(organization, p.getPersonId());
+  }
+
+  private UUID viewerOrganization() {
+    return operation("employees", "READ");
+  }
+
+  private UUID scope() {
+    var user = users.current();
+    if (user.has("PLATFORM_ADMIN") || user.organizationId() == null)
+      throw new org.springframework.security.access.AccessDeniedException(
+          "ORGANIZATION_CONTEXT_REQUIRED");
+    return user.organizationId();
+  }
+
+  private UUID operation(String resource, String action) {
+    UUID org = scope();
+    permissions.require(org, resource, action);
+    return org;
+  }
+
+  private void requireAssignmentTenant(UUID org, String action) {
+    if (!operation("employees", action).equals(org))
+      throw new org.springframework.security.access.AccessDeniedException(
+          "ASSIGNMENT_TENANT_MISMATCH");
+  }
+
+  private void globalMutation(Professional p, String action) {
+    UUID org = operation("employees", action);
+    if (p.getAssignments().stream().anyMatch(a -> !org.equals(a.getOrganizationId())))
+      throw new org.springframework.security.access.AccessDeniedException(
+          "SHARED_PROFESSIONAL_PROFILE_IMMUTABLE");
+  }
+
+  private void validateAssignment(AssignmentRequest r) {
+    requireExists("organization.organization", r.organizationId(), "Organization");
+    if (r.departmentId() != null
+        && !exists(
+            "select count(*) from organization.department where id=? and organization_id=?",
+            r.departmentId(),
+            r.organizationId())) throw notFound("Department", r.departmentId());
+    if (r.serviceId() != null
+        && !exists(
+            "select count(*) from organization.service where id=? and department_id=?",
+            r.serviceId(),
+            r.departmentId())) throw notFound("Service", r.serviceId());
+  }
+
+  private void requireExists(String table, UUID id, String resource) {
+    if (!exists("select count(*) from " + table + " where id=?", id)) throw notFound(resource, id);
+  }
+
+  private boolean exists(String sql, Object... args) {
+    return Boolean.TRUE.equals(jdbc.queryForObject(sql, Integer.class, args) > 0);
+  }
+
+  private String[] specialityInfo(UUID id) {
+    try {
+      return jdbc.queryForObject(
+          "select code,name from catalog.speciality_catalog where id=? and active=true",
+          (rs, n) -> new String[] {rs.getString(1), rs.getString(2)},
+          id);
+    } catch (EmptyResultDataAccessException e) {
+      throw notFound("Speciality", id);
+    }
+  }
+
+  private Professional professional(UUID id) {
+    UUID org = scope();
+    var p = professionals.findById(id).orElseThrow(() -> notFound("Professional", id));
+    if (!exists(
+        "select count(*) from licensing.member where organization_id=? and person_id=? and"
+            + " status='ACTIVE'",
+        org,
+        p.getPersonId())) throw notFound("Professional", id);
+    return p;
+  }
+
+  private ProfessionalLicense licenseEntity(UUID p, UUID id) {
+    return licenses
+        .findByIdAndProfessionalId(id, p)
+        .orElseThrow(() -> notFound("ProfessionalLicense", id));
+  }
+
+  private ProfessionalAssignment assignmentEntity(UUID p, UUID id) {
+    var assignment =
+        assignments
+            .findByIdAndProfessionalId(id, p)
+            .orElseThrow(() -> notFound("ProfessionalAssignment", id));
+    UUID scope = scope();
+    if (scope != null && !scope.equals(assignment.getOrganizationId()))
+      throw new org.springframework.security.access.AccessDeniedException(
+          "Assignment outside organization scope");
+    return assignment;
+  }
+
+  private ResourceNotFoundException notFound(String r, Object id) {
+    return new ResourceNotFoundException(r, id);
+  }
+
+  private void conflict(String c, String k) {
+    throw new ConflictException(c, k);
+  }
+
+  private ProfessionalSummary summary(Professional p) {
+    return new ProfessionalSummary(
+        p.getId(), p.getPersonId(), p.getNumber(), p.getType(), p.getStatus());
+  }
+
+  private ProfessionalResponse response(Professional p) {
+    UUID viewer = scope();
+    return new ProfessionalResponse(
+        p.getId(),
+        p.getPersonId(),
+        p.getNumber(),
+        p.getType(),
+        p.getStatus(),
+        p.getCreatedAt(),
+        p.getUpdatedAt(),
+        p.getLicenses().stream().map(this::license).toList(),
+        p.getSpecialities().stream().map(this::speciality).toList(),
+        p.getAssignments().stream()
+            .filter(a -> viewer == null || viewer.equals(a.getOrganizationId()))
+            .map(this::assignment)
+            .toList());
+  }
+
+  private LicenseResponse license(ProfessionalLicense x) {
+    return new LicenseResponse(
+        x.getId(),
+        x.getNumber(),
+        x.getAuthority(),
+        x.getCountryId(),
+        x.getIssuedAt(),
+        x.getExpiresAt(),
+        x.getStatus());
+  }
+
+  private SpecialityResponse speciality(ProfessionalSpeciality x) {
+    var i = specialityInfo(x.getSpecialityCatalogId());
+    return new SpecialityResponse(x.getSpecialityCatalogId(), i[0], i[1], x.isPrimary());
+  }
+
+  private AssignmentResponse assignment(ProfessionalAssignment x) {
+    return new AssignmentResponse(
+        x.getId(),
+        x.getOrganizationId(),
+        x.getDepartmentId(),
+        x.getServiceId(),
+        x.getPosition(),
+        x.getEmployeeNumber(),
+        x.getStartDate(),
+        x.getEndDate(),
+        x.getStatus(),
+        x.getSchedules().stream().map(this::schedule).toList(),
+        x.getAvailabilities().stream().map(this::availability).toList());
+  }
+
+  private ScheduleResponse schedule(ProfessionalSchedule x) {
+    return new ScheduleResponse(
+        x.getId(), x.getDayOfWeek(), x.getStartTime(), x.getEndTime(), x.getSlotDurationMinutes());
+  }
+
+  private AvailabilityResponse availability(ProfessionalAvailability x) {
+    return new AvailabilityResponse(
+        x.getId(), x.getStartAt(), x.getEndAt(), x.getType(), x.getStatus());
+  }
 }

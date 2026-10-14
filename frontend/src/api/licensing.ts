@@ -2,7 +2,7 @@ import {apiRequest} from './client';
 export type PlanInput={name:string;amountMinor:number;currency:string;interval:'MONTH'|'YEAR';doctorQuota:number;professionalQuota:number;cashierQuota:number;accountantQuota:number;aiAssistantEnabled:boolean;stripePriceId:string;active:boolean};
 export type Plan=PlanInput&{id:string};
 export type Entitlements={status:string;active:boolean;aiAssistantEnabled:boolean;planName?:string;doctorQuota:number;professionalQuota:number;cashierQuota:number;accountantQuota:number;usage:Record<string,number>;currentPeriodEnd?:string};
-export type TeamMember={id:string;personId?:string;email?:string;role:string;status:string};
+export type TeamMember={id:string;personId?:string;professionalId?:string;email?:string;role:string;status:string};
 export type SubscriptionInvoice={id:string;amountMinor:number;currency:string;status:string;invoiceUrl?:string;periodStart?:string;periodEnd?:string};
 export const licensingKeys={all:['licensing'] as const,plans:['licensing','plans'] as const,organization:(id:string)=>['licensing',id] as const};
 function camelize(value:any):any{if(Array.isArray(value))return value.map(camelize);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([k,v])=>[k.replace(/_([a-z])/g,(_,c:string)=>c.toUpperCase()),camelize(v)]));return value;}
@@ -29,3 +29,6 @@ export function formatSubscriptionMoney(amountMinor:number,currency:string,local
  const digits=format.resolvedOptions().maximumFractionDigits??2;
  return format.format(amountMinor/(10**digits));
 }
+export type EmployeeInput={personId?:string;firstName?:string;lastName?:string;email?:string;role:string;customRoleIds?:string[]};
+export const createEmployee=(org:string,input:EmployeeInput)=>request<TeamMember>(`${base(org)}/employees`,{method:'POST',body:JSON.stringify(input)});
+export const findEmployeeAccounts=(org:string,email:string)=>request<{personId:string;firstName:string;lastName:string;email?:string}[]>(`${base(org)}/employee-accounts?email=${encodeURIComponent(email)}`);

@@ -1,3 +1,4 @@
+import {useHospitalPermission} from '../auth/HospitalPermissions';
 import {CarePatientHistory} from "../components/CarePatientHistory";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -45,7 +46,7 @@ export function CareVisitPage() {
   const { id = "" } = useParams();
   const { i18n } = useTranslation();
   const fr = i18n.language.startsWith("fr");
-  const auth = useAuth();
+  const auth = useAuth();const reportUpdate=useHospitalPermission('reports','UPDATE');
   const report = useQuery({
     queryKey: ["visit-report", id],
     queryFn: () => getVisitReport(id),
@@ -58,7 +59,7 @@ export function CareVisitPage() {
       id={id}
       fr={fr}
       value={report.data}
-      canWrite={auth.hasAnyRole("DOCTOR")}
+      canWrite={reportUpdate&&auth.hasAnyRole("DOCTOR")}
     />
   );
 }
@@ -73,6 +74,7 @@ function VisitWorkspace({
   value: VisitReport;
   canWrite: boolean;
 }) {
+  const documentCreate=useHospitalPermission('documents','CREATE');
   const cache = useQueryClient();
   const [draft, setDraft] = useState<ReportFields>({
     reason: value.reason ?? "",
@@ -343,7 +345,7 @@ function VisitWorkspace({
           <VisitDocuments
             id={id}
             fr={fr}
-            canGenerate={canWrite && value.status === "VALIDATED"}
+            canGenerate={documentCreate && canWrite && value.status === "VALIDATED"}
           />
         </>
       )}

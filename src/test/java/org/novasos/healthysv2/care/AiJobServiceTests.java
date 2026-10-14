@@ -14,6 +14,8 @@ import org.novasos.healthysv2.shared.api.error.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 class AiJobServiceTests {
+  final org.novasos.healthysv2.organizationaccess.api.OrganizationPermissionAccess permissions =
+      mock(org.novasos.healthysv2.organizationaccess.api.OrganizationPermissionAccess.class);
   final JdbcTemplate db = mock(JdbcTemplate.class);
   final CurrentUserContext users = mock(CurrentUserContext.class);
   final AiAuthorization authorization = mock(AiAuthorization.class);
@@ -22,9 +24,10 @@ class AiJobServiceTests {
   final UUID visit = UUID.randomUUID(),
       actor = UUID.randomUUID(),
       org = UUID.randomUUID(),
-      job = UUID.randomUUID();
+      job = UUID.randomUUID(),
+      profile = UUID.randomUUID();
   final AiAuthorization.Context context =
-      new AiAuthorization.Context(visit, actor, org, UUID.randomUUID());
+      new AiAuthorization.Context(visit, actor, org, UUID.randomUUID(), profile);
   final AiPolicy policy =
       new AiPolicy(
           true,
@@ -44,12 +47,13 @@ class AiJobServiceTests {
           policy,
           audio,
           new CarePolicy(Duration.ofDays(7), 30),
-          mock(AuditTrail.class));
+          mock(AuditTrail.class),
+          permissions);
 
   void setup() {
     when(users.current())
-        .thenReturn(new CurrentUserContext.UserContext(actor, org, Set.of("DOCTOR")));
-    when(authorization.require(visit, actor, org)).thenReturn(context);
+        .thenReturn(new CurrentUserContext.UserContext(actor, org, Set.of("DOCTOR"), profile));
+    when(authorization.require(visit, actor, org, profile)).thenReturn(context);
     when(snapshots.build(context)).thenReturn(Map.of("sources", List.of()));
     when(snapshots.hash(any())).thenReturn("current");
   }
@@ -67,6 +71,8 @@ class AiJobServiceTests {
             hash,
             "created_at",
             Timestamp.from(Instant.now()),
+            "created_profile_id",
+            profile,
             "request_hash",
             AiSnapshot.hashText("SUMMARY\n\nnull\n")));
   }
@@ -108,13 +114,15 @@ class AiJobServiceTests {
             eq(job),
             eq(visit),
             eq(actor),
-            eq(org));
+            eq(org),
+            eq(profile));
   }
 
   @Test
   void staleProposalCannotBeAppliedToCurrentReport() {
     setup();
-    when(db.queryForList(contains("id=? and visit_id=?"), eq(job), eq(visit), eq(actor), eq(org)))
+    when(db.queryForList(
+            contains("id=? and visit_id=?"), eq(job), eq(visit), eq(actor), eq(org), eq(profile)))
         .thenReturn(List.of(existing("REPORT", "old")));
     assertThrows(ConflictException.class, () -> service.requireReportProvenance(visit, job));
   }
@@ -122,7 +130,8 @@ class AiJobServiceTests {
   @Test
   void transcriptionIsNotAReportProposalAndDoesNotReadClinicalSnapshot() {
     setup();
-    when(db.queryForList(contains("id=? and visit_id=?"), eq(job), eq(visit), eq(actor), eq(org)))
+    when(db.queryForList(
+            contains("id=? and visit_id=?"), eq(job), eq(visit), eq(actor), eq(org), eq(profile)))
         .thenReturn(List.of(existing("TRANSCRIPTION", "unused")));
     assertFalse(service.get(visit, job).obsolete());
     assertThrows(BusinessRuleException.class, () -> service.requireReportProvenance(visit, job));
@@ -141,9 +150,33 @@ class AiJobServiceTests {
   @Test
   void listingManyResultsBuildsTheCurrentSnapshotOnce() {
     setup();
-    when(db.queryForList(contains("order by created_at desc"), eq(visit), eq(actor), eq(org)))
+    when(db.queryForList(
+            contains("order by created_at desc"), eq(visit), eq(actor), eq(org), eq(profile)))
         .thenReturn(List.of(existing("REPORT", "current"), existing("SUMMARY", "current")));
     assertEquals(2, service.list(visit).size());
     verify(snapshots, times(1)).build(context);
+  }
+
+  @Test
+  void aiGrantWithoutClinicalReadCannotBuildSnapshot() {
+    setup();
+    doThrow(new org.springframework.security.access.AccessDeniedException("CLINICAL_READ_REQUIRED"))
+        .when(permissions)
+        .require(org, "clinicalrecords", "READ");
+    assertThrows(
+        org.springframework.security.access.AccessDeniedException.class, () -> service.list(visit));
+    verifyNoInteractions(snapshots, authorization, audio);
+  }
+
+  @Test
+  void revokedAiCreateCannotQueueAnotherJob() {
+    setup();
+    doThrow(new org.springframework.security.access.AccessDeniedException("AI_CREATE_REVOKED"))
+        .when(permissions)
+        .require(org, "ai", "CREATE");
+    assertThrows(
+        org.springframework.security.access.AccessDeniedException.class,
+        () -> service.create(visit, "new", new AiDtos.Request(AiDtos.Kind.SUMMARY, null), null));
+    verifyNoInteractions(snapshots, authorization, audio, db);
   }
 }

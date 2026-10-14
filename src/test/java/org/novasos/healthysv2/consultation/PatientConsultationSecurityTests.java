@@ -1,6 +1,7 @@
 package org.novasos.healthysv2.consultation;
 
 import static org.mockito.Mockito.*;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -8,90 +9,136 @@ import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.novasos.healthysv2.patient.PatientSelfAccess;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.*;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 import org.springframework.test.context.web.WebAppConfiguration;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
-import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 
 @SpringJUnitConfig(PatientConsultationSecurityTests.Config.class)
 @WebAppConfiguration
 class PatientConsultationSecurityTests {
-    @Autowired WebApplicationContext context;
-    @Autowired PatientConsultationService service;
-    @Autowired JwtDecoder decoder;
-    private MockMvc mvc;
-    private final UUID subject = UUID.randomUUID();
+  @Autowired WebApplicationContext context;
+  @Autowired PatientConsultationService service;
+  @Autowired JwtDecoder decoder;
+  @Autowired PatientSelfAccess selfAccess;
+  private MockMvc mvc;
+  private final UUID subject = UUID.randomUUID();
+  private final UUID linkedPerson = UUID.randomUUID();
+  private final UUID selectedPatient = UUID.randomUUID();
 
-    @BeforeEach
-    void setup() {
-        reset(service, decoder);
-        mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
-        when(decoder.decode("patient")).thenReturn(token("PATIENT"));
-        when(decoder.decode("doctor")).thenReturn(token("DOCTOR"));
-        when(decoder.decode("expired")).thenAnswer(invocation -> {
-            var expired = Jwt.withTokenValue("expired").header("alg", "RS256")
-                    .subject(subject.toString()).claim("role", "PATIENT")
-                    .issuedAt(Instant.now().minusSeconds(3600))
-                    .expiresAt(Instant.now().minusSeconds(300)).build();
-            var validation = new JwtTimestampValidator().validate(expired);
-            if (validation.hasErrors()) {
+  @BeforeEach
+  void setup() {
+    reset(service, decoder, selfAccess);
+    when(selfAccess.resolve(subject))
+        .thenReturn(new PatientSelfAccess.Identity(linkedPerson, selectedPatient));
+    mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
+    when(decoder.decode("patient")).thenReturn(token("PATIENT"));
+    when(decoder.decode("doctor")).thenReturn(token("DOCTOR"));
+    when(decoder.decode("expired"))
+        .thenAnswer(
+            invocation -> {
+              var expired =
+                  Jwt.withTokenValue("expired")
+                      .header("alg", "RS256")
+                      .subject(subject.toString())
+                      .claim("role", "PATIENT")
+                      .issuedAt(Instant.now().minusSeconds(3600))
+                      .expiresAt(Instant.now().minusSeconds(300))
+                      .build();
+              var validation = new JwtTimestampValidator().validate(expired);
+              if (validation.hasErrors()) {
                 throw new JwtValidationException("Expired JWT", validation.getErrors());
-            }
-            return expired;
-        });
-    }
+              }
+              return expired;
+            });
+  }
 
-    @Test void authorizedPatientUsesOnlyVerifiedSubjectEvenWithSpoofedParameters() throws Exception {
-        mvc.perform(get("/api/v1/patients/me/consultations")
+  @Test
+  void authorizedPatientUsesOnlyVerifiedSubjectEvenWithSpoofedParameters() throws Exception {
+    mvc.perform(
+            get("/api/v1/patients/me/consultations")
                 .param("personId", UUID.randomUUID().toString())
                 .param("patientId", UUID.randomUUID().toString())
-                .header("Authorization", "Bearer patient")).andExpect(status().isOk());
-        verify(service).list(subject, 0, 20);
-        verifyNoMoreInteractions(service);
+                .header("Authorization", "Bearer patient"))
+        .andExpect(status().isOk());
+    verify(service).list(subject, 0, 20);
+    verifyNoMoreInteractions(service);
+  }
+
+  @Test
+  void nonPatientRoleCannotReadPatientMedicalRecord() throws Exception {
+    mvc.perform(get("/api/v1/patients/me/consultations").header("Authorization", "Bearer doctor"))
+        .andExpect(status().isForbidden());
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void anonymousAndExpiredTokenCannotReadMedicalRecord() throws Exception {
+    mvc.perform(get("/api/v1/patients/me/consultations")).andExpect(status().isUnauthorized());
+    mvc.perform(get("/api/v1/patients/me/consultations").header("Authorization", "Bearer expired"))
+        .andExpect(status().isUnauthorized());
+    verifyNoInteractions(service);
+  }
+
+  private Jwt token(String role) {
+    return Jwt.withTokenValue("token")
+        .header("alg", "RS256")
+        .subject(subject.toString())
+        .claim("role", role)
+        .issuedAt(Instant.now())
+        .expiresAt(Instant.now().plusSeconds(60))
+        .build();
+  }
+
+  @Configuration
+  @EnableWebMvc
+  @EnableMethodSecurity
+  @org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
+  static class Config {
+    @Bean
+    PatientConsultationService service() {
+      return mock(PatientConsultationService.class);
     }
 
-    @Test void nonPatientRoleCannotReadPatientMedicalRecord() throws Exception {
-        mvc.perform(get("/api/v1/patients/me/consultations").header("Authorization", "Bearer doctor"))
-                .andExpect(status().isForbidden());
-        verifyNoInteractions(service);
+    @Bean
+    PatientConsultationController controller(PatientConsultationService service) {
+      return new PatientConsultationController(service);
     }
 
-    @Test void anonymousAndExpiredTokenCannotReadMedicalRecord() throws Exception {
-        mvc.perform(get("/api/v1/patients/me/consultations")).andExpect(status().isUnauthorized());
-        mvc.perform(get("/api/v1/patients/me/consultations").header("Authorization", "Bearer expired"))
-                .andExpect(status().isUnauthorized());
-        verifyNoInteractions(service);
+    @Bean
+    PatientSelfAccess selfAccess() {
+      return mock(PatientSelfAccess.class);
     }
 
-    private Jwt token(String role) {
-        return Jwt.withTokenValue("token").header("alg", "RS256").subject(subject.toString())
-                .claim("role", role).issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(60)).build();
+    @Bean
+    JwtDecoder decoder() {
+      return mock(JwtDecoder.class);
     }
 
-    @Configuration @EnableWebMvc @EnableMethodSecurity
-    @org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
-    static class Config {
-        @Bean PatientConsultationService service() { return mock(PatientConsultationService.class); }
-        @Bean PatientConsultationController controller(PatientConsultationService service) { return new PatientConsultationController(service); }
-        @Bean JwtDecoder decoder() { return mock(JwtDecoder.class); }
-        @Bean SecurityFilterChain security(HttpSecurity http) throws Exception {
-            var converter = new JwtAuthenticationConverter();
-            converter.setJwtGrantedAuthoritiesConverter(jwt -> java.util.List.of(
-                    new SimpleGrantedAuthority("ROLE_" + jwt.getClaimAsString("role"))));
-            return http.csrf(csrf -> csrf.disable()).authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
-                    .oauth2ResourceServer(resource -> resource.jwt(jwt -> jwt.jwtAuthenticationConverter(converter))).build();
-        }
+    @Bean
+    SecurityFilterChain security(HttpSecurity http) throws Exception {
+      var converter = new JwtAuthenticationConverter();
+      converter.setJwtGrantedAuthoritiesConverter(
+          jwt ->
+              java.util.List.of(
+                  new SimpleGrantedAuthority("ROLE_" + jwt.getClaimAsString("role"))));
+      return http.csrf(csrf -> csrf.disable())
+          .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+          .oauth2ResourceServer(
+              resource -> resource.jwt(jwt -> jwt.jwtAuthenticationConverter(converter)))
+          .build();
     }
+  }
 }

@@ -8,6 +8,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.*;
 import org.junit.jupiter.api.*;
+import org.novasos.healthysv2.accessprofile.api.AccessProfileResolver;
+import org.novasos.healthysv2.profilecontract.api.ContractAccess;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.*;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -16,6 +18,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.oauth2.jwt.*;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(
@@ -31,6 +34,7 @@ class CutoverIntegrationTests {
   @Autowired JdbcTemplate db;
   @Autowired MockMvc mvc;
   @Autowired ObjectMapper json;
+  @MockitoBean ContractAccess contracts;
   UUID person, subject;
 
   @BeforeEach
@@ -77,6 +81,7 @@ class CutoverIntegrationTests {
     mvc.perform(
             post("/api/v1/care/cutover/activate")
                 .header("Authorization", token())
+                .header("X-Profile-ID", AccessProfileResolver.platformId(person))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(Map.of("migrationRunId", id))))
         .andExpect(status().isUnprocessableEntity());
@@ -86,7 +91,8 @@ class CutoverIntegrationTests {
   }
 
   @Test
-  void verifiedCutoverMakesLegacyCommandsReadOnlyInHttpAndDatabase() throws Exception {
+  void verifiedCutoverRetiresDatabaseWritesAndKeepsPlatformOutsideMedicalCommands()
+      throws Exception {
     Map<String, Object> proof = new HashMap<>();
     proof.put("journey", Map.of("validated", true));
     proof.put("restoration", Map.of("validated", true));
@@ -100,15 +106,17 @@ class CutoverIntegrationTests {
     mvc.perform(
             post("/api/v1/care/cutover/activate")
                 .header("Authorization", token())
+                .header("X-Profile-ID", AccessProfileResolver.platformId(person))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(Map.of("migrationRunId", id))))
         .andExpect(status().isOk());
     mvc.perform(
             post("/api/v1/appointments")
                 .header("Authorization", token())
+                .header("X-Profile-ID", AccessProfileResolver.platformId(person))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{}"))
-        .andExpect(status().isUnprocessableEntity());
+        .andExpect(status().isForbidden());
     UUID org = UUID.randomUUID(), patient = UUID.randomUUID();
     db.update(
         "insert into organization.organization(id,organization_number,name)"

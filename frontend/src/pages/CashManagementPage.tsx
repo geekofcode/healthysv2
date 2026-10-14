@@ -1,3 +1,4 @@
+import {useHospitalPermission} from '../auth/HospitalPermissions';
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -18,13 +19,14 @@ export function CashManagementPage() {
   const [to, setTo] = useState("");
   const [cashier, setCashier] = useState("");
   const [period, setPeriod] = useState<CashPeriod>();
-  const allowed = auth.hasAnyRole(
+  const read=useHospitalPermission('cashreports','READ');const closePermission=useHospitalPermission('cashclosures','CREATE');
+  const allowed = read || auth.hasAnyRole(
     "CASHIER",
     "ACCOUNTANT",
     "HOSPITAL_ADMIN",
     "PLATFORM_ADMIN",
   );
-  const canClose = auth.hasAnyRole(
+  const canClose = closePermission && auth.hasAnyRole(
     "CASHIER",
     "HOSPITAL_ADMIN",
     "PLATFORM_ADMIN",

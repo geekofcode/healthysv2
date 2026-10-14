@@ -1,4 +1,4 @@
-import {useLocation} from 'react-router-dom';
+import {Navigate,useLocation} from 'react-router-dom';
 import {useAuth} from '../auth/AuthContext';
 import {useTranslation} from 'react-i18next';
 import {ThemeSwitch} from '../components/ThemeSwitch';
@@ -9,6 +9,7 @@ export function LoginPage() {
   const from = (location.state as {from?: string} | null)?.from ?? '/';
   const {t,i18n} = useTranslation();
   const french = i18n?.language?.startsWith('fr');
+  if(auth.initialized&&auth.authenticated)return <Navigate to="/profiles/select" replace/>;
   return <main className="login-page">
     <header className="public-header"><a className="brand" href="/">HEALTH’YS</a><ThemeSwitch /></header>
     <div className="welcome-layout">
@@ -27,7 +28,7 @@ export function LoginPage() {
         <button type="button" disabled={!auth.initialized} onClick={() => void auth.login(`${window.location.origin}${from}`)}>{auth.initialized ? t('auth.login') : t('auth.keycloakInitializing')}</button>
         <div className="auth-divider"><span>{french ? 'Première visite ?' : 'First visit?'}</span></div>
         <button className="button-secondary" disabled={!auth.initialized} type="button" onClick={() => void auth.register(`${window.location.origin}/registration/complete`)}>{t('registration.createAccount')}</button>
-        <button className="auth-professional-link" disabled={!auth.initialized} type="button" onClick={() => void auth.register(`${window.location.origin}${from.startsWith('/professional-invitation') ? from : '/professional-onboarding'}`)}>{t('onboarding.createProfessionalAccount')} <span aria-hidden="true">→</span></button>
+
         <p className="auth-security-note">{french ? 'Connexion sécurisée. Vos données de santé restent dans votre espace HEALTH’YS.' : 'Secure sign-in. Your health data stays in your HEALTH’YS space.'}</p>
       </section>
     </div>

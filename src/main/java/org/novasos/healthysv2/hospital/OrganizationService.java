@@ -38,6 +38,29 @@ class OrganizationService {
     this.beds = beds;
   }
 
+  private org.novasos.healthysv2.identity.api.EmployeeAccountProvisioning accounts;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  void accounts(org.novasos.healthysv2.identity.api.EmployeeAccountProvisioning accounts) {
+    this.accounts = accounts;
+  }
+
+  private org.novasos.healthysv2.organizationaccess.api.OrganizationPermissionAccess permissions;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  void permissions(
+      org.novasos.healthysv2.organizationaccess.api.OrganizationPermissionAccess permissions) {
+    this.permissions = permissions;
+  }
+
+  private void requireStructure(UUID organizationId, String action) {
+    var user = users.current();
+    if (user.has("PLATFORM_ADMIN") || !organizationId.equals(user.organizationId()))
+      throw new org.springframework.security.access.AccessDeniedException(
+          "ORGANIZATION_OPERATION_DENIED");
+    permissions.require(organizationId, "orgconfiguration", action);
+  }
+
   OrganizationResponse create(OrganizationRequest request) {
     requireSupportedType(request.organizationTypeId());
     if (organizations.existsByNumber(request.number()))
@@ -52,9 +75,30 @@ class OrganizationService {
             request.email(),
             request.website(),
             request.status());
-    validateAdministrator(request.administratorPersonId());
-    item.configure(request.timezone(), request.administratorPersonId());
-    return response(organizations.saveAndFlush(item));
+    if (!users.current().has("PLATFORM_ADMIN"))
+      throw new org.springframework.security.access.AccessDeniedException(
+          "PLATFORM_ADMIN_REQUIRED");
+    UUID administrator = request.administratorPersonId();
+    if (administrator != null && request.administratorAccount() != null)
+      throw new IllegalArgumentException("ONE_ADMINISTRATOR_IDENTITY_REQUIRED");
+    if (administrator == null && request.administratorAccount() != null) {
+      var account = request.administratorAccount();
+      administrator =
+          accounts
+              .ensureAccount(account.firstName(), account.lastName(), account.email())
+              .personId();
+    }
+    if (administrator == null)
+      throw new IllegalArgumentException("HOSPITAL_ADMIN_ACCOUNT_REQUIRED");
+    validateAdministrator(administrator);
+    item.configure(request.timezone(), administrator);
+    organizations.saveAndFlush(item);
+    jdbc.update(
+        "insert into licensing.member(organization_id,person_id,role,status)"
+            + " values(?,?,'HOSPITAL_ADMIN','ACTIVE')",
+        item.getId(),
+        administrator);
+    return response(item);
   }
 
   @Transactional(readOnly = true)
@@ -86,6 +130,25 @@ class OrganizationService {
     if (!java.util.Objects.equals(request.organizationTypeId(), item.getOrganizationTypeId()))
       requireSupportedType(request.organizationTypeId());
     validateAdministrator(request.administratorPersonId());
+    UUID previousAdministrator = item.getAdministratorPersonId();
+    if (platform
+        && request.administratorPersonId() != null
+        && !request.administratorPersonId().equals(previousAdministrator)) {
+      jdbc.update(
+          "update licensing.member set status='INACTIVE',updated_at=now() where organization_id=?"
+              + " and person_id=? and role='HOSPITAL_ADMIN' and status='ACTIVE'",
+          id,
+          previousAdministrator);
+      jdbc.update(
+          "insert into licensing.member(organization_id,person_id,role,status) select"
+              + " ?,?,'HOSPITAL_ADMIN','ACTIVE' where not exists(select 1 from licensing.member"
+              + " where organization_id=? and person_id=? and role='HOSPITAL_ADMIN' and"
+              + " status<>'INACTIVE')",
+          id,
+          request.administratorPersonId(),
+          id,
+          request.administratorPersonId());
+    }
     item.configure(
         request.timezone(),
         request.administratorPersonId() == null
@@ -133,7 +196,7 @@ class OrganizationService {
   }
 
   DepartmentResponse addDepartment(UUID organizationId, DepartmentRequest request) {
-    requireAdministrator(organizationId);
+    requireStructure(organizationId, "CREATE");
     Organization org = organization(organizationId);
     if (departments.existsByOrganizationIdAndCode(organizationId, request.code()))
       conflict("DEPARTMENT_CODE_ALREADY_EXISTS", "error.department.code.exists");
@@ -145,20 +208,20 @@ class OrganizationService {
 
   DepartmentResponse updateDepartment(
       UUID organizationId, UUID id, DepartmentUpdateRequest request) {
-    requireAdministrator(organizationId);
+    requireStructure(organizationId, "UPDATE");
     Department item = departmentEntity(organizationId, id);
     item.update(request.name(), request.description(), request.status());
     return department(item);
   }
 
   void deleteDepartment(UUID organizationId, UUID id) {
-    requireAdministrator(organizationId);
+    requireStructure(organizationId, "DELETE");
     Organization org = organization(organizationId);
     org.removeDepartment(departmentEntity(organizationId, id));
   }
 
   ServiceResponse addService(UUID organizationId, UUID departmentId, ServiceRequest request) {
-    requireAdministrator(organizationId);
+    requireStructure(organizationId, "CREATE");
     Department parent = departmentEntity(organizationId, departmentId);
     if (services.existsByDepartmentIdAndCode(departmentId, request.code()))
       conflict("SERVICE_CODE_ALREADY_EXISTS", "error.service.code.exists");
@@ -170,7 +233,7 @@ class OrganizationService {
 
   ServiceResponse updateService(
       UUID organizationId, UUID departmentId, UUID id, ServiceUpdateRequest request) {
-    requireAdministrator(organizationId);
+    requireStructure(organizationId, "UPDATE");
     departmentEntity(organizationId, departmentId);
     CareService item =
         services
@@ -181,7 +244,7 @@ class OrganizationService {
   }
 
   void deleteService(UUID organizationId, UUID departmentId, UUID id) {
-    requireAdministrator(organizationId);
+    requireStructure(organizationId, "DELETE");
     Department parent = departmentEntity(organizationId, departmentId);
     CareService item =
         services
@@ -191,7 +254,7 @@ class OrganizationService {
   }
 
   RoomResponse addRoom(UUID organizationId, RoomRequest request) {
-    requireAdministrator(organizationId);
+    requireStructure(organizationId, "CREATE");
     Organization org = organization(organizationId);
     if (rooms.existsByOrganizationIdAndRoomNumber(organizationId, request.roomNumber()))
       conflict("ROOM_NUMBER_ALREADY_EXISTS", "error.room.number.exists");
@@ -205,7 +268,7 @@ class OrganizationService {
   }
 
   RoomResponse updateRoom(UUID organizationId, UUID id, RoomUpdateRequest request) {
-    requireAdministrator(organizationId);
+    requireStructure(organizationId, "UPDATE");
     Room item = roomEntity(organizationId, id);
     Department department =
         request.departmentId() == null
@@ -216,12 +279,12 @@ class OrganizationService {
   }
 
   void deleteRoom(UUID organizationId, UUID id) {
-    requireAdministrator(organizationId);
+    requireStructure(organizationId, "DELETE");
     organization(organizationId).removeRoom(roomEntity(organizationId, id));
   }
 
   BedResponse addBed(UUID organizationId, UUID roomId, BedRequest request) {
-    requireAdministrator(organizationId);
+    requireStructure(organizationId, "CREATE");
     Room parent = roomEntity(organizationId, roomId);
     if (beds.existsByRoomIdAndBedNumber(roomId, request.bedNumber()))
       conflict("BED_NUMBER_ALREADY_EXISTS", "error.bed.number.exists");
@@ -229,7 +292,7 @@ class OrganizationService {
   }
 
   BedResponse updateBed(UUID organizationId, UUID roomId, UUID id, BedUpdateRequest request) {
-    requireAdministrator(organizationId);
+    requireStructure(organizationId, "UPDATE");
     roomEntity(organizationId, roomId);
     Bed item = beds.findByIdAndRoomId(id, roomId).orElseThrow(() -> notFound("Bed", id));
     item.update(request.status());
@@ -237,7 +300,7 @@ class OrganizationService {
   }
 
   void deleteBed(UUID organizationId, UUID roomId, UUID id) {
-    requireAdministrator(organizationId);
+    requireStructure(organizationId, "DELETE");
     Room parent = roomEntity(organizationId, roomId);
     Bed item = beds.findByIdAndRoomId(id, roomId).orElseThrow(() -> notFound("Bed", id));
     parent.removeBed(item);
@@ -256,7 +319,9 @@ class OrganizationService {
     if (person != null
         && !Boolean.TRUE.equals(
             jdbc.queryForObject(
-                "select exists(select 1 from identity.person where id=? and status='ACTIVE')",
+                "select exists(select 1 from identity.person p where id=? and status='ACTIVE' and"
+                    + " (keycloak_user_id is not null or exists(select 1 from"
+                    + " identity.staff_account_outbox a where a.person_id=p.id)))",
                 Boolean.class,
                 person))) throw notFound("Person", person);
   }
@@ -264,7 +329,9 @@ class OrganizationService {
   private void requireAdministrator(UUID organization) {
     var user = users.current();
     if (user.has("PLATFORM_ADMIN")) return;
-    if (user.personId() == null || !organization.equals(user.organizationId()))
+    if (!user.has("HOSPITAL_ADMIN")
+        || user.personId() == null
+        || !organization.equals(user.organizationId()))
       throw new org.springframework.security.access.AccessDeniedException(
           "Organization administrator required");
     boolean allowed =
@@ -311,7 +378,18 @@ class OrganizationService {
         o.getId(), o.getNumber(), o.getName(), o.getLegalName(), o.getStatus());
   }
 
+  private boolean canReadStructure(UUID organizationId) {
+    if (users.current().has("PLATFORM_ADMIN")) return false;
+    try {
+      permissions.require(organizationId, "orgconfiguration", "READ");
+      return true;
+    } catch (org.springframework.security.access.AccessDeniedException denied) {
+      return false;
+    }
+  }
+
   private OrganizationResponse response(Organization o) {
+    boolean structure = canReadStructure(o.getId());
     return new OrganizationResponse(
         o.getId(),
         o.getNumber(),
@@ -324,14 +402,13 @@ class OrganizationService {
         o.getStatus(),
         o.getCreatedAt(),
         o.getUpdatedAt(),
-        o.getDepartments().stream()
-            .sorted(Comparator.comparing(Department::getCode))
-            .map(this::department)
-            .toList(),
-        o.getRooms().stream()
-            .sorted(Comparator.comparing(Room::getRoomNumber))
-            .map(this::room)
-            .toList(),
+        (!structure ? java.util.List.<Department>of() : o.getDepartments())
+            .stream()
+                .sorted(Comparator.comparing(Department::getCode))
+                .map(this::department)
+                .toList(),
+        (!structure ? java.util.List.<Room>of() : o.getRooms())
+            .stream().sorted(Comparator.comparing(Room::getRoomNumber)).map(this::room).toList(),
         o.getTimezone(),
         o.getAdministratorPersonId());
   }

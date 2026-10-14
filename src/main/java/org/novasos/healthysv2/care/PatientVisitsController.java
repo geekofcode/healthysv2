@@ -16,10 +16,13 @@ import org.springframework.web.bind.annotation.*;
 class PatientVisitsController {
   private final JdbcTemplate db;
   private final AuditTrail audit;
+  private final org.novasos.healthysv2.patient.PatientSelfAccess selves;
 
-  PatientVisitsController(JdbcTemplate db, AuditTrail audit) {
+  PatientVisitsController(
+      JdbcTemplate db, AuditTrail audit, org.novasos.healthysv2.patient.PatientSelfAccess selves) {
     this.db = db;
     this.audit = audit;
+    this.selves = selves;
   }
 
   record Visit(
@@ -47,18 +50,8 @@ class PatientVisitsController {
     } catch (IllegalArgumentException e) {
       throw new AccessDeniedException("INVALID_SUBJECT");
     }
-    UUID person =
-        db.query(
-            "select id from identity.person where keycloak_user_id=? and status='ACTIVE'",
-            rs -> rs.next() ? rs.getObject(1, UUID.class) : null,
-            subject);
-    if (person == null) throw new AccessDeniedException("AUTHENTICATED_PATIENT_REQUIRED");
-    UUID patient =
-        db.query(
-            "select id from patient.patient where person_id=?",
-            rs -> rs.next() ? rs.getObject(1, UUID.class) : null,
-            person);
-    if (patient == null) return List.of();
+    var selected = selves.resolve(subject);
+    UUID person = selected.person(), patient = selected.patient();
     Instant begin = from == null ? Instant.now().minusSeconds(30L * 86400) : from;
     Instant end = to == null ? Instant.now().plusSeconds(366L * 86400) : to;
     if (!end.isAfter(begin)) throw new IllegalArgumentException("INVALID_VISIT_PERIOD");

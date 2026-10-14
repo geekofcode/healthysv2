@@ -1,85 +1,139 @@
 package org.novasos.healthysv2.patient;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.ResultSetExtractor;
+import org.novasos.healthysv2.accessprofile.api.AccessProfileResolver;
+import org.novasos.healthysv2.accessprofile.api.AccessProfileResolver.AccessProfile;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 class CurrentOrganizationContextTests {
-    @AfterEach void clean() {
-        SecurityContextHolder.clearContext();
-        RequestContextHolder.resetRequestAttributes();
-    }
+  final UUID subject = UUID.randomUUID(),
+      person = UUID.randomUUID(),
+      org = UUID.randomUUID(),
+      profile = UUID.randomUUID();
+  final AccessProfileResolver resolver = mock(AccessProfileResolver.class);
+  final CurrentUserContext context = new CurrentUserContext(resolver, "healthys-backend");
 
-    @Test
-    void selectedOrganizationRequiresLiveMembershipEvenWithOldJwt() {
-        JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        UUID subject = UUID.randomUUID(), person = UUID.randomUUID(), selected = UUID.randomUUID();
-        Jwt jwt = Jwt.withTokenValue("test").header("alg", "RS256").subject(subject.toString())
-                .issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(300)).build();
-        SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt,
-                List.of(new SimpleGrantedAuthority("ROLE_DOCTOR"))));
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("X-Organization-ID", selected.toString());
-        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
-        when(jdbc.query(anyString(), org.mockito.ArgumentMatchers.<ResultSetExtractor<UUID>>any(), eq(subject)))
-                .thenReturn(person);
-        when(jdbc.queryForObject(contains("licensing.member"), eq(Integer.class), eq(selected), eq(person)))
-                .thenReturn(0);
-        assertThatThrownBy(() -> new CurrentUserContext(jdbc).current())
-                .isInstanceOf(AccessDeniedException.class).hasMessage("ORGANIZATION_MEMBERSHIP_REQUIRED");
-        when(jdbc.queryForObject(contains("licensing.member"), eq(Integer.class), eq(selected), eq(person)))
-                .thenReturn(1);
-        assertThat(new CurrentUserContext(jdbc).current().organizationId()).isEqualTo(selected);
-    }
-    @Test
-    void explicitIndependentContextOverridesJwtOrganizationButHospitalAdminCannotUseIt() {
-        JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        UUID subject = UUID.randomUUID();
-        Jwt jwt = Jwt.withTokenValue("test").header("alg", "RS256").subject(subject.toString())
-                .claim("healthys_organization_id", UUID.randomUUID().toString())
-                .issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(300)).build();
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("X-Organization-ID", "independent");
-        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
-        SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt,
-                List.of(new SimpleGrantedAuthority("ROLE_DOCTOR"))));
-        assertThat(new CurrentUserContext(jdbc).current().organizationId()).isNull();
-        verify(jdbc).query(eq("select id from identity.person where keycloak_user_id=? limit 1"),
-                org.mockito.ArgumentMatchers.<ResultSetExtractor<UUID>>any(), eq(subject));
-        SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt,
-                List.of(new SimpleGrantedAuthority("ROLE_HOSPITAL_ADMIN"))));
-        assertThatThrownBy(() -> new CurrentUserContext(jdbc).current())
-                .isInstanceOf(AccessDeniedException.class).hasMessage("INDEPENDENT_CONTEXT_DENIED");
-    }
-    @Test void ownerCanControlConsentDespiteAStaleOrganizationHeader() {
-        JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        UUID subject=UUID.randomUUID(), person=UUID.randomUUID(), patient=UUID.randomUUID();
-        Jwt jwt = Jwt.withTokenValue("test").header("alg","RS256").subject(subject.toString())
-                .issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(300)).build();
-        SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt,
-                List.of(new SimpleGrantedAuthority("ROLE_PATIENT"))));
-        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/patients/"+patient+"/access-revocations");
-        request.addHeader("X-Organization-ID", UUID.randomUUID().toString());
-        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
-        when(jdbc.query(anyString(), org.mockito.ArgumentMatchers.<ResultSetExtractor<UUID>>any(), eq(subject))).thenReturn(person);
-        when(jdbc.queryForObject(contains("patient.patient"), eq(Integer.class), eq(patient), eq(person))).thenReturn(1);
-        assertThat(new CurrentUserContext(jdbc).current().organizationId()).isNull();
-        verify(jdbc, never()).queryForObject(contains("licensing.member"), eq(Integer.class), any(), any());
-    }
+  @AfterEach
+  void clear() {
+    SecurityContextHolder.clearContext();
+    RequestContextHolder.resetRequestAttributes();
+  }
+
+  void authentication(String... selectedRoles) {
+    Jwt jwt =
+        Jwt.withTokenValue("test")
+            .header("alg", "none")
+            .subject(subject.toString())
+            .claim("realm_access", Map.of("roles", List.of("admin", "medecin", "patient")))
+            .claim("organization_id", UUID.randomUUID().toString())
+            .build();
+    SecurityContextHolder.getContext()
+        .setAuthentication(
+            new JwtAuthenticationToken(
+                jwt,
+                Arrays.stream(selectedRoles)
+                    .map(r -> new SimpleGrantedAuthority("ROLE_" + r))
+                    .toList()));
+  }
+
+  void headers(UUID id, UUID organization) {
+    var request = new MockHttpServletRequest();
+    request.addHeader("X-Profile-ID", id.toString());
+    if (organization != null) request.addHeader("X-Organization-ID", organization.toString());
+    RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+  }
+
+  AccessProfile persona(String type, UUID organization) {
+    return new AccessProfile(
+        profile,
+        person,
+        type,
+        "ORGANIZATION_MEMBERSHIP",
+        profile,
+        organization,
+        "Hospital",
+        "Profile",
+        true);
+  }
+
+  @Test
+  void selectedPersistedProfileDeterminesOrganizationAndOnlyItsRole() {
+    authentication("DOCTOR");
+    headers(profile, org);
+    when(resolver.resolve(subject, Set.of("PLATFORM_ADMIN", "DOCTOR", "PATIENT"), profile, org))
+        .thenReturn(persona("DOCTOR", org));
+    var user = context.current();
+    assertThat(user.personId()).isEqualTo(person);
+    assertThat(user.organizationId()).isEqualTo(org);
+    assertThat(user.profileId()).isEqualTo(profile);
+    assertThat(user.roles()).containsExactly("DOCTOR");
+  }
+
+  @Test
+  void explicitProfileIgnoresStaleJwtOrganizationWhenNoOrganizationHeaderProvided() {
+    authentication("DOCTOR");
+    headers(profile, null);
+    when(resolver.resolve(subject, Set.of("PLATFORM_ADMIN", "DOCTOR", "PATIENT"), profile, null))
+        .thenReturn(persona("DOCTOR", org));
+    assertThat(context.current().organizationId()).isEqualTo(org);
+  }
+
+  @Test
+  void revokedProfileIsRecheckedEvenWithPreviouslyAcceptedJwt() {
+    authentication("DOCTOR");
+    headers(profile, org);
+    when(resolver.resolve(subject, Set.of("PLATFORM_ADMIN", "DOCTOR", "PATIENT"), profile, org))
+        .thenThrow(new AccessDeniedException("PROFILE_INACTIVE"));
+    assertThatThrownBy(context::current)
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessage("PROFILE_INACTIVE");
+  }
+
+  @Test
+  void clinicalRoleRemovedByQualificationFilterIsNotRestoredByProfile() {
+    authentication();
+    headers(profile, org);
+    when(resolver.resolve(subject, Set.of("PLATFORM_ADMIN", "DOCTOR", "PATIENT"), profile, org))
+        .thenReturn(persona("DOCTOR", org));
+    assertThat(context.current().roles()).isEmpty();
+  }
+
+  @Test
+  void patientPersonaContainsNoOrganizationOrStaffPermissions() {
+    authentication("PATIENT");
+    headers(profile, null);
+    when(resolver.resolve(subject, Set.of("PLATFORM_ADMIN", "DOCTOR", "PATIENT"), profile, null))
+        .thenReturn(persona("PATIENT", null));
+    assertThat(context.current().organizationId()).isNull();
+    assertThat(context.current().roles()).containsExactly("PATIENT");
+  }
+
+  @Test
+  void guardianProfileKeepsActorIdentityButTargetsOnlySelectedChild() {
+    var child = UUID.randomUUID();
+    authentication("PATIENT");
+    headers(profile, null);
+    when(resolver.resolve(subject, Set.of("PLATFORM_ADMIN", "DOCTOR", "PATIENT"), profile, null))
+        .thenReturn(
+            new AccessProfile(
+                profile, person, "PATIENT", "FAMILY_PATIENT", child, null, null, "Child", true));
+    var selected = context.current();
+    assertThat(selected.personId()).isEqualTo(person);
+    assertThat(selected.patientId()).isEqualTo(child);
+    assertThat(selected.profileId()).isEqualTo(profile);
+    assertThat(selected.isPatient(child)).isTrue();
+    assertThat(selected.isPatient(UUID.randomUUID())).isFalse();
+  }
 }

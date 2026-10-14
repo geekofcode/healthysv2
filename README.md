@@ -38,3 +38,14 @@ Java 21, Spring Boot/Modulith, PostgreSQL/Flyway, Keycloak, MinIO ; frontend Rea
 Le mode livré reste `LEGACY` jusqu’à validation de la migration et du parcours cash sans IA. Les commandes de l’ancien parcours consultation deviennent indisponibles après activation contrôlée ; l’historique reste consultable. Exécuter les intégrations PostgreSQL natif et une restauration PostgreSQL/MinIO isolée avant cette activation, selon le guide de Phase 7.
 
 La [documentation mobile précédente](docs/archive/PREVIOUS_MOBILE_FEATURES.md) est archivée et ne décrit pas le périmètre actif de cette version.
+
+## Profils, droits et contrats
+
+Les catégories au niveau plateforme sont administrateur HEALTH’YS, hôpital et patient. Les profils médecins, infirmiers, caissiers et comptables proviennent de leurs établissements. Après identification, choisir explicitement un profil ; les droits ne sont jamais additionnés entre profils, même dans le même établissement. Sans profil, seule la création d’un profil patient est proposée. Un compte peut gérer ses propres données et plusieurs profils de patients mineurs, chacun avec un contexte distinct.
+
+- [Profils et gestion familiale](docs/ACCESS_PROFILES_AND_FAMILY.md)
+- [Gestion des employés et des accès](docs/HOSPITAL_ACCESS_FRONTEND.md)
+- [Création des comptes Keycloak](docs/STAFF_ACCOUNT_PROVISIONING.md)
+- [Conditions, signature et contrats PDF](docs/PROFILE_CONTRACTS.md)
+
+Publier les modèles et les conditions réelles depuis l’administration avant la signature. Configurer MinIO et activer SMTP pour les copies par email ; aucun lien de conditions ni texte juridique n’est inventé par défaut. L’administrateur plateforme dispose des statistiques agrégées et des comptes, sans accès aux opérations des établissements.

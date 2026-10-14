@@ -30,5 +30,15 @@ public final class LicensingDtos {
           String role,
       @NotBlank @Pattern(regexp = "ACTIVE|INACTIVE") String status) {}
 
+  public record EmployeeRequest(
+      UUID personId,
+      @Size(max = 120) String firstName,
+      @Size(max = 120) String lastName,
+      @Email @Size(max = 254) String email,
+      @NotBlank @Pattern(regexp = "HOSPITAL_ADMIN|DOCTOR|NURSE|HOSPITAL_AGENT|CASHIER|ACCOUNTANT")
+          String role,
+      @Size(max = 50) String professionalNumber,
+      @Size(max = 50) Set<UUID> customRoleIds) {}
+
   public record CheckoutRequest(@NotNull UUID planId) {}
 }

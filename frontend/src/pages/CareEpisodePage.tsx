@@ -1,3 +1,4 @@
+import {useHospitalPermission} from '../auth/HospitalPermissions';
 import { useRef, useState } from "react";
 import { EpisodeInvoice } from "../components/EpisodeInvoice";
 import { VisitScheduleForm } from "../components/VisitScheduleForm";
@@ -179,7 +180,7 @@ export function CareEpisodePage() {
   const { id = "" } = useParams();
   const { i18n } = useTranslation();
   const fr = i18n.language.startsWith("fr");
-  const auth = useAuth();
+  const auth = useAuth();const scheduleUpdate=useHospitalPermission('scheduling','UPDATE');const intakeUpdate=useHospitalPermission('intakes','UPDATE');const followUpCreate=useHospitalPermission('visits','CREATE');
   const episode = useQuery({
     queryKey: ["care-episodes", id],
     queryFn: () => getCareEpisode(id),
@@ -222,7 +223,7 @@ export function CareEpisodePage() {
             {visit.scheduledAt &&
               ` · ${new Date(visit.scheduledAt).toLocaleString(i18n.language)}`}
           </p>
-          {auth.hasAnyRole(
+          {scheduleUpdate&&auth.hasAnyRole(
             "NURSE",
             "HOSPITAL_ADMIN",
             "HOSPITAL_AGENT",
@@ -241,7 +242,7 @@ export function CareEpisodePage() {
           {visit.followUp &&
             !visit.startedAt &&
             visit.status !== "CANCELLED" &&
-            auth.hasAnyRole("NURSE") && (
+            intakeUpdate&&auth.hasAnyRole("NURSE") && (
               <VisitIntakeLoader visitId={visit.id} fr={fr} />
             )}
         </article>
@@ -249,13 +250,13 @@ export function CareEpisodePage() {
       {e.status === "ACTIVE" &&
         e.expiresAt &&
         new Date(e.expiresAt) > new Date() &&
-        auth.hasAnyRole(
+        followUpCreate&&auth.hasAnyRole(
           "NURSE",
           "HOSPITAL_ADMIN",
           "HOSPITAL_AGENT",
           "PLATFORM_ADMIN",
         ) && <FollowUpForm id={id} specialityId={e.specialityId} fr={fr} />}
-      {auth.hasAnyRole("NURSE") &&
+      {intakeUpdate&&auth.hasAnyRole("NURSE") &&
         e.visits.some(
           (visit) =>
             !visit.followUp && !visit.startedAt && visit.status !== "CANCELLED",

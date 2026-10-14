@@ -24,3 +24,11 @@
   modules opérationnels actifs.
 - Ne retirer le parcours ancien consultation/rendez-vous qu'après les preuves
   de migration et de recette définies par la procédure de bascule Phase 7.
+
+## Isolation des profils
+- Un contexte actif correspond à un seul profil explicitement choisi, et à sa source.
+- Ne jamais unir les rôles de plusieurs établissements, appartenances ou profils patient.
+- Les opérations exigent le contrat signé du profil, les permissions de sa source,
+  et les contrôles métier de qualification, consentement, quotas et abonnement.
+- Les parents agissent avec leur propre identité sur le seul profil mineur sélectionné.
+- L'administration plateforme ne lit que les métadonnées et statistiques agrégées.

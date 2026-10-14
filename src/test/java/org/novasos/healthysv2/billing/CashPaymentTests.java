@@ -17,37 +17,55 @@ import org.novasos.healthysv2.shared.api.error.BusinessRuleException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 class CashPaymentTests {
-    @ParameterizedTest
-    @NullAndEmptySource
-    @ValueSource(strings = {"CARD", "MOBILE_MONEY", "INSURANCE", "MUTUAL", "THIRD_PARTY", "CRYPTO"})
-    void rejectsNonCashWithoutChangingBalanceOrPersistingPayment(String method) {
-        var invoices = mock(InvoiceRepository.class);
-        var payments = mock(PaymentRepository.class);
-        var jdbc = mock(JdbcTemplate.class);
-        var users = mock(CurrentUserContext.class);
-        var invoice = Invoice.create(UUID.randomUUID(), UUID.randomUUID(), null, "CAD", null);
-        invoice.addItem("CONSULTATION", null, "Consultation", BigDecimal.ONE, new BigDecimal("50"), BigDecimal.ZERO);
-        invoice.issue();
-        when(invoices.lock(invoice.getId())).thenReturn(Optional.of(invoice));
-        when(users.current()).thenReturn(new CurrentUserContext.UserContext(UUID.randomUUID(), null, Set.of("PLATFORM_ADMIN")));
-        var service = new BillingService(invoices, payments, jdbc, users);
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = {"CARD", "MOBILE_MONEY", "INSURANCE", "MUTUAL", "THIRD_PARTY", "CRYPTO"})
+  void rejectsNonCashWithoutChangingBalanceOrPersistingPayment(String method) {
+    var invoices = mock(InvoiceRepository.class);
+    var payments = mock(PaymentRepository.class);
+    var jdbc = mock(JdbcTemplate.class);
+    var users = mock(CurrentUserContext.class);
+    var invoice = Invoice.create(UUID.randomUUID(), UUID.randomUUID(), null, "CAD", null);
+    invoice.addItem(
+        "CONSULTATION",
+        null,
+        "Consultation",
+        BigDecimal.ONE,
+        new BigDecimal("50"),
+        BigDecimal.ZERO);
+    invoice.issue();
+    when(invoices.lock(invoice.getId())).thenReturn(Optional.of(invoice));
+    when(users.current())
+        .thenReturn(
+            new CurrentUserContext.UserContext(UUID.randomUUID(), null, Set.of("PLATFORM_ADMIN")));
+    var service = new BillingService(invoices, payments, jdbc, users);
+    service.configurePermissions(
+        mock(org.novasos.healthysv2.organizationaccess.api.OrganizationPermissionAccess.class));
 
-        assertThatThrownBy(() -> service.recordPayment(invoice.getId(),
-                new RecordPaymentRequest(new BigDecimal("50"), "CAD", method, null, null)))
-                .isInstanceOf(BusinessRuleException.class);
-        assertThat(invoice.getAmountPaid()).isEqualByComparingTo("0");
-        assertThat(invoice.getStatus()).isEqualTo("ISSUED");
-        verify(invoices, never()).flush();
-        verifyNoInteractions(payments, jdbc);
-    }
+    assertThatThrownBy(
+            () ->
+                service.recordPayment(
+                    invoice.getId(),
+                    new RecordPaymentRequest(new BigDecimal("50"), "CAD", method, null, null)))
+        .isInstanceOf(BusinessRuleException.class);
+    assertThat(invoice.getAmountPaid()).isEqualByComparingTo("0");
+    assertThat(invoice.getStatus()).isEqualTo("ISSUED");
+    verify(invoices, never()).flush();
+    verifyNoInteractions(payments, jdbc);
+  }
 
-    @Test void normalizesCashAndCreatesItsTransaction() {
-        var payment = Payment.complete(UUID.randomUUID(), new BigDecimal("50"), "CAD", " cash ", null, null);
-        assertThat(payment.getMethod()).isEqualTo("CASH");
-        assertThat(payment.getStatus()).isEqualTo("COMPLETED");
-        assertThat(payment.getTransactions()).singleElement().satisfies(transaction -> {
-            assertThat(transaction.getProvider()).isNull();
-            assertThat(transaction.getExternalReference()).isNull();
-        });
-    }
+  @Test
+  void normalizesCashAndCreatesItsTransaction() {
+    var payment =
+        Payment.complete(UUID.randomUUID(), new BigDecimal("50"), "CAD", " cash ", null, null);
+    assertThat(payment.getMethod()).isEqualTo("CASH");
+    assertThat(payment.getStatus()).isEqualTo("COMPLETED");
+    assertThat(payment.getTransactions())
+        .singleElement()
+        .satisfies(
+            transaction -> {
+              assertThat(transaction.getProvider()).isNull();
+              assertThat(transaction.getExternalReference()).isNull();
+            });
+  }
 }

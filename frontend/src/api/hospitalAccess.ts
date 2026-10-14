@@ -1,0 +1,16 @@
+import {apiRequest} from './client';
+export type AccessAction='CREATE'|'READ'|'UPDATE'|'DELETE';
+export type ResourcePermission={resource:string;actions:AccessAction[]};
+export type PermissionCatalogEntry=ResourcePermission&{label:string};
+export type HospitalAccess={organizationId:string;administrator:boolean;permissions:ResourcePermission[]};
+export type HospitalRole={id:string;organizationId:string;name:string;description?:string;version:number;permissions:ResourcePermission[]};
+export type RoleInput={name:string;description?:string;permissions:ResourcePermission[];version?:number};
+const base=(org:string)=>`/organizations/${org}/access`;
+export const accessKeys={all:(org:string)=>['hospital-access',org] as const,me:(org:string)=>['hospital-access',org,'me'] as const};
+export const getHospitalAccess=(org:string)=>apiRequest<HospitalAccess>(`${base(org)}/me`);
+export const getPermissionCatalog=(org:string)=>apiRequest<PermissionCatalogEntry[]>(`${base(org)}/permissions`);
+export const listHospitalRoles=(org:string)=>apiRequest<HospitalRole[]>(`${base(org)}/roles`);
+export const saveHospitalRole=(org:string,input:RoleInput,id?:string)=>apiRequest<HospitalRole>(`${base(org)}/roles${id?`/${id}`:''}`,{method:id?'PUT':'POST',body:JSON.stringify(input)});
+export const deleteHospitalRole=(org:string,id:string)=>apiRequest<void>(`${base(org)}/roles/${id}`,{method:'DELETE'});
+export const getMemberRoleIds=(org:string,member:string)=>apiRequest<string[]>(`${base(org)}/members/${member}/roles`);
+export const setMemberRoleIds=(org:string,member:string,roleIds:string[])=>apiRequest<void>(`${base(org)}/members/${member}/roles`,{method:'PUT',body:JSON.stringify({roleIds})});

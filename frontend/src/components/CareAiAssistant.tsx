@@ -1,3 +1,4 @@
+import {useHospitalPermission} from '../auth/HospitalPermissions';
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getEntitlements } from "../api/licensing";
@@ -47,7 +48,7 @@ type Props = {
   onApply: (fields: ReportFields, jobId: string) => void;
 };
 export function CareAiAssistant(props: Props) {
-  const { organizationId, professionalId, canWrite } = props;
+  const { organizationId, professionalId } = props;const aiPermission=useHospitalPermission('ai','CREATE');const canWrite=props.canWrite&&aiPermission;
   const rights = useQuery({
     queryKey: ["licensing", organizationId],
     queryFn: () => getEntitlements(organizationId),

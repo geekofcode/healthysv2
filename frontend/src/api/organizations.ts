@@ -7,7 +7,7 @@ export type Department = {id:string; code:string; name:string; description?:stri
 export type OrganizationSummary = {id:string; number:string; name:string; legalName?:string; status:string};
 export type Organization = OrganizationSummary & {organizationTypeId?:string; phone?:string; email?:string; website?:string; timezone?:string; administratorPersonId?:string; createdAt:string; updatedAt:string; departments:Department[]; rooms:Room[]};
 export type Page<T> = {content:T[]; page:{number:number;size:number;totalElements:number;totalPages:number;first:boolean;last:boolean}};
-export type OrganizationInput = {number:string;name:string;legalName?:string;organizationTypeId?:string;phone?:string;email?:string;website?:string;timezone?:string;administratorPersonId?:string;status?:string};
+export type OrganizationInput = {number:string;name:string;legalName?:string;organizationTypeId?:string;phone?:string;email?:string;website?:string;timezone?:string;administratorPersonId?:string;administratorAccount?:{firstName:string;lastName:string;email:string};status?:string};
 
 export const organizationKeys = {all:['organizations'] as const, detail:(id:string)=>['organizations',id] as const};
 export const listOrganizations = (query='',page=0,size=100,status='') => apiRequest<Page<OrganizationSummary>>(`/organizations?size=${size}&page=${page}&sort=name,asc&query=${encodeURIComponent(query)}&status=${encodeURIComponent(status)}`);

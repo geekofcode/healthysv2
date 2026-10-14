@@ -24,39 +24,42 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping(ApiPaths.V1 + "/prescriptions")
 @Tag(name = "Prescriptions", description = "Prescription lifecycle and medication orders")
-@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE','PATIENT')")
+@PreAuthorize("hasAnyRole('HOSPITAL_ADMIN','DOCTOR','NURSE','PATIENT')")
 class PrescriptionController {
-    private static final String PRESCRIBE = "hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR')";
-    private final PrescriptionService service;
+  private static final String PRESCRIBE = "hasAnyRole('HOSPITAL_ADMIN','DOCTOR')";
+  private final PrescriptionService service;
 
-    PrescriptionController(PrescriptionService service) {
-        this.service = service;
-    }
+  PrescriptionController(PrescriptionService service) {
+    this.service = service;
+  }
 
-    @PostMapping
-    @PreAuthorize(PRESCRIBE)
-    ResponseEntity<PrescriptionResponse> create(@Valid @RequestBody CreatePrescriptionRequest request) {
-        var response = service.create(request);
-        return ResponseEntity.created(URI.create(ApiPaths.V1 + "/prescriptions/" + response.id())).body(response);
-    }
+  @PostMapping
+  @PreAuthorize(PRESCRIBE)
+  ResponseEntity<PrescriptionResponse> create(
+      @Valid @RequestBody CreatePrescriptionRequest request) {
+    var response = service.create(request);
+    return ResponseEntity.created(URI.create(ApiPaths.V1 + "/prescriptions/" + response.id()))
+        .body(response);
+  }
 
-    @GetMapping("/{id}")
-    PrescriptionResponse find(@PathVariable UUID id) {
-        return service.find(id);
-    }
+  @GetMapping("/{id}")
+  PrescriptionResponse find(@PathVariable UUID id) {
+    return service.find(id);
+  }
 
-    @GetMapping
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE')")
-    PageResponse<PrescriptionSummary> search(@RequestParam(required = false) UUID patientId,
-                                             @RequestParam(required = false) UUID organizationId,
-                                             @RequestParam(required = false) String status,
-                                             Pageable pageable) {
-        return service.search(patientId, organizationId, status, pageable);
-    }
+  @GetMapping
+  @PreAuthorize("hasAnyRole('HOSPITAL_ADMIN','DOCTOR','NURSE')")
+  PageResponse<PrescriptionSummary> search(
+      @RequestParam(required = false) UUID patientId,
+      @RequestParam(required = false) UUID organizationId,
+      @RequestParam(required = false) String status,
+      Pageable pageable) {
+    return service.search(patientId, organizationId, status, pageable);
+  }
 
-    @PostMapping("/{id}/cancel")
-    @PreAuthorize(PRESCRIBE)
-    PrescriptionResponse cancel(@PathVariable UUID id) {
-        return service.cancel(id);
-    }
+  @PostMapping("/{id}/cancel")
+  @PreAuthorize(PRESCRIBE)
+  PrescriptionResponse cancel(@PathVariable UUID id) {
+    return service.cancel(id);
+  }
 }

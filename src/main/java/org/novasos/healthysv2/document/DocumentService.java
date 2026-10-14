@@ -1,45 +1,324 @@
 package org.novasos.healthysv2.document;
-import static org.novasos.healthysv2.document.api.DocumentDtos.*;import java.io.*;import java.security.*;import java.util.*;import org.novasos.healthysv2.patient.PatientAccessService;import org.novasos.healthysv2.shared.api.dto.PageResponse;import org.novasos.healthysv2.shared.api.error.*;import org.springframework.data.domain.*;import org.springframework.jdbc.core.JdbcTemplate;import org.springframework.security.core.context.SecurityContextHolder;import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;import org.springframework.stereotype.Service;import org.springframework.transaction.annotation.Transactional;import org.springframework.web.multipart.MultipartFile;
-@Service @Transactional class DocumentService{
- private static final long MAX_SIZE=25L*1024*1024;private static final Set<String>ALLOWED=Set.of("application/pdf","image/jpeg","image/png","text/plain");private final HealthDocumentRepository repository;private final DocumentStorage storage;private final PatientAccessService access;private final JdbcTemplate jdbc;
- private final org.novasos.healthysv2.patient.CurrentUserContext users;
- @org.springframework.beans.factory.annotation.Autowired
- DocumentService(HealthDocumentRepository repository,DocumentStorage storage,PatientAccessService access,JdbcTemplate jdbc,org.novasos.healthysv2.patient.CurrentUserContext users){this.repository=repository;this.storage=storage;this.access=access;this.jdbc=jdbc;this.users=users;}
- DocumentService(HealthDocumentRepository repository,DocumentStorage storage,PatientAccessService access,JdbcTemplate jdbc){this(repository,storage,access,jdbc,null);}
- DocumentResponse upload(UUID patientId,UUID categoryId,String resourceType,UUID resourceId,MultipartFile file){return upload(patientId,categoryId,resourceType,resourceId,file,false);}
- DocumentResponse upload(UUID patientId,UUID categoryId,String resourceType,UUID resourceId,MultipartFile file,boolean patientVisible){access.requireAccess(patientId,"DOCUMENTS","WRITE");validate(file);if(categoryId!=null&&!exists("select count(*) from document.document_category where id=? and active=true",categoryId))throw new ResourceNotFoundException("DocumentCategory",categoryId);String name=safeName(file.getOriginalFilename());String key="patients/"+patientId+"/"+UUID.randomUUID()+"/"+name;try{byte[] bytes=file.getBytes();validateContent(name,file.getContentType(),bytes);String checksum=HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));storage.put(key,new ByteArrayInputStream(bytes),bytes.length,file.getContentType());var draft=HealthDocument.create(patientId,categoryId,name,key,file.getContentType(),bytes.length,checksum,currentPerson());draft.setPatientVisible(patientVisible);var document=repository.saveAndFlush(draft);if(resourceType!=null&&!resourceType.isBlank()&&resourceId!=null)jdbc.update("insert into document.document_link(document_id,resource_type,resource_id) values (?,?,?)",document.id(),resourceType.trim().toUpperCase(),resourceId);audit(document,"UPLOAD");return response(document);}catch(IOException|NoSuchAlgorithmException e){safeDelete(key);throw new IllegalStateException("Document upload failed",e);}catch(RuntimeException e){safeDelete(key);throw e;}}
- @Transactional(readOnly=true)DocumentResponse find(UUID id){return response(readAllowed(id));}
- @Transactional(readOnly=true)PageResponse<DocumentResponse>search(UUID patientId,UUID categoryId,String status,Pageable pageable){if(patientId==null)throw new BusinessRuleException("PATIENT_REQUIRED","error.document.patient-required");if(patientOnly()){requireOwnPatient(patientId);access.requireAccess(patientId,"DOCUMENTS","READ");return PageResponse.from(repository.searchVisible(patientId,categoryId,null,org.springframework.data.domain.PageRequest.of(pageable.getPageNumber(),Math.min(100,pageable.getPageSize()))).map(this::response));}access.requireAccess(patientId,"DOCUMENTS","READ");return PageResponse.from(repository.search(patientId,categoryId,normalize(status),pageable).map(this::response));}
- Download download(UUID id){var document=readAllowed(id);if(!"ACTIVE".equals(document.status()))throw new BusinessRuleException("DOCUMENT_ARCHIVED","error.document.archived");var object=storage.get(document.storageKey());audit(document,"DOWNLOAD");return new Download(object.content(),object.size(),document.mimeType(),document.fileName());}
- DocumentResponse archive(UUID id){var document=writeAllowed(id);document.archive();repository.flush();audit(document,"ARCHIVE");return response(document);}
- org.novasos.healthysv2.document.api.PatientDocumentDtos.PatientVisibilityResponse visibility(UUID id,org.novasos.healthysv2.document.api.PatientDocumentDtos.PatientVisibilityRequest request){var document=repository.findLockedById(id).orElseThrow(()->new ResourceNotFoundException("Document",id));access.requireAccess(document.patientId(),"DOCUMENTS","WRITE");document.setPatientVisible(request.patientVisible());repository.flush();audit(document,request.patientVisible()?"PUBLISH_PATIENT":"REVOKE_PATIENT");return new org.novasos.healthysv2.document.api.PatientDocumentDtos.PatientVisibilityResponse(id,request.patientVisible());}
- @Transactional(readOnly=true)List<DocumentCategoryResponse>categories(){return jdbc.query("select id,code,name from document.document_category where active=true order by name",(rs,n)->new DocumentCategoryResponse((UUID)rs.getObject(1),rs.getString(2),rs.getString(3)));}
- private boolean patientOnly(){
-  var authentication=SecurityContextHolder.getContext().getAuthentication();
-  if(authentication==null || authentication.getAuthorities().stream().noneMatch(a->"ROLE_PATIENT".equals(a.getAuthority()))) return false;
-  if(users==null) return true;
-  var user=users.current();
-  if(user.personId()==null || user.organizationId()==null || !user.hasAny("DOCTOR","NURSE","HOSPITAL_ADMIN")) return true;
-  Integer clinical=jdbc.queryForObject("""
-    select count(*) from organization.organization o join licensing.subscription s on s.organization_id=o.id
-    where o.id=? and o.status='ACTIVE' and s.status='active' and s.period_start<=clock_timestamp() and s.period_end>clock_timestamp()
-      and (o.administrator_person_id=? or exists(select 1 from licensing.member m where m.organization_id=o.id
-        and m.person_id=? and m.status='ACTIVE' and (m.role='HOSPITAL_ADMIN' or exists(
-          select 1 from professional.professional p join identity.person person on person.id=p.person_id and person.status='ACTIVE'
-          where p.person_id=m.person_id and p.status='ACTIVE' and ((m.role='DOCTOR' and p.professional_type in ('DOCTOR','MEDECIN')) or (m.role='NURSE' and p.professional_type='NURSE'))
-          and exists(select 1 from professional.professional_assignment a where a.professional_id=p.id and a.organization_id=o.id
-            and a.status='ACTIVE' and a.start_date<=current_date and (a.end_date is null or a.end_date>=current_date))))))
-    """,Integer.class,user.organizationId(),user.personId(),user.personId());
-  return clinical==null || clinical==0;
- }
- private void requireOwnPatient(UUID patient){UUID person=currentPerson();if(person==null||patient==null||!exists("select count(*) from patient.patient where id=? and person_id=?",patient,person))throw new org.springframework.security.access.AccessDeniedException("Patient can only access own published documents");}
- private HealthDocument readAllowed(UUID id){var d=get(id);if(patientOnly()){requireOwnPatient(d.patientId());if(!d.patientVisible()||!"ACTIVE".equals(d.status()))throw new ResourceNotFoundException("Published document",id);}access.requireAccess(d.patientId(),"DOCUMENTS","READ");return d;}private HealthDocument writeAllowed(UUID id){var d=get(id);access.requireAccess(d.patientId(),"DOCUMENTS","WRITE");return d;}private HealthDocument get(UUID id){return repository.findById(id).orElseThrow(()->new ResourceNotFoundException("Document",id));}
- void validate(MultipartFile file){if(file==null||file.isEmpty())throw new BusinessRuleException("EMPTY_DOCUMENT","error.document.empty");if(file.getSize()>MAX_SIZE)throw new BusinessRuleException("DOCUMENT_TOO_LARGE","error.document.too-large");if(!ALLOWED.contains(file.getContentType()))throw new BusinessRuleException("DOCUMENT_TYPE_NOT_ALLOWED","error.document.type");}
- void validateContent(String name,String type,byte[] bytes){String extension=switch(type){case "application/pdf"->".pdf";case "image/jpeg"->".jpg";case "image/png"->".png";default->".txt";};String lower=name.toLowerCase(Locale.ROOT);boolean matches=lower.endsWith(extension)||type.equals("image/jpeg")&&lower.endsWith(".jpeg");if(type.equals("application/pdf"))matches=matches&&starts(bytes,new byte[]{'%','P','D','F','-'});else if(type.equals("image/jpeg"))matches=matches&&starts(bytes,new byte[]{(byte)0xff,(byte)0xd8,(byte)0xff});else if(type.equals("image/png"))matches=matches&&starts(bytes,new byte[]{(byte)0x89,'P','N','G',13,10,26,10});else {String content=new String(bytes,java.nio.charset.StandardCharsets.UTF_8);matches=matches&&content.indexOf('\0')<0&&Arrays.equals(bytes,content.getBytes(java.nio.charset.StandardCharsets.UTF_8));}if(!matches)throw new BusinessRuleException("DOCUMENT_CONTENT_MISMATCH","error.document.type");}
- private boolean starts(byte[] bytes,byte[] magic){if(bytes.length<magic.length)return false;for(int i=0;i<magic.length;i++)if(bytes[i]!=magic[i])return false;return true;}
- String safeName(String name){String clean=name==null?"document":name.replace('\\','/');clean=clean.substring(clean.lastIndexOf('/')+1).replaceAll("[^A-Za-z0-9._ -]","_");return clean.isBlank()?"document":clean;}
- private String normalize(String value){return value==null||value.isBlank()?null:value.trim().toUpperCase();}private boolean exists(String sql,Object...args){return Objects.requireNonNull(jdbc.queryForObject(sql,Integer.class,args))>0;}private UUID currentPerson(){var authentication=SecurityContextHolder.getContext().getAuthentication();if(!(authentication instanceof JwtAuthenticationToken jwt))return null;try{UUID subject=UUID.fromString(jwt.getToken().getSubject());return jdbc.query("select id from identity.person where keycloak_user_id=? limit 1",rs->rs.next()?(UUID)rs.getObject(1):null,subject);}catch(IllegalArgumentException ignored){return null;}}
- private void audit(HealthDocument d,String action){jdbc.update("insert into audit.audit_log(actor_person_id,module,entity_type,entity_id,action,new_value) values (?,'DOCUMENT','Document',?,?,?::jsonb)",currentPerson(),d.id(),action,"{\"patientId\":\""+d.patientId()+"\",\"patientVisible\":"+d.patientVisible()+"}");}private void safeDelete(String key){try{storage.delete(key);}catch(RuntimeException ignored){}}
- private DocumentResponse response(HealthDocument d){String[] category=d.categoryId()==null?new String[]{null,null}:jdbc.query("select code,name from document.document_category where id=?",rs->rs.next()?new String[]{rs.getString(1),rs.getString(2)}:new String[]{null,null},d.categoryId());return new DocumentResponse(d.id(),d.number(),d.patientId(),d.categoryId(),category[0],category[1],d.fileName(),d.mimeType(),d.sizeBytes(),d.checksum(),d.uploadedBy(),d.uploadedAt(),d.status());}
- record Download(InputStream content,long size,String contentType,String fileName){}
+
+import static org.novasos.healthysv2.document.api.DocumentDtos.*;
+
+import java.io.*;
+import java.security.*;
+import java.util.*;
+import org.novasos.healthysv2.patient.PatientAccessService;
+import org.novasos.healthysv2.shared.api.dto.PageResponse;
+import org.novasos.healthysv2.shared.api.error.*;
+import org.springframework.data.domain.*;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+@Service
+@Transactional
+class DocumentService {
+  private static final long MAX_SIZE = 25L * 1024 * 1024;
+  private static final Set<String> ALLOWED =
+      Set.of("application/pdf", "image/jpeg", "image/png", "text/plain");
+  private final HealthDocumentRepository repository;
+  private final DocumentStorage storage;
+  private final PatientAccessService access;
+  private final JdbcTemplate jdbc;
+  private final org.novasos.healthysv2.patient.CurrentUserContext users;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  DocumentService(
+      HealthDocumentRepository repository,
+      DocumentStorage storage,
+      PatientAccessService access,
+      JdbcTemplate jdbc,
+      org.novasos.healthysv2.patient.CurrentUserContext users) {
+    this.repository = repository;
+    this.storage = storage;
+    this.access = access;
+    this.jdbc = jdbc;
+    this.users = users;
+  }
+
+  DocumentService(
+      HealthDocumentRepository repository,
+      DocumentStorage storage,
+      PatientAccessService access,
+      JdbcTemplate jdbc) {
+    this(repository, storage, access, jdbc, null);
+  }
+
+  DocumentResponse upload(
+      UUID patientId, UUID categoryId, String resourceType, UUID resourceId, MultipartFile file) {
+    return upload(patientId, categoryId, resourceType, resourceId, file, false);
+  }
+
+  DocumentResponse upload(
+      UUID patientId,
+      UUID categoryId,
+      String resourceType,
+      UUID resourceId,
+      MultipartFile file,
+      boolean patientVisible) {
+    access.requireAccess(patientId, "DOCUMENTS", "WRITE");
+    validate(file);
+    if (categoryId != null
+        && !exists(
+            "select count(*) from document.document_category where id=? and active=true",
+            categoryId)) throw new ResourceNotFoundException("DocumentCategory", categoryId);
+    String name = safeName(file.getOriginalFilename());
+    String key = "patients/" + patientId + "/" + UUID.randomUUID() + "/" + name;
+    try {
+      byte[] bytes = file.getBytes();
+      validateContent(name, file.getContentType(), bytes);
+      String checksum =
+          HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+      storage.put(key, new ByteArrayInputStream(bytes), bytes.length, file.getContentType());
+      var draft =
+          HealthDocument.create(
+              patientId,
+              categoryId,
+              name,
+              key,
+              file.getContentType(),
+              bytes.length,
+              checksum,
+              currentPerson());
+      draft.setPatientVisible(patientVisible);
+      var document = repository.saveAndFlush(draft);
+      if (resourceType != null && !resourceType.isBlank() && resourceId != null)
+        jdbc.update(
+            "insert into document.document_link(document_id,resource_type,resource_id) values"
+                + " (?,?,?)",
+            document.id(),
+            resourceType.trim().toUpperCase(),
+            resourceId);
+      audit(document, "UPLOAD");
+      return response(document);
+    } catch (IOException | NoSuchAlgorithmException e) {
+      safeDelete(key);
+      throw new IllegalStateException("Document upload failed", e);
+    } catch (RuntimeException e) {
+      safeDelete(key);
+      throw e;
+    }
+  }
+
+  @Transactional(readOnly = true)
+  DocumentResponse find(UUID id) {
+    return response(readAllowed(id));
+  }
+
+  @Transactional(readOnly = true)
+  PageResponse<DocumentResponse> search(
+      UUID patientId, UUID categoryId, String status, Pageable pageable) {
+    if (patientId == null)
+      throw new BusinessRuleException("PATIENT_REQUIRED", "error.document.patient-required");
+    if (patientOnly()) {
+      requireOwnPatient(patientId);
+      access.requireAccess(patientId, "DOCUMENTS", "READ");
+      return PageResponse.from(
+          repository
+              .searchVisible(
+                  patientId,
+                  categoryId,
+                  null,
+                  org.springframework.data.domain.PageRequest.of(
+                      pageable.getPageNumber(), Math.min(100, pageable.getPageSize())))
+              .map(this::response));
+    }
+    access.requireAccess(patientId, "DOCUMENTS", "READ");
+    return PageResponse.from(
+        repository.search(patientId, categoryId, normalize(status), pageable).map(this::response));
+  }
+
+  Download download(UUID id) {
+    var document = readAllowed(id);
+    if (!"ACTIVE".equals(document.status()))
+      throw new BusinessRuleException("DOCUMENT_ARCHIVED", "error.document.archived");
+    var object = storage.get(document.storageKey());
+    audit(document, "DOWNLOAD");
+    return new Download(object.content(), object.size(), document.mimeType(), document.fileName());
+  }
+
+  DocumentResponse archive(UUID id) {
+    var document = writeAllowed(id);
+    document.archive();
+    repository.flush();
+    audit(document, "ARCHIVE");
+    return response(document);
+  }
+
+  org.novasos.healthysv2.document.api.PatientDocumentDtos.PatientVisibilityResponse visibility(
+      UUID id,
+      org.novasos.healthysv2.document.api.PatientDocumentDtos.PatientVisibilityRequest request) {
+    var document =
+        repository
+            .findLockedById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Document", id));
+    access.requireAccess(document.patientId(), "DOCUMENTS", "WRITE");
+    document.setPatientVisible(request.patientVisible());
+    repository.flush();
+    audit(document, request.patientVisible() ? "PUBLISH_PATIENT" : "REVOKE_PATIENT");
+    return new org.novasos.healthysv2.document.api.PatientDocumentDtos.PatientVisibilityResponse(
+        id, request.patientVisible());
+  }
+
+  @Transactional(readOnly = true)
+  List<DocumentCategoryResponse> categories() {
+    return jdbc.query(
+        "select id,code,name from document.document_category where active=true order by name",
+        (rs, n) ->
+            new DocumentCategoryResponse((UUID) rs.getObject(1), rs.getString(2), rs.getString(3)));
+  }
+
+  private boolean patientOnly() {
+    return users != null && users.current().has("PATIENT");
+  }
+
+  private void requireOwnPatient(UUID patient) {
+    if (users == null || !users.current().isPatient(patient))
+      throw new org.springframework.security.access.AccessDeniedException(
+          "Patient can only access own published documents");
+  }
+
+  private HealthDocument readAllowed(UUID id) {
+    var d = get(id);
+    if (patientOnly()) {
+      requireOwnPatient(d.patientId());
+      if (!d.patientVisible() || !"ACTIVE".equals(d.status()))
+        throw new ResourceNotFoundException("Published document", id);
+    }
+    access.requireAccess(d.patientId(), "DOCUMENTS", "READ");
+    return d;
+  }
+
+  private HealthDocument writeAllowed(UUID id) {
+    var d = get(id);
+    access.requireAccess(d.patientId(), "DOCUMENTS", "WRITE");
+    return d;
+  }
+
+  private HealthDocument get(UUID id) {
+    return repository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Document", id));
+  }
+
+  void validate(MultipartFile file) {
+    if (file == null || file.isEmpty())
+      throw new BusinessRuleException("EMPTY_DOCUMENT", "error.document.empty");
+    if (file.getSize() > MAX_SIZE)
+      throw new BusinessRuleException("DOCUMENT_TOO_LARGE", "error.document.too-large");
+    if (!ALLOWED.contains(file.getContentType()))
+      throw new BusinessRuleException("DOCUMENT_TYPE_NOT_ALLOWED", "error.document.type");
+  }
+
+  void validateContent(String name, String type, byte[] bytes) {
+    String extension =
+        switch (type) {
+          case "application/pdf" -> ".pdf";
+          case "image/jpeg" -> ".jpg";
+          case "image/png" -> ".png";
+          default -> ".txt";
+        };
+    String lower = name.toLowerCase(Locale.ROOT);
+    boolean matches =
+        lower.endsWith(extension) || type.equals("image/jpeg") && lower.endsWith(".jpeg");
+    if (type.equals("application/pdf"))
+      matches = matches && starts(bytes, new byte[] {'%', 'P', 'D', 'F', '-'});
+    else if (type.equals("image/jpeg"))
+      matches = matches && starts(bytes, new byte[] {(byte) 0xff, (byte) 0xd8, (byte) 0xff});
+    else if (type.equals("image/png"))
+      matches = matches && starts(bytes, new byte[] {(byte) 0x89, 'P', 'N', 'G', 13, 10, 26, 10});
+    else {
+      String content = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+      matches =
+          matches
+              && content.indexOf('\0') < 0
+              && Arrays.equals(bytes, content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+    if (!matches)
+      throw new BusinessRuleException("DOCUMENT_CONTENT_MISMATCH", "error.document.type");
+  }
+
+  private boolean starts(byte[] bytes, byte[] magic) {
+    if (bytes.length < magic.length) return false;
+    for (int i = 0; i < magic.length; i++) if (bytes[i] != magic[i]) return false;
+    return true;
+  }
+
+  String safeName(String name) {
+    String clean = name == null ? "document" : name.replace('\\', '/');
+    clean = clean.substring(clean.lastIndexOf('/') + 1).replaceAll("[^A-Za-z0-9._ -]", "_");
+    return clean.isBlank() ? "document" : clean;
+  }
+
+  private String normalize(String value) {
+    return value == null || value.isBlank() ? null : value.trim().toUpperCase();
+  }
+
+  private boolean exists(String sql, Object... args) {
+    return Objects.requireNonNull(jdbc.queryForObject(sql, Integer.class, args)) > 0;
+  }
+
+  private UUID currentPerson() {
+    var authentication = SecurityContextHolder.getContext().getAuthentication();
+    if (!(authentication instanceof JwtAuthenticationToken jwt)) return null;
+    try {
+      UUID subject = UUID.fromString(jwt.getToken().getSubject());
+      return jdbc.query(
+          "select id from identity.person where keycloak_user_id=? limit 1",
+          rs -> rs.next() ? (UUID) rs.getObject(1) : null,
+          subject);
+    } catch (IllegalArgumentException ignored) {
+      return null;
+    }
+  }
+
+  private void audit(HealthDocument d, String action) {
+    jdbc.update(
+        "insert into audit.audit_log(actor_person_id,module,entity_type,entity_id,action,new_value)"
+            + " values (?,'DOCUMENT','Document',?,?,?::jsonb)",
+        currentPerson(),
+        d.id(),
+        action,
+        "{\"patientId\":\"" + d.patientId() + "\",\"patientVisible\":" + d.patientVisible() + "}");
+  }
+
+  private void safeDelete(String key) {
+    try {
+      storage.delete(key);
+    } catch (RuntimeException ignored) {
+    }
+  }
+
+  private DocumentResponse response(HealthDocument d) {
+    String[] category =
+        d.categoryId() == null
+            ? new String[] {null, null}
+            : jdbc.query(
+                "select code,name from document.document_category where id=?",
+                rs ->
+                    rs.next()
+                        ? new String[] {rs.getString(1), rs.getString(2)}
+                        : new String[] {null, null},
+                d.categoryId());
+    return new DocumentResponse(
+        d.id(),
+        d.number(),
+        d.patientId(),
+        d.categoryId(),
+        category[0],
+        category[1],
+        d.fileName(),
+        d.mimeType(),
+        d.sizeBytes(),
+        d.checksum(),
+        d.uploadedBy(),
+        d.uploadedAt(),
+        d.status());
+  }
+
+  record Download(InputStream content, long size, String contentType, String fileName) {}
 }

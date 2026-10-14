@@ -6,9 +6,7 @@ import static org.novasos.healthysv2.prescription.api.PrescriptionDtos.Prescript
 import static org.novasos.healthysv2.prescription.api.PrescriptionDtos.PrescriptionSummary;
 
 import java.util.HashSet;
-import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
 import org.novasos.healthysv2.patient.PatientAccessService;
 import org.novasos.healthysv2.shared.api.dto.PageResponse;
@@ -17,216 +15,309 @@ import org.novasos.healthysv2.shared.api.error.ConflictException;
 import org.novasos.healthysv2.shared.api.error.ResourceNotFoundException;
 import org.springframework.data.domain.Pageable;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Service;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Transactional
 class PrescriptionService {
-    private final PrescriptionRepository prescriptions;
-    private final JdbcTemplate jdbc;
-    private final PatientAccessService access;
-    private final org.novasos.healthysv2.patient.PatientSelfAccess selves;
-    private final org.novasos.healthysv2.patient.CurrentUserContext users;
+  private final PrescriptionRepository prescriptions;
+  private final JdbcTemplate jdbc;
+  private final PatientAccessService access;
+  private final org.novasos.healthysv2.patient.PatientSelfAccess selves;
+  private final org.novasos.healthysv2.patient.CurrentUserContext users;
 
-    PrescriptionService(PrescriptionRepository prescriptions, JdbcTemplate jdbc, PatientAccessService access, org.novasos.healthysv2.patient.PatientSelfAccess selves, org.novasos.healthysv2.patient.CurrentUserContext users) {
-        this.prescriptions = prescriptions;
-        this.jdbc = jdbc;
-        this.access = access;
-        this.selves=selves; this.users=users;
-    }
+  PrescriptionService(
+      PrescriptionRepository prescriptions,
+      JdbcTemplate jdbc,
+      PatientAccessService access,
+      org.novasos.healthysv2.patient.PatientSelfAccess selves,
+      org.novasos.healthysv2.patient.CurrentUserContext users) {
+    this.prescriptions = prescriptions;
+    this.jdbc = jdbc;
+    this.access = access;
+    this.selves = selves;
+    this.users = users;
+  }
 
-    PrescriptionResponse create(CreatePrescriptionRequest request) {
-        access.requireAccess(request.patientId(), "PRESCRIPTIONS", "WRITE");
-        requireScope(request.organizationId(), request.prescriberId());
-        requirePrescriber(request.prescriberId(), request.organizationId());
-        validatePrescription(request);
-        var prescription = Prescription.create(request.patientId(), request.consultationId(),
-                request.prescriberId(), request.organizationId(), request.expiresAt());
-        request.items().forEach(item -> prescription.addItem(item.medicationCatalogId(), item.dosage(),
-                item.frequency(), item.route(), item.duration(), item.quantity(), item.instructions()));
-        prescriptions.saveAndFlush(prescription);
-        audit(prescription, "CREATE_PRESCRIPTION");
-        return response(prescription);
-    }
+  PrescriptionResponse create(CreatePrescriptionRequest request) {
+    access.requireAccess(request.patientId(), "PRESCRIPTIONS", "WRITE");
+    requireScope(request.organizationId(), request.prescriberId());
+    requirePrescriber(request.prescriberId(), request.organizationId());
+    validatePrescription(request);
+    var prescription =
+        Prescription.create(
+            request.patientId(),
+            request.consultationId(),
+            request.prescriberId(),
+            request.organizationId(),
+            request.expiresAt());
+    request
+        .items()
+        .forEach(
+            item ->
+                prescription.addItem(
+                    item.medicationCatalogId(),
+                    item.dosage(),
+                    item.frequency(),
+                    item.route(),
+                    item.duration(),
+                    item.quantity(),
+                    item.instructions()));
+    prescriptions.saveAndFlush(prescription);
+    audit(prescription, "CREATE_PRESCRIPTION");
+    return response(prescription);
+  }
 
-    @Transactional(readOnly = true)
-    PrescriptionResponse find(UUID id) {
-        var prescription = get(id);
-        requirePatientOwn(prescription.getPatientId());
-        access.requireAccess(prescription.getPatientId(), "PRESCRIPTIONS", "READ");
-        return response(prescription);
-    }
+  @Transactional(readOnly = true)
+  PrescriptionResponse find(UUID id) {
+    var prescription = get(id);
+    requirePatientOwn(prescription.getPatientId());
+    access.requireAccess(prescription.getPatientId(), "PRESCRIPTIONS", "READ");
+    return response(prescription);
+  }
 
-    @Transactional(readOnly = true)
-    PageResponse<PrescriptionSummary> search(UUID patient, UUID organization, String status, Pageable pageable) {
-        var user = users.current();
-        if (user.has("PLATFORM_ADMIN")) {
-            return PageResponse.from(prescriptions.search(patient, organization, normalize(status), pageable).map(this::summary));
-        }
-        if (user.has("PATIENT") && !user.hasAny("DOCTOR", "NURSE", "HOSPITAL_ADMIN", "PHARMACIST")) {
-            if (patient == null) throw new AccessDeniedException("Patient identifier required");
-            selves.requireOwn(patient);
-            access.requireAccess(patient, "PRESCRIPTIONS", "READ");
-            return PageResponse.from(prescriptions.search(patient, organization, normalize(status), pageable).map(this::summary));
-        }
-        if (organization != null && !organization.equals(user.organizationId())) {
-            throw new AccessDeniedException("Prescription organization access denied");
-        }
-        if (patient == null && !user.has("HOSPITAL_ADMIN")) {
-            throw new AccessDeniedException("Patient identifier required for clinical search");
-        }
-        if (patient != null) access.requireAccess(patient, "PRESCRIPTIONS", "READ");
-        UUID owner = user.organizationId() == null ? currentProfessional() : null;
-        return PageResponse.from(prescriptions.searchScoped(patient, user.organizationId(), owner, normalize(status), pageable).map(this::summary));
+  @Transactional(readOnly = true)
+  PageResponse<PrescriptionSummary> search(
+      UUID patient, UUID organization, String status, Pageable pageable) {
+    var user = users.current();
+    if (user.has("PLATFORM_ADMIN")) throw new AccessDeniedException("PLATFORM_OPERATION_DENIED");
+    if (user.has("PATIENT") && !user.hasAny("DOCTOR", "NURSE", "HOSPITAL_ADMIN", "PHARMACIST")) {
+      if (patient == null) throw new AccessDeniedException("Patient identifier required");
+      selves.requireOwn(patient);
+      access.requireAccess(patient, "PRESCRIPTIONS", "READ");
+      return PageResponse.from(
+          prescriptions
+              .search(patient, organization, normalize(status), pageable)
+              .map(this::summary));
     }
+    if (organization != null && !organization.equals(user.organizationId())) {
+      throw new AccessDeniedException("Prescription organization access denied");
+    }
+    if (patient == null && !user.has("HOSPITAL_ADMIN")) {
+      throw new AccessDeniedException("Patient identifier required for clinical search");
+    }
+    if (patient != null) access.requireAccess(patient, "PRESCRIPTIONS", "READ");
+    UUID owner = user.organizationId() == null ? currentProfessional() : null;
+    return PageResponse.from(
+        prescriptions
+            .searchScoped(patient, user.organizationId(), owner, normalize(status), pageable)
+            .map(this::summary));
+  }
 
-    PrescriptionResponse cancel(UUID id) {
-        var prescription = forWrite(id);
-        try {
-            prescription.cancel();
-            prescriptions.flush();
-            audit(prescription, "CANCEL_PRESCRIPTION");
-            return response(prescription);
-        } catch (IllegalStateException exception) {
-            throw rule("PRESCRIPTION_CANNOT_CANCEL", "error.pharmacy.cannot-cancel");
-        }
+  PrescriptionResponse cancel(UUID id) {
+    var prescription = forWrite(id);
+    try {
+      prescription.cancel();
+      prescriptions.flush();
+      audit(prescription, "CANCEL_PRESCRIPTION");
+      return response(prescription);
+    } catch (IllegalStateException exception) {
+      throw rule("PRESCRIPTION_CANNOT_CANCEL", "error.pharmacy.cannot-cancel");
     }
+  }
 
-    private void validatePrescription(CreatePrescriptionRequest request) {
-        require("patient.patient", request.patientId(), "Patient");
-        require("professional.professional", request.prescriberId(), "Professional");
-        if (request.organizationId() != null) {
-            require("organization.organization", request.organizationId(), "Organization");
-        }
-        if (request.consultationId() != null && !exists(
-                "select count(*) from consultation.consultation where id=? and patient_id=? and professional_id=? and organization_id is not distinct from ?",
-                request.consultationId(), request.patientId(), request.prescriberId(), request.organizationId())) {
-            throw rule("CONSULTATION_PRESCRIPTION_MISMATCH", "error.pharmacy.consultation");
-        }
-        var medications = new HashSet<UUID>();
-        request.items().forEach(item -> {
-            requireMedication(item.medicationCatalogId());
-            if (!medications.add(item.medicationCatalogId())) {
-                throw new ConflictException("MEDICATION_ALREADY_PRESCRIBED", "error.pharmacy.medication-exists");
-            }
-        });
+  private void validatePrescription(CreatePrescriptionRequest request) {
+    require("patient.patient", request.patientId(), "Patient");
+    require("professional.professional", request.prescriberId(), "Professional");
+    if (request.organizationId() != null) {
+      require("organization.organization", request.organizationId(), "Organization");
     }
+    if (request.consultationId() != null
+        && !exists(
+            "select count(*) from consultation.consultation where id=? and patient_id=? and"
+                + " professional_id=? and organization_id is not distinct from ?",
+            request.consultationId(),
+            request.patientId(),
+            request.prescriberId(),
+            request.organizationId())) {
+      throw rule("CONSULTATION_PRESCRIPTION_MISMATCH", "error.pharmacy.consultation");
+    }
+    var medications = new HashSet<UUID>();
+    request
+        .items()
+        .forEach(
+            item -> {
+              requireMedication(item.medicationCatalogId());
+              if (!medications.add(item.medicationCatalogId())) {
+                throw new ConflictException(
+                    "MEDICATION_ALREADY_PRESCRIBED", "error.pharmacy.medication-exists");
+              }
+            });
+  }
 
-    private void requirePatientOwn(UUID patient) {
-        var user=users.current();
-        if(user.has("PATIENT")&&!user.hasAny("PLATFORM_ADMIN","HOSPITAL_ADMIN","DOCTOR","NURSE","PHARMACIST")) selves.requireOwn(patient);
-    }
+  private void requirePatientOwn(UUID patient) {
+    var user = users.current();
+    if (user.has("PATIENT") && !user.hasAny("HOSPITAL_ADMIN", "DOCTOR", "NURSE", "PHARMACIST"))
+      selves.requireOwn(patient);
+  }
 
-    private Prescription forWrite(UUID id) {
-        var prescription = prescriptions.lock(id).orElseThrow(() -> notFound("Prescription", id));
-        requireScope(prescription.getOrganizationId(), prescription.getPrescriberId());
-        access.requireAccess(prescription.getPatientId(), "PRESCRIPTIONS", "WRITE");
-        return prescription;
-    }
+  private Prescription forWrite(UUID id) {
+    var prescription = prescriptions.lock(id).orElseThrow(() -> notFound("Prescription", id));
+    requireScope(prescription.getOrganizationId(), prescription.getPrescriberId());
+    access.requireAccess(prescription.getPatientId(), "PRESCRIPTIONS", "WRITE");
+    return prescription;
+  }
 
-    private Prescription get(UUID id) {
-        var prescription = prescriptions.findById(id).orElseThrow(() -> notFound("Prescription", id));
-        requireScope(prescription.getOrganizationId(), prescription.getPrescriberId());
-        return prescription;
-    }
+  private Prescription get(UUID id) {
+    var prescription = prescriptions.findById(id).orElseThrow(() -> notFound("Prescription", id));
+    requireScope(prescription.getOrganizationId(), prescription.getPrescriberId());
+    return prescription;
+  }
 
-    private void requireScope(UUID organization, UUID prescriber) {
-        var user = users.current();
-        if (user.has("PLATFORM_ADMIN")) return;
-        if (user.has("PATIENT") && !user.hasAny("DOCTOR", "NURSE", "HOSPITAL_ADMIN", "PHARMACIST")) return;
-        if (!Objects.equals(user.organizationId(), organization)) throw new AccessDeniedException("Prescription organization access denied");
-        if (organization == null && !currentProfessional().equals(prescriber)) throw new AccessDeniedException("Prescription owner access denied");
-    }
+  private void requireScope(UUID organization, UUID prescriber) {
+    var user = users.current();
+    if (user.has("PLATFORM_ADMIN"))
+      throw new org.springframework.security.access.AccessDeniedException(
+          "PLATFORM_OPERATION_DENIED");
+    if (user.has("PATIENT") && !user.hasAny("DOCTOR", "NURSE", "HOSPITAL_ADMIN", "PHARMACIST"))
+      return;
+    if (!Objects.equals(user.organizationId(), organization))
+      throw new AccessDeniedException("Prescription organization access denied");
+    if (organization == null && !currentProfessional().equals(prescriber))
+      throw new AccessDeniedException("Prescription owner access denied");
+  }
 
-    private void requirePrescriber(UUID prescriber, UUID organization) {
-        var user = users.current();
-        if (user.has("DOCTOR") && !user.hasAny("PLATFORM_ADMIN", "HOSPITAL_ADMIN") && !currentProfessional().equals(prescriber)) {
-            throw new AccessDeniedException("Prescriber must be the authenticated professional");
-        }
-        if (organization != null && !exists("select count(*) from professional.professional_assignment where professional_id=? and organization_id=? and status='ACTIVE' and start_date<=current_date and (end_date is null or end_date>=current_date)", prescriber, organization)) {
-            throw new AccessDeniedException("Prescriber is not assigned to the selected organization");
-        }
+  private void requirePrescriber(UUID prescriber, UUID organization) {
+    var user = users.current();
+    if (user.has("DOCTOR")
+        && !user.hasAny("HOSPITAL_ADMIN")
+        && !currentProfessional().equals(prescriber)) {
+      throw new AccessDeniedException("Prescriber must be the authenticated professional");
     }
+    if (organization != null
+        && !exists(
+            "select count(*) from professional.professional_assignment where professional_id=? and"
+                + " organization_id=? and status='ACTIVE' and start_date<=current_date and"
+                + " (end_date is null or end_date>=current_date)",
+            prescriber,
+            organization)) {
+      throw new AccessDeniedException("Prescriber is not assigned to the selected organization");
+    }
+  }
 
-    private UUID currentProfessional() {
-        UUID person = users.current().personId();
-        UUID professional = person == null ? null : jdbc.query("select id from professional.professional where person_id=? and status='ACTIVE' limit 1", rs -> rs.next() ? (UUID) rs.getObject(1) : null, person);
-        if (professional == null) throw new AccessDeniedException("Active professional required");
-        return professional;
-    }
+  private UUID currentProfessional() {
+    UUID person = users.current().personId();
+    UUID professional =
+        person == null
+            ? null
+            : jdbc.query(
+                "select id from professional.professional where person_id=? and status='ACTIVE'"
+                    + " limit 1",
+                rs -> rs.next() ? (UUID) rs.getObject(1) : null,
+                person);
+    if (professional == null) throw new AccessDeniedException("Active professional required");
+    return professional;
+  }
 
-    private void requireMedication(UUID id) {
-        if (!exists("select count(*) from catalog.medication_catalog where id=? and active=true", id)) {
-            throw notFound("MedicationCatalog", id);
-        }
+  private void requireMedication(UUID id) {
+    if (!exists("select count(*) from catalog.medication_catalog where id=? and active=true", id)) {
+      throw notFound("MedicationCatalog", id);
     }
+  }
 
-    private void require(String table, UUID id, String resource) {
-        if (!exists("select count(*) from " + table + " where id=?", id)) {
-            throw notFound(resource, id);
-        }
+  private void require(String table, UUID id, String resource) {
+    if (!exists("select count(*) from " + table + " where id=?", id)) {
+      throw notFound(resource, id);
     }
+  }
 
-    private boolean exists(String sql, Object... arguments) {
-        return Objects.requireNonNull(jdbc.queryForObject(sql, Integer.class, arguments)) > 0;
-    }
+  private boolean exists(String sql, Object... arguments) {
+    return Objects.requireNonNull(jdbc.queryForObject(sql, Integer.class, arguments)) > 0;
+  }
 
-    private String normalize(String value) {
-        return value == null || value.isBlank() ? null : value.trim().toUpperCase();
-    }
+  private String normalize(String value) {
+    return value == null || value.isBlank() ? null : value.trim().toUpperCase();
+  }
 
-    private PrescriptionSummary summary(Prescription prescription) {
-        return new PrescriptionSummary(prescription.getId(), prescription.getNumber(), prescription.getPatientId(),
-                prescription.getOrganizationId(), prescription.getPrescribedAt(), prescription.getExpiresAt(),
-                prescription.getStatus());
-    }
+  private PrescriptionSummary summary(Prescription prescription) {
+    return new PrescriptionSummary(
+        prescription.getId(),
+        prescription.getNumber(),
+        prescription.getPatientId(),
+        prescription.getOrganizationId(),
+        prescription.getPrescribedAt(),
+        prescription.getExpiresAt(),
+        prescription.getStatus());
+  }
 
-    private PrescriptionResponse response(Prescription prescription) {
-        return new PrescriptionResponse(prescription.getId(), prescription.getNumber(), prescription.getPatientId(),
-                prescription.getConsultationId(), prescription.getPrescriberId(), prescription.getOrganizationId(),
-                prescription.getPrescribedAt(), prescription.getExpiresAt(), prescription.getStatus(),
-                prescription.getItems().stream().map(this::item).toList());
-    }
+  private PrescriptionResponse response(Prescription prescription) {
+    return new PrescriptionResponse(
+        prescription.getId(),
+        prescription.getNumber(),
+        prescription.getPatientId(),
+        prescription.getConsultationId(),
+        prescription.getPrescriberId(),
+        prescription.getOrganizationId(),
+        prescription.getPrescribedAt(),
+        prescription.getExpiresAt(),
+        prescription.getStatus(),
+        prescription.getItems().stream().map(this::item).toList());
+  }
 
-    private PrescriptionItemResponse item(PrescriptionItem item) {
-        String[] medication = jdbc.query("select code,name from catalog.medication_catalog where id=?",
-                result -> result.next() ? new String[]{result.getString(1), result.getString(2)}
-                        : new String[]{null, null}, item.getMedicationId());
-        return new PrescriptionItemResponse(item.getId(), item.getMedicationId(), medication[0], medication[1],
-                item.getDosage(), item.getFrequency(), item.getRoute(), item.getDuration(), item.getQuantity(),
-                item.getQuantityDispensed(), item.remaining(), item.getInstructions());
-    }
+  private PrescriptionItemResponse item(PrescriptionItem item) {
+    String[] medication =
+        jdbc.query(
+            "select code,name from catalog.medication_catalog where id=?",
+            result ->
+                result.next()
+                    ? new String[] {result.getString(1), result.getString(2)}
+                    : new String[] {null, null},
+            item.getMedicationId());
+    return new PrescriptionItemResponse(
+        item.getId(),
+        item.getMedicationId(),
+        medication[0],
+        medication[1],
+        item.getDosage(),
+        item.getFrequency(),
+        item.getRoute(),
+        item.getDuration(),
+        item.getQuantity(),
+        item.getQuantityDispensed(),
+        item.remaining(),
+        item.getInstructions());
+  }
 
-    private void audit(Prescription prescription, String action) {
-        jdbc.update("insert into audit.audit_log(actor_person_id,organization_id,module,entity_type,entity_id,action,new_value) "
-                        + "values (?,?,?,?,?,?,?::jsonb)", actor(), prescription.getOrganizationId(), "PRESCRIPTION",
-                "Prescription", prescription.getId(), action,
-                "{\"status\":\"" + prescription.getStatus() + "\"}");
-    }
+  private void audit(Prescription prescription, String action) {
+    jdbc.update(
+        "insert into"
+            + " audit.audit_log(actor_person_id,organization_id,module,entity_type,entity_id,action,new_value)"
+            + " values (?,?,?,?,?,?,?::jsonb)",
+        actor(),
+        prescription.getOrganizationId(),
+        "PRESCRIPTION",
+        "Prescription",
+        prescription.getId(),
+        action,
+        "{\"status\":\"" + prescription.getStatus() + "\"}");
+  }
 
-    private UUID actor() {
-        var authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (!(authentication instanceof JwtAuthenticationToken jwt)) {
-            return null;
-        }
-        try {
-            UUID subject = UUID.fromString(jwt.getToken().getSubject());
-            return jdbc.query("select id from identity.person where keycloak_user_id=? or id=? limit 1",
-                    result -> result.next() ? (UUID) result.getObject(1) : null, subject, subject);
-        } catch (IllegalArgumentException exception) {
-            return null;
-        }
+  private UUID actor() {
+    var authentication = SecurityContextHolder.getContext().getAuthentication();
+    if (!(authentication instanceof JwtAuthenticationToken jwt)) {
+      return null;
     }
+    try {
+      UUID subject = UUID.fromString(jwt.getToken().getSubject());
+      return jdbc.query(
+          "select id from identity.person where keycloak_user_id=? or id=? limit 1",
+          result -> result.next() ? (UUID) result.getObject(1) : null,
+          subject,
+          subject);
+    } catch (IllegalArgumentException exception) {
+      return null;
+    }
+  }
 
-    private ResourceNotFoundException notFound(String resource, Object id) {
-        return new ResourceNotFoundException(resource, id);
-    }
+  private ResourceNotFoundException notFound(String resource, Object id) {
+    return new ResourceNotFoundException(resource, id);
+  }
 
-    private BusinessRuleException rule(String code, String messageKey) {
-        return new BusinessRuleException(code, messageKey);
-    }
+  private BusinessRuleException rule(String code, String messageKey) {
+    return new BusinessRuleException(code, messageKey);
+  }
 }

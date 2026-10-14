@@ -12,6 +12,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.novasos.healthysv2.profilecontract.api.ContractAccess;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -24,19 +25,27 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
-/** Real HTTP/security/domain/database journey. No business service or entitlement is mocked. */
+/**
+ * Real HTTP/security/domain/database cash journey. Business services, profiles and entitlements are
+ * persisted; contract signatures are tested separately by profilecontract tests.
+ */
 @ActiveProfiles("test")
 @SpringBootTest(
     properties = {
       "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://keycloak.example/realms/healthys",
       "spring.security.oauth2.resourceserver.jwt.audiences=healthys-backend-apps",
       "healthys.security.api-client-id=healthys-backend-apps",
-      "healthys.ai.enabled=true",
+      "healthys.ai.enabled=false",
+      "STAFF_ACCOUNT_PROVISIONING_ENABLED=false",
+      "DATA_DELETION_WORKER_ENABLED=false",
+      "DATA_RETENTION_PURGE_ENABLED=false",
       "healthys.ai.service-token=integration-test-private-token-32-characters",
-      "healthys.ai.poll-interval-ms=3600000"
+      "healthys.ai.poll-interval-ms=3600000",
+      "healthys.ai.audio-sweep-interval-ms=3600000"
     })
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, CashCareJourneyIntegrationTests.Tokens.class})
@@ -44,6 +53,7 @@ class CashCareJourneyIntegrationTests {
   @Autowired MockMvc mvc;
   @Autowired ObjectMapper json;
   @Autowired JdbcTemplate db;
+  @MockitoBean ContractAccess contracts;
   private static final Map<String, Actor> ACTORS = new ConcurrentHashMap<>();
   private UUID org, otherOrg, patient, specialty, doctor, secondDoctor;
   private String nurse, cashier, physician, secondPhysician, foreignNurse, admin;
@@ -454,7 +464,11 @@ class CashCareJourneyIntegrationTests {
   private JsonNode call(
       String actor, MockHttpServletRequestBuilder request, Object body, int expected)
       throws Exception {
-    request.header(HttpHeaders.AUTHORIZATION, "Bearer " + actor);
+    Actor selected = Objects.requireNonNull(ACTORS.get(actor));
+    request
+        .header(HttpHeaders.AUTHORIZATION, "Bearer " + actor)
+        .header("X-Profile-ID", selected.profile())
+        .header("X-Organization-ID", selected.org());
     if (body != null)
       request.contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body));
     String value =
@@ -507,14 +521,16 @@ class CashCareJourneyIntegrationTests {
     UUID login =
         db.queryForObject(
             "select keycloak_user_id from identity.person where id=?", UUID.class, person);
+    UUID profile = UUID.randomUUID();
     db.update(
-        "insert into licensing.member(organization_id,person_id,role,status)"
-            + " values(?,?,?,'ACTIVE')",
+        "insert into licensing.member(id,organization_id,person_id,role,status)"
+            + " values(?,?,?,?,'ACTIVE')",
+        profile,
         organization,
         person,
         role);
     String token = UUID.randomUUID().toString();
-    ACTORS.put(token, new Actor(person, login, organization, role));
+    ACTORS.put(token, new Actor(person, login, organization, role, profile));
     return token;
   }
 
@@ -552,7 +568,7 @@ class CashCareJourneyIntegrationTests {
     return professional;
   }
 
-  record Actor(UUID person, UUID login, UUID org, String role) {}
+  record Actor(UUID person, UUID login, UUID org, String role, UUID profile) {}
 
   @TestConfiguration(proxyBeanMethods = false)
   static class Tokens {
