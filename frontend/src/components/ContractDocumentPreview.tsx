@@ -1,0 +1,4 @@
+import {useTranslation} from 'react-i18next';
+import {SafeContractHtml} from './SafeContractHtml';
+import type {ContractBodyFormat} from '../api/profileContracts';
+export function ContractDocumentPreview({body,bodyFormat='TEXT',headerHtml='',footerHtml=''}:{body:string;bodyFormat?:ContractBodyFormat;headerHtml?:string|null;footerHtml?:string|null}){const {t}=useTranslation();return <div className="contract-document-preview">{headerHtml&&<section data-contract-zone="header" aria-label={t('contractEditor.header')} className="contract-document-header"><SafeContractHtml html={headerHtml}/></section>}{bodyFormat==='HTML'?<SafeContractHtml className="contract-body contract-rich-content" html={body}/>:<div className="contract-body">{body}</div>}{footerHtml&&<section data-contract-zone="footer" aria-label={t('contractEditor.footer')} className="contract-document-footer"><SafeContractHtml html={footerHtml}/></section>}</div>;}

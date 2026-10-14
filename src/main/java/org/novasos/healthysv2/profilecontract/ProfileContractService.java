@@ -74,6 +74,7 @@ public class ProfileContractService implements ContractAccess {
                 + " status='ACTIVE'",
             String.class,
             profile.personId());
+    var values = renderValues(profile, signer, null);
     return new Template(
         template.id(),
         template.category(),
@@ -82,15 +83,16 @@ public class ProfileContractService implements ContractAccess {
         template.termsVersion(),
         template.bodyText(),
         template.publishedAt(),
-        rendered(template, profile, signer, null),
-        template.bodyFormat());
+        renderBody(template, values),
+        template.bodyFormat(),
+        template.headerHtml(),
+        template.footerHtml(),
+        ContractHtml.render(template.headerHtml(), values),
+        ContractHtml.render(template.footerHtml(), values));
   }
 
-  private String rendered(
-      Template template,
-      AccessProfileResolver.AccessProfile profile,
-      String signer,
-      Instant signedAt) {
+  private Map<String, String> renderValues(
+      AccessProfileResolver.AccessProfile profile, String signer, Instant signedAt) {
     String patient = "";
     if ("PATIENT".equals(profile.type()))
       patient =
@@ -99,19 +101,17 @@ public class ProfileContractService implements ContractAccess {
                   + " identity.person p on p.id=pt.person_id where pt.id=?",
               String.class,
               profile.sourceId());
-    return renderBody(
-        template,
-        Map.of(
-            "signerName",
-            Objects.toString(signer, ""),
-            "profileLabel",
-            Objects.toString(profile.label(), profile.type()),
-            "organizationName",
-            Objects.toString(profile.organizationName(), ""),
-            "patientName",
-            Objects.toString(patient, ""),
-            "signedAt",
-            signedAt == null ? "[date de signature]" : signedAt.toString()));
+    return Map.of(
+        "signerName",
+        Objects.toString(signer, ""),
+        "profileLabel",
+        Objects.toString(profile.label(), profile.type()),
+        "organizationName",
+        Objects.toString(profile.organizationName(), ""),
+        "patientName",
+        Objects.toString(patient, ""),
+        "signedAt",
+        signedAt == null ? "[date de signature]" : signedAt.toString());
   }
 
   static String renderBody(Template template, Map<String, String> values) {
@@ -144,7 +144,11 @@ public class ProfileContractService implements ContractAccess {
                         ? null
                         : rs.getTimestamp("published_at").toInstant(),
                     null,
-                    rs.getString("body_format")),
+                    rs.getString("body_format"),
+                    rs.getString("header_html"),
+                    rs.getString("footer_html"),
+                    "",
+                    ""),
             category);
     if (rows.isEmpty())
       throw new BusinessRuleException(
@@ -288,20 +292,22 @@ public class ProfileContractService implements ContractAccess {
     byte[] signature = SignatureImage.normalize(request.signature());
     UUID id = UUID.randomUUID();
     Instant now = Instant.now();
-    String body =
-        renderBody(
-            template,
-            Map.of(
-                "signerName",
-                signer,
-                "profileLabel",
-                label,
-                "organizationName",
-                organization,
-                "patientName",
-                patientName,
-                "signedAt",
-                now.toString()));
+    var values =
+        Map.of(
+            "signerName",
+            signer,
+            "profileLabel",
+            label,
+            "organizationName",
+            organization,
+            "patientName",
+            patientName,
+            "signedAt",
+            now.toString());
+    String body = renderBody(template, values);
+    String header = ContractHtml.render(template.headerHtml(), values),
+        footer = ContractHtml.render(template.footerHtml(), values);
+    ContractPdf.validateZones(header, footer);
     String snapshotHash =
         hashSnapshot(
             List.of(
@@ -327,11 +333,13 @@ public class ProfileContractService implements ContractAccess {
                 "true",
                 Boolean.toString(guardian),
                 hash(signature),
-                template.bodyFormat()));
+                template.bodyFormat(),
+                header,
+                footer));
     db.update(
         """
-        insert into profilecontract.agreement(id,actor_person_id,profile_id,template_id,template_version,category,profile_type,source_type,source_id,organization_id,profile_label,organization_name,patient_name,signer_name,signer_email,terms_url,terms_version,body_snapshot,accepted_terms,guardian_acknowledgement,signature_png,signature_sha256,snapshot_sha256,signed_at,body_format)
-        values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,true,?,?,?,?,?,?)
+        insert into profilecontract.agreement(id,actor_person_id,profile_id,template_id,template_version,category,profile_type,source_type,source_id,organization_id,profile_label,organization_name,patient_name,signer_name,signer_email,terms_url,terms_version,body_snapshot,accepted_terms,guardian_acknowledgement,signature_png,signature_sha256,snapshot_sha256,signed_at,body_format,header_snapshot,footer_snapshot)
+        values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,true,?,?,?,?,?,?,?,?)
         """,
         id,
         profile.personId(),
@@ -356,7 +364,9 @@ public class ProfileContractService implements ContractAccess {
         hash(signature),
         snapshotHash,
         Timestamp.from(now),
-        template.bodyFormat());
+        template.bodyFormat(),
+        header,
+        footer);
     db.update("insert into profilecontract.delivery_job(agreement_id) values(?)", id);
     db.update(
         "insert into audit.audit_log(actor_person_id,module,entity_type,entity_id,action,new_value)"
@@ -417,7 +427,11 @@ public class ProfileContractService implements ContractAccess {
                     ? null
                     : rs.getTimestamp("published_at").toInstant(),
                 null,
-                rs.getString("body_format")));
+                rs.getString("body_format"),
+                rs.getString("header_html"),
+                rs.getString("footer_html"),
+                "",
+                ""));
   }
 
   static void validateTemplate(TemplateRequest request) {
@@ -434,6 +448,8 @@ public class ProfileContractService implements ContractAccess {
     if (!Set.of("TEXT", "HTML").contains(request.bodyFormat()))
       throw new IllegalArgumentException("INVALID_CONTRACT_FORMAT");
     normalizedBody(request);
+    ContractPdf.validateZones(
+        normalizedZone(request.headerHtml()), normalizedZone(request.footerHtml()));
     if (request.bodyText().isBlank() || request.termsVersion().isBlank())
       throw new IllegalArgumentException("CONTRACT_TEXT_REQUIRED");
   }
@@ -443,6 +459,14 @@ public class ProfileContractService implements ContractAccess {
     String safe = ContractHtml.sanitize(request.bodyText());
     if (ContractHtml.plainText(safe).isBlank())
       throw new IllegalArgumentException("CONTRACT_TEXT_REQUIRED");
+    return safe;
+  }
+
+  private static String normalizedZone(String input) {
+    if (input == null || input.isBlank()) return "";
+    if (input.length() > 5000) throw new IllegalArgumentException("CONTRACT_ZONE_TOO_LARGE");
+    String safe = ContractHtml.sanitize(input);
+    if (safe.length() > 5000) throw new IllegalArgumentException("CONTRACT_ZONE_TOO_LARGE");
     return safe;
   }
 
@@ -458,8 +482,8 @@ public class ProfileContractService implements ContractAccess {
     UUID id = UUID.randomUUID();
     db.update(
         "insert into"
-            + " profilecontract.template(id,category,version,terms_url,terms_version,body_text,created_by,body_format)"
-            + " values(?,?,?,?,?,?,?,?)",
+            + " profilecontract.template(id,category,version,terms_url,terms_version,body_text,created_by,body_format,header_html,footer_html)"
+            + " values(?,?,?,?,?,?,?,?,?,?)",
         id,
         request.category(),
         version,
@@ -467,7 +491,9 @@ public class ProfileContractService implements ContractAccess {
         request.termsVersion(),
         normalizedBody(request),
         actor,
-        request.bodyFormat());
+        request.bodyFormat(),
+        normalizedZone(request.headerHtml()),
+        normalizedZone(request.footerHtml()));
     return new Template(
         id,
         request.category(),
@@ -477,7 +503,11 @@ public class ProfileContractService implements ContractAccess {
         normalizedBody(request),
         null,
         null,
-        request.bodyFormat());
+        request.bodyFormat(),
+        normalizedZone(request.headerHtml()),
+        normalizedZone(request.footerHtml()),
+        "",
+        "");
   }
 
   public Template updateTemplate(UUID id, TemplateRequest request) {
@@ -486,12 +516,14 @@ public class ProfileContractService implements ContractAccess {
     int changed =
         db.update(
             "update profilecontract.template set"
-                + " terms_url=?,terms_version=?,body_text=?,body_format=? where id=? and category=?"
-                + " and published_at is null",
+                + " terms_url=?,terms_version=?,body_text=?,body_format=?,header_html=?,footer_html=?"
+                + " where id=? and category=? and published_at is null",
             request.termsUrl(),
             request.termsVersion(),
             normalizedBody(request),
             request.bodyFormat(),
+            normalizedZone(request.headerHtml()),
+            normalizedZone(request.footerHtml()),
             id,
             request.category());
     if (changed != 1)
@@ -514,7 +546,9 @@ public class ProfileContractService implements ContractAccess {
             template.termsUrl(),
             template.termsVersion(),
             template.bodyText(),
-            template.bodyFormat()));
+            template.bodyFormat(),
+            template.headerHtml(),
+            template.footerHtml()));
     if (template.publishedAt() != null) return template;
     db.update(
         "update profilecontract.template set published_at=clock_timestamp() where id=? and"

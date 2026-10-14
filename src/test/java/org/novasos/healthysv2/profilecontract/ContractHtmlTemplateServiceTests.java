@@ -46,7 +46,9 @@ class ContractHtmlTemplateServiceTests {
             "1",
             "<h2>Contrat</h2><p onclick='bad()'>{{signerName}}</p><p>{{signature}}</p><a"
                 + " href='https://example.test/terms' style='color:red'>Conditions</a>",
-            "HTML");
+            "HTML",
+            "<p onclick='bad()'>{{signerName}}</p>",
+            "<p>Page {{pageNumber}}/{{pageCount}}</p>");
     var saved = service.createTemplate(request);
     assertThat(saved.bodyFormat()).isEqualTo("HTML");
     assertThat(saved.bodyText())
@@ -56,6 +58,8 @@ class ContractHtmlTemplateServiceTests {
             "{{signature}}",
             "href=\"https://example.test/terms\"")
         .doesNotContain("onclick", "style=");
+    assertThat(saved.headerHtml()).isEqualTo("<p>{{signerName}}</p>");
+    assertThat(saved.footerHtml()).isEqualTo("<p>Page {{pageNumber}}/{{pageCount}}</p>");
     verify(db)
         .update(
             contains("body_format"),
@@ -66,6 +70,8 @@ class ContractHtmlTemplateServiceTests {
             eq("1"),
             eq(saved.bodyText()),
             eq(actor),
-            eq("HTML"));
+            eq("HTML"),
+            eq(saved.headerHtml()),
+            eq(saved.footerHtml()));
   }
 }

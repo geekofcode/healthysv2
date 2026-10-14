@@ -39,7 +39,7 @@ public final class ContractHtml {
           "(?is)<\\s*/?\\s*(script|style|iframe|object|embed|svg|math|form|input|button|select|textarea|link|meta|img|video|audio|source|base|frameset|frame|noscript|template)\\b|<!\\s*(doctype|entity)|<\\?");
   private static final Pattern VARIABLE =
       Pattern.compile(
-          "\\{\\{(signerName|profileLabel|organizationName|patientName|signedAt|signature)\\}\\}");
+          "\\{\\{(signerName|profileLabel|organizationName|patientName|signedAt|signature|pageNumber|pageCount)\\}\\}");
 
   private ContractHtml() {}
 

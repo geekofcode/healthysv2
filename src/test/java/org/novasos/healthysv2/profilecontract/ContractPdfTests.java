@@ -137,6 +137,118 @@ class ContractPdfTests {
         .hasMessage("UNSAFE_CONTRACT_HTML");
   }
 
+  @Test
+  void headerAndFooterRepeatOnEveryPageWithFinalCountersIncludingSignature() throws Exception {
+    var agreement =
+        htmlAgreement(
+            "<h1>Contrat paginé</h1><table><tr><th>Profil</th><th>Droits</th></tr><tr><td>Patient"
+                + " enfant</td><td>Dossier protégé et suivi autorisé</td></tr></table>"
+                + "<p>Contenu contractuel avec pagination et zones fixes.</p>".repeat(100));
+    agreement.put(
+        "header_snapshot", "<p><strong>ENTÊTE — HEALTH’YS</strong><br>Profil patient</p>");
+    agreement.put("footer_snapshot", "<p>PIED — Page {{pageNumber}} / {{pageCount}}</p>");
+    byte[] bytes = new ContractPdf().render(agreement);
+    try (var document = Loader.loadPDF(bytes)) {
+      int count = document.getNumberOfPages();
+      assertThat(count).isGreaterThan(4);
+      for (int page = 1; page <= count; page++) {
+        var strip = new PDFTextStripper();
+        strip.setStartPage(page);
+        strip.setEndPage(page);
+        String text = strip.getText(document);
+        assertThat(text)
+            .contains("ENTÊTE — HEALTH’YS", "PIED — Page " + page + " / " + count)
+            .doesNotContain("{{pageNumber}}", "{{pageCount}}");
+        var headerPositions = new ArrayList<org.apache.pdfbox.text.TextPosition>();
+        var footerPositions = new ArrayList<org.apache.pdfbox.text.TextPosition>();
+        var bounds =
+            new PDFTextStripper() {
+              @Override
+              protected void writeString(
+                  String value, List<org.apache.pdfbox.text.TextPosition> positions)
+                  throws java.io.IOException {
+                if (value.contains("ENTÊTE")) headerPositions.addAll(positions);
+                if (value.contains("PIED")) footerPositions.addAll(positions);
+                super.writeString(value, positions);
+              }
+            };
+        bounds.setStartPage(page);
+        bounds.setEndPage(page);
+        bounds.getText(document);
+        assertThat(headerPositions).isNotEmpty();
+        assertThat(footerPositions).isNotEmpty();
+        assertThat(headerPositions)
+            .allSatisfy(
+                position -> {
+                  assertThat(position.getXDirAdj()).isGreaterThanOrEqualTo(47.5f);
+                  assertThat(position.getXDirAdj() + position.getWidthDirAdj())
+                      .isLessThanOrEqualTo(548f);
+                  assertThat(position.getYDirAdj()).isBetween(0f, 96f);
+                });
+        float height = document.getPage(page - 1).getMediaBox().getHeight();
+        assertThat(footerPositions)
+            .allSatisfy(
+                position -> {
+                  assertThat(position.getXDirAdj()).isGreaterThanOrEqualTo(47.5f);
+                  assertThat(position.getXDirAdj() + position.getWidthDirAdj())
+                      .isLessThanOrEqualTo(548f);
+                  assertThat(position.getYDirAdj()).isBetween(height - 64, height - 5);
+                });
+      }
+      var last = new PDFTextStripper();
+      last.setStartPage(count);
+      assertThat(last.getText(document))
+          .contains("Signature manuscrite", "Empreinte du contenu", "Représentant légal");
+      assertThat(document.getPage(count - 1).getResources().getXObjectNames()).isNotEmpty();
+    }
+    String preview = System.getProperty("healthys.contract.zones.preview");
+    if (preview != null) java.nio.file.Files.write(java.nio.file.Path.of(preview), bytes);
+  }
+
+  @Test
+  void plainLegacyBodyAlsoReservesConfiguredZones() throws Exception {
+    var agreement = htmlAgreement("Texte historique conservé.\n".repeat(100));
+    agreement.put("body_format", "TEXT");
+    agreement.put("header_snapshot", "<p>ENTETE_LEGACY</p>");
+    agreement.put("footer_snapshot", "<p>PIED_LEGACY {{pageNumber}} / {{pageCount}}</p>");
+    try (var document = Loader.loadPDF(new ContractPdf().render(agreement))) {
+      var text = new PDFTextStripper().getText(document);
+      assertThat(text).contains("Texte historique conservé.");
+      for (int page = 1; page <= document.getNumberOfPages(); page++) {
+        var strip = new PDFTextStripper();
+        strip.setStartPage(page);
+        strip.setEndPage(page);
+        assertThat(strip.getText(document))
+            .contains("ENTETE_LEGACY", "PIED_LEGACY " + page + " / " + document.getNumberOfPages());
+      }
+    }
+  }
+
+  @Test
+  void oversizedOrUnsafeZonesAreRejectedBeforeSigningRatherThanClipped() {
+    assertThatCode(
+            () ->
+                ContractPdf.validateZones(
+                    "<p>Établissement — Ελληνικά</p>",
+                    "<p>Page {{pageNumber}} / {{pageCount}}</p>"))
+        .doesNotThrowAnyException();
+    String tall = "<p>" + "Ligne de zone<br>".repeat(20) + "</p>";
+    assertThatThrownBy(() -> ContractPdf.validateZones(tall, ""))
+        .isInstanceOf(org.novasos.healthysv2.shared.api.error.BusinessRuleException.class)
+        .hasMessageContaining("72 points");
+    assertThatThrownBy(() -> ContractPdf.validateZones("", tall))
+        .isInstanceOf(org.novasos.healthysv2.shared.api.error.BusinessRuleException.class)
+        .hasMessageContaining("40 points");
+    assertThatThrownBy(() -> ContractPdf.validateZones("<script>alert(1)</script>", ""))
+        .isInstanceOf(org.novasos.healthysv2.shared.api.error.BusinessRuleException.class);
+    assertThatThrownBy(
+            () ->
+                ContractPdf.validateZones("", "<img src='https://unreachable.example/image.png'>"))
+        .isInstanceOf(org.novasos.healthysv2.shared.api.error.BusinessRuleException.class);
+    assertThatThrownBy(() -> ContractPdf.validateZones("<p>" + "x".repeat(5001) + "</p>", ""))
+        .isInstanceOf(org.novasos.healthysv2.shared.api.error.BusinessRuleException.class);
+  }
+
   private Map<String, Object> htmlAgreement(String body) throws java.io.IOException {
     Map<String, Object> agreement = new HashMap<>();
     agreement.put("id", UUID.randomUUID());

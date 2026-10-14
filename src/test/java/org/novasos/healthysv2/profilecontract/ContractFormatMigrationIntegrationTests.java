@@ -109,6 +109,20 @@ class ContractFormatMigrationIntegrationTests {
                         + " id=?",
                     agreement))
         .isInstanceOf(DataIntegrityViolationException.class);
+    assertThatThrownBy(
+            () ->
+                db.update(
+                    "update profilecontract.agreement set header_snapshot='<p>Changed header</p>'"
+                        + " where id=?",
+                    agreement))
+        .isInstanceOf(DataIntegrityViolationException.class);
+    assertThatThrownBy(
+            () ->
+                db.update(
+                    "update profilecontract.agreement set footer_snapshot='<p>Changed footer</p>'"
+                        + " where id=?",
+                    agreement))
+        .isInstanceOf(DataIntegrityViolationException.class);
     assertThat(
             db.update(
                 "update profilecontract.agreement set"

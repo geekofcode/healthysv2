@@ -253,3 +253,6 @@ input[type="checkbox"],input[type="radio"] {width:16px;min-width:16px;height:16p
 .contract-rich-content table, .contract-editor-surface table {border-collapse: collapse; width: 100%; margin: 1rem 0;}
 .contract-rich-content th, .contract-rich-content td, .contract-editor-surface th, .contract-editor-surface td {border: 1px solid #94a3b8; padding: .5rem;}
 .contract-rich-content h1, .contract-rich-content h2, .contract-rich-content h3 {margin: 1rem 0 .5rem;}
+.contract-document-preview {margin: 1rem 0; border: 1px solid var(--border); border-radius: .4rem;}
+.contract-document-header {padding: .75rem 1rem; border-bottom: 1px solid var(--border);}
+.contract-document-footer {padding: .75rem 1rem; border-top: 1px solid var(--border);}

@@ -55,3 +55,11 @@ L’administration propose un éditeur visuel et un mode source HTML avec aperç
 L’API conserve `bodyText` pour le contenu et ajoute `bodyFormat` (`TEXT` ou `HTML`, omis = `TEXT` pour les anciens clients). Le serveur normalise le fragment HTML sur une liste de balises admises, supprime les attributs non autorisés et refuse les éléments actifs. Il n’importe aucune image ou feuille de style extérieure. L’aperçu web applique également un contrôle avant affichage ; l’autorité reste la validation serveur.
 
 Le PDF reproduit les titres, emphases, listes et tableaux avec pagination, puis les preuves d’acceptation et la page de signature dédiée. Il ne s’agit pas d’un navigateur HTML/CSS complet : seules les structures annoncées par l’éditeur sont prises en charge. La signature réelle reste fournie par le signataire (dessin ou image), et les jobs MinIO/courriel continuent à fonctionner sur le contenu immuable enregistré.
+
+## En-tête et pied de page HTML
+
+Chaque modèle peut définir `headerHtml` et `footerHtml`, en plus du corps. Ces zones utilisent le même HTML contrôlé et le même échappement des variables. L’administration peut éditer et prévisualiser les trois zones séparément. Les champs sont facultatifs ; les anciens modèles et contrats ont des zones vides après la migration V53.
+
+Les zones configurées sont répétées sur toutes les pages du PDF, y compris les pages de preuve et de signature. `{{pageNumber}}` et `{{pageCount}}` sont réservés à ces zones et remplacés lors de la génération finale. Les autres variables de profil/signataire sont rendues au moment de l’acceptation. Leurs instantanés sont conservés avec le contrat signé et protégés contre les modifications.
+
+Des bandes fixes et des marges sont réservées pour éviter le chevauchement avec le corps ou la signature. Une zone trop longue ou trop haute doit être raccourcie ; elle n’est pas coupée silencieusement. Le HTML des zones n’autorise ni scripts, médias ni CSS arbitraire. Sans zone personnalisée, le comportement historique est conservé.

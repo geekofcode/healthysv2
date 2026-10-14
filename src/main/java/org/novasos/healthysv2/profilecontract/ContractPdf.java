@@ -14,11 +14,84 @@ import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import org.apache.pdfbox.pdmodel.graphics.state.RenderingMode;
 import org.apache.pdfbox.util.Matrix;
+import org.novasos.healthysv2.shared.api.error.BusinessRuleException;
 import org.springframework.stereotype.Component;
 
 @Component
 class ContractPdf {
+  private static final float HEADER_HEIGHT = 96, FOOTER_HEIGHT = 64, ZONE_PADDING = 12;
+
+  private record Zones(String header, String footer) {
+    static final Zones EMPTY = new Zones("", "");
+
+    boolean hasHeader() {
+      return !header.isBlank();
+    }
+
+    boolean hasFooter() {
+      return !footer.isBlank();
+    }
+
+    float top() {
+      return hasHeader() ? PDRectangle.A4.getHeight() - HEADER_HEIGHT - 24 : 790;
+    }
+
+    float bottom() {
+      return hasFooter() ? FOOTER_HEIGHT + 24 : 64;
+    }
+  }
+
+  public static void validateZones(String headerHtml, String footerHtml) {
+    String header = Objects.toString(headerHtml, ""), footer = Objects.toString(footerHtml, "");
+    if (header.isBlank() && footer.isBlank()) return;
+    try (var document = new PDDocument();
+        var input = ContractPdf.class.getResourceAsStream("/fonts/DejaVuSans.ttf")) {
+      if (input == null) throw new IllegalStateException("CONTRACT_FONT_UNAVAILABLE");
+      var font = PDType0Font.load(document, input);
+      var owner = new ContractPdf();
+      var metrics = owner.new RichPages(document, font, Zones.EMPTY, false);
+      owner.validateZone(metrics, header, "HEADER", HEADER_HEIGHT - 2 * ZONE_PADDING);
+      owner.validateZone(metrics, footer, "FOOTER", FOOTER_HEIGHT - 2 * ZONE_PADDING);
+    } catch (IOException e) {
+      throw new IllegalStateException("CONTRACT_FONT_UNAVAILABLE", e);
+    }
+  }
+
+  private void validateZone(RichPages metrics, String html, String name, float available)
+      throws IOException {
+    if (html.isBlank()) return;
+    if (html.length() > 5000)
+      throw new BusinessRuleException(
+          "CONTRACT_" + name + "_TOO_LARGE",
+          "Contract " + name.toLowerCase(Locale.ROOT) + " exceeds 5000 characters");
+    try {
+      ContractHtml.sanitize(html);
+      var layout = metrics.zoneLayout(pages(html, "999999999", "999999999"));
+      if (layout.height() > available)
+        throw new BusinessRuleException(
+            "CONTRACT_" + name + "_TOO_TALL",
+            "Contract "
+                + name.toLowerCase(Locale.ROOT)
+                + " exceeds its fixed printable height of "
+                + (int) available
+                + " points");
+    } catch (IllegalArgumentException e) {
+      throw new BusinessRuleException(
+          "INVALID_CONTRACT_" + name,
+          "Unsupported or unsafe contract " + name.toLowerCase(Locale.ROOT));
+    }
+  }
+
+  private String pages(String html, String page, String count) {
+    return html.replace("{{pageNumber}}", page).replace("{{pageCount}}", count);
+  }
+
   byte[] render(Map<String, Object> agreement) {
+    var zones =
+        new Zones(
+            Objects.toString(agreement.get("header_snapshot"), ""),
+            Objects.toString(agreement.get("footer_snapshot"), ""));
+    validateZones(zones.header(), zones.footer());
     try (var document = new PDDocument();
         var fontStream = getClass().getResourceAsStream("/fonts/DejaVuSans.ttf")) {
       if (fontStream == null) throw new IllegalStateException("CONTRACT_FONT_UNAVAILABLE");
@@ -55,9 +128,9 @@ class ContractPdf {
 
       if (html)
         appendHtmlPages(
-            document, font, lines, Objects.toString(agreement.get("body_snapshot"), ""));
-      else appendPages(document, font, lines);
-      appendPages(document, font, proof);
+            document, font, lines, Objects.toString(agreement.get("body_snapshot"), ""), zones);
+      else appendPages(document, font, lines, zones);
+      appendPages(document, font, proof, zones);
       var signaturePage = new PDPage(PDRectangle.A4);
       document.addPage(signaturePage);
       try (var content = new PDPageContentStream(document, signaturePage)) {
@@ -71,7 +144,7 @@ class ContractPdf {
         if (Boolean.TRUE.equals(agreement.get("guardian_acknowledgement")))
           signatureLabels.addAll(
               wrap("Représentant légal de : " + agreement.get("patient_name"), font));
-        write(content, font, signatureLabels, 48, 790, 10, 17);
+        write(content, font, signatureLabels, 48, zones.top(), 10, 17);
         // The signature has its own fixed region, separate from the contract and proof text.
         content.setLineWidth(0.8f);
         content.addRect(48, 270, 499, 150);
@@ -92,8 +165,9 @@ class ContractPdf {
         hashes.add("Empreinte de signature :");
         hashes.add(Objects.toString(agreement.get("signature_sha256"), ""));
         write(content, font, hashes, 48, 235, 8, 15);
-        footer(content, font, document.getNumberOfPages());
+        if (!zones.hasFooter()) footer(content, font, document.getNumberOfPages());
       }
+      decorate(document, font, zones);
       var info = document.getDocumentInformation();
       info.setTitle("Contrat HEALTH’YS");
       info.setAuthor("HEALTH’YS");
@@ -112,9 +186,12 @@ class ContractPdf {
     }
   }
 
-  private void appendPages(PDDocument document, PDType0Font font, List<String> lines)
+  private void appendPages(PDDocument document, PDType0Font font, List<String> lines, Zones zones)
       throws IOException {
-    int perPage = 43;
+    int perPage =
+        !zones.hasHeader() && !zones.hasFooter()
+            ? 43
+            : Math.max(1, (int) ((zones.top() - zones.bottom()) / 16));
     for (int offset = 0; offset < lines.size(); offset += perPage) {
       var page = new PDPage(PDRectangle.A4);
       document.addPage(page);
@@ -124,10 +201,10 @@ class ContractPdf {
             font,
             lines.subList(offset, Math.min(offset + perPage, lines.size())),
             48,
-            790,
+            zones.top(),
             10,
             16);
-        footer(content, font, document.getNumberOfPages());
+        if (!zones.hasFooter()) footer(content, font, document.getNumberOfPages());
       }
     }
   }
@@ -178,11 +255,12 @@ class ContractPdf {
   }
 
   private void appendHtmlPages(
-      PDDocument document, PDType0Font font, List<String> header, String html) throws IOException {
+      PDDocument document, PDType0Font font, List<String> header, String html, Zones zones)
+      throws IOException {
     var parser = new RichParser();
     new ParserDelegator().parse(new StringReader(ContractHtml.sanitize(html)), parser, true);
     parser.flush();
-    try (var pages = new RichPages(document, font)) {
+    try (var pages = new RichPages(document, font, zones, true)) {
       for (String line : header)
         pages.paragraph(new Paragraph(List.of(new Span(line, Style.PLAIN)), 10, 0));
       for (Block block : parser.blocks) {
@@ -190,6 +268,58 @@ class ContractPdf {
         else if (block instanceof Table table) pages.table(table);
       }
     }
+  }
+
+  private record ZoneText(List<Span> spans, float x, float baselineOffset, float size) {}
+
+  private record ZoneBorder(float x, float topOffset, float width, float height) {}
+
+  private record ZoneLayout(List<ZoneText> text, List<ZoneBorder> borders, float height) {}
+
+  /** Decorations run after all body/proof/signature pages exist, so counters are final. */
+  private void decorate(PDDocument document, PDType0Font font, Zones zones) throws IOException {
+    if (!zones.hasHeader() && !zones.hasFooter()) return;
+    var metrics = new RichPages(document, font, zones, false);
+    int count = document.getNumberOfPages();
+    for (int i = 0; i < count; i++) {
+      try (var stream =
+          new PDPageContentStream(
+              document, document.getPage(i), PDPageContentStream.AppendMode.APPEND, true, true)) {
+        metrics.content = stream;
+        if (zones.hasHeader())
+          drawZone(
+              metrics,
+              pages(zones.header(), Integer.toString(i + 1), Integer.toString(count)),
+              PDRectangle.A4.getHeight() - ZONE_PADDING,
+              HEADER_HEIGHT - 2 * ZONE_PADDING,
+              "HEADER");
+        if (zones.hasFooter())
+          drawZone(
+              metrics,
+              pages(zones.footer(), Integer.toString(i + 1), Integer.toString(count)),
+              FOOTER_HEIGHT - ZONE_PADDING,
+              FOOTER_HEIGHT - 2 * ZONE_PADDING,
+              "FOOTER");
+      } finally {
+        metrics.content = null;
+      }
+    }
+  }
+
+  private void drawZone(RichPages metrics, String html, float top, float height, String name)
+      throws IOException {
+    var layout = metrics.zoneLayout(html);
+    if (layout.height() > height)
+      throw new BusinessRuleException(
+          "CONTRACT_" + name + "_TOO_TALL", "Contract zone exceeds its fixed printable height");
+    for (var border : layout.borders()) {
+      metrics.content.setLineWidth(.5f);
+      metrics.content.addRect(
+          border.x(), top - border.topOffset() - border.height(), border.width(), border.height());
+      metrics.content.stroke();
+    }
+    for (var line : layout.text())
+      metrics.draw(line.spans(), line.x(), top - line.baselineOffset(), line.size());
   }
 
   private interface Block {}
@@ -352,13 +482,16 @@ class ContractPdf {
   private class RichPages implements AutoCloseable {
     final PDDocument document;
     final PDType0Font font;
+    final Zones zones;
     PDPageContentStream content;
     float y;
 
-    RichPages(PDDocument document, PDType0Font font) throws IOException {
+    RichPages(PDDocument document, PDType0Font font, Zones zones, boolean createPage)
+        throws IOException {
       this.document = document;
       this.font = font;
-      nextPage();
+      this.zones = zones;
+      if (createPage) nextPage();
     }
 
     void nextPage() throws IOException {
@@ -366,7 +499,7 @@ class ContractPdf {
       var page = new PDPage(PDRectangle.A4);
       document.addPage(page);
       content = new PDPageContentStream(document, page);
-      y = 790;
+      y = zones.top();
     }
 
     void finishPage() throws IOException {
@@ -374,14 +507,14 @@ class ContractPdf {
         content.beginText();
         content.setRenderingMode(RenderingMode.FILL);
         content.endText();
-        footer(content, font, document.getNumberOfPages());
+        if (!zones.hasFooter()) footer(content, font, document.getNumberOfPages());
         content.close();
         content = null;
       }
     }
 
     void ensure(float height) throws IOException {
-      if (y - height < 64) nextPage();
+      if (y - height < zones.bottom()) nextPage();
     }
 
     void paragraph(Paragraph paragraph) throws IOException {
@@ -411,7 +544,7 @@ class ContractPdf {
         }
         for (int offset = 0; offset < totalLines; ) {
           ensure(leading + 2 * padding);
-          int capacity = Math.max(1, (int) ((y - 64 - 2 * padding) / leading));
+          int capacity = Math.max(1, (int) ((y - zones.bottom() - 2 * padding) / leading));
           int count = Math.min(capacity, totalLines - offset);
           float height = count * leading + 2 * padding;
           for (int column = 0; column < columns; column++) {
@@ -433,6 +566,55 @@ class ContractPdf {
         }
       }
       y -= 10;
+    }
+
+    ZoneLayout zoneLayout(String html) throws IOException {
+      var parser = new RichParser();
+      new ParserDelegator().parse(new StringReader(html), parser, true);
+      parser.flush();
+      var text = new ArrayList<ZoneText>();
+      var borders = new ArrayList<ZoneBorder>();
+      float consumed = 0;
+      for (var block : parser.blocks) {
+        if (block instanceof Paragraph paragraph) {
+          float indent = Math.min(140, paragraph.indent()), leading = paragraph.size() + 6;
+          for (var line : wrapped(paragraph.spans(), paragraph.size(), 495 - indent)) {
+            text.add(
+                new ZoneText(line, 48 + indent, consumed + paragraph.size(), paragraph.size()));
+            consumed += leading;
+          }
+          consumed += paragraph.size() > 10 ? 7 : 4;
+        } else if (block instanceof Table table) {
+          int columns = table.rows().stream().mapToInt(List::size).max().orElse(1);
+          float width = 495f / columns, padding = 5, size = 9, leading = 13;
+          for (var row : table.rows()) {
+            var cells = new ArrayList<List<List<Span>>>();
+            int lineCount = 1;
+            for (int c = 0; c < columns; c++) {
+              var lines =
+                  wrapped(
+                      c < row.size() ? row.get(c) : List.of(),
+                      size,
+                      Math.max(1, width - 2 * padding));
+              cells.add(lines);
+              lineCount = Math.max(lineCount, lines.size());
+            }
+            float height = lineCount * leading + 2 * padding;
+            for (int c = 0; c < columns; c++) {
+              float x = 48 + c * width;
+              borders.add(new ZoneBorder(x, consumed, width, height));
+              var lines = cells.get(c);
+              for (int l = 0; l < lines.size(); l++)
+                text.add(
+                    new ZoneText(
+                        lines.get(l), x + padding, consumed + padding + size + l * leading, size));
+            }
+            consumed += height;
+          }
+          consumed += 10;
+        }
+      }
+      return new ZoneLayout(List.copyOf(text), List.copyOf(borders), consumed);
     }
 
     void draw(List<Span> spans, float x, float baseline, float size) throws IOException {

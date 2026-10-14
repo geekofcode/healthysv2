@@ -21,7 +21,14 @@
     "plain": "Texte brut",
     "serverValidation": "Le contenu HTML est nettoyé et contrôlé par le serveur. Le PDF conserve une copie du contrat et de son format au moment de la signature.",
     "importHtml": "Importer un fichier HTML",
-    "importError": "Choisissez un fichier HTML de moins de 150 Ko et 50 000 caractères."
+    "importError": "Choisissez un fichier HTML de moins de 150 Ko et {{maxLength}} caractères.",
+    "zones": "Zones du contrat",
+    "body": "Corps du contrat",
+    "header": "En-tête",
+    "footer": "Pied de page",
+    "zonesHint": "L’en-tête et le pied de page sont facultatifs, limités à 5 000 caractères chacun et répétés sur chaque page du PDF. Les variables de pagination sont disponibles uniquement dans ces deux zones.",
+    "documentPreview": "Aperçu du contrat complet",
+    "tooLong": "Le contenu dépasse la limite de {{maxLength}} caractères."
   },
   "en": {
     "visual": "Visual editor",
@@ -45,6 +52,13 @@
     "plain": "Plain text",
     "serverValidation": "HTML content is sanitized and validated by the server. The PDF preserves the contract and its format at the time of signature.",
     "importHtml": "Import an HTML file",
-    "importError": "Choose an HTML file smaller than 150 KB and 50,000 characters."
+    "importError": "Choose an HTML file smaller than 150 KB and {{maxLength}} characters.",
+    "zones": "Contract sections",
+    "body": "Contract body",
+    "header": "Header",
+    "footer": "Footer",
+    "zonesHint": "The optional header and footer are limited to 5,000 characters each and repeated on every PDF page. Page-number variables are available only in these two sections.",
+    "documentPreview": "Full contract preview",
+    "tooLong": "Content exceeds the {{maxLength}} character limit."
   }
 }
