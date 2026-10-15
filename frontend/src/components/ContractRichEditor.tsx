@@ -14,7 +14,7 @@ function replaceEditorHtml(editor:HTMLDivElement,html:string){
  const limit=(node:Node)=>node.nodeType===Node.TEXT_NODE?(node.textContent?.length??0):node.childNodes.length;
  const restored=document.createRange();restored.setStart(first,Math.min(startOffset,limit(first)));restored.setEnd(last,Math.min(endOffset,limit(last)));selection.removeAllRanges();selection.addRange(restored);
 }
-const bodyVariables=['signerName','profileLabel','organizationName','patientName','signedAt','signature'];
+const bodyVariables=['signerName','profileLabel','organizationName','patientName','signedAt','currentDate','signature'];
 export function ContractRichEditor({value,onChange,label,maxLength=50000,pagination=false}:{value:string;onChange:(value:string)=>void;label?:string;maxLength?:number;pagination?:boolean}){
  const {t}=useTranslation();const named=(key:string)=>label?`${t(key)} — ${label}`:t(key);const variables=pagination?bodyVariables.filter(v=>v!=='signature').concat(['pageNumber','pageCount']):bodyVariables;const editable=useRef<HTMLDivElement>(null);const emitted=useRef(value);const [mode,setMode]=useState<'visual'|'source'>('visual');const [source,setSource]=useState(value);const [warning,setWarning]=useState(false);const [importError,setImportError]=useState(false);const safe=sanitizeContractHtml(value);
  useEffect(()=>{if(value!==emitted.current)setSource(value);emitted.current=value;if(editable.current&&editable.current.innerHTML!==safe.html)replaceEditorHtml(editable.current,safe.html);},[value,mode]);

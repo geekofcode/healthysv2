@@ -24,6 +24,16 @@ public class ProfileContractService implements ContractAccess {
   private final AccessProfileResolver profiles;
   private final ContractObjectStorage storage;
   private final String clientId;
+  private java.time.ZoneId contractZone = java.time.ZoneOffset.UTC;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  void configureDateZone(@Value("${CONTRACT_TIME_ZONE:UTC}") String zone) {
+    contractZone = java.time.ZoneId.of(zone);
+  }
+
+  static String currentDate(Instant instant, java.time.ZoneId zone) {
+    return instant.atZone(zone).toLocalDate().toString();
+  }
 
   ProfileContractService(
       JdbcTemplate db,
@@ -111,7 +121,9 @@ public class ProfileContractService implements ContractAccess {
         "patientName",
         Objects.toString(patient, ""),
         "signedAt",
-        signedAt == null ? "[date de signature]" : signedAt.toString());
+        signedAt == null ? "[date de signature]" : signedAt.toString(),
+        "currentDate",
+        currentDate(signedAt == null ? Instant.now() : signedAt, contractZone));
   }
 
   static String renderBody(Template template, Map<String, String> values) {
@@ -124,6 +136,7 @@ public class ProfileContractService implements ContractAccess {
         .replace("{{organizationName}}", values.get("organizationName"))
         .replace("{{patientName}}", values.get("patientName"))
         .replace("{{signedAt}}", values.get("signedAt"))
+        .replace("{{currentDate}}", values.getOrDefault("currentDate", ""))
         .replace("{{signature}}", "[Signature manuscrite en fin de document]");
   }
 
@@ -303,7 +316,9 @@ public class ProfileContractService implements ContractAccess {
             "patientName",
             patientName,
             "signedAt",
-            now.toString());
+            now.toString(),
+            "currentDate",
+            currentDate(now, contractZone));
     String body = renderBody(template, values);
     String header = ContractHtml.render(template.headerHtml(), values),
         footer = ContractHtml.render(template.footerHtml(), values);
