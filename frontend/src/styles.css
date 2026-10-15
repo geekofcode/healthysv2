@@ -256,3 +256,7 @@ input[type="checkbox"],input[type="radio"] {width:16px;min-width:16px;height:16p
 .contract-document-preview {margin: 1rem 0; border: 1px solid var(--border); border-radius: .4rem;}
 .contract-document-header {padding: .75rem 1rem; border-bottom: 1px solid var(--border);}
 .contract-document-footer {padding: .75rem 1rem; border-top: 1px solid var(--border);}
+
+.contract-signature-form {grid-template-columns:minmax(0,1fr)}
+.contract-signature-form .contract-document-preview {width:100%;min-width:0;margin:0}
+.contract-signature-form .checkbox-label {grid-column:1/-1;justify-content:flex-start}
