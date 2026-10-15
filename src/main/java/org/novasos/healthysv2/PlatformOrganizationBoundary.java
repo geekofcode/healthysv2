@@ -47,6 +47,9 @@ class PlatformOrganizationBoundary implements WebMvcConfigurer {
           || path.startsWith("/api/v1/admin/contract-templates/")
           || path.equals("/api/v1/admin/overview")
           || path.equals("/api/v1/admin/statistics")
+          || path.equals("/api/v1/admin/platform-audit")
+          || path.equals("/api/v1/admin/account-authentication")
+          || path.equals("/api/v1/admin/subscriptions")
           || path.matches("/api/v1/admin/organizations/[0-9a-fA-F-]{36}/statistics")
           || path.startsWith("/api/v1/admin/accounts")) return true;
       if (path.equals("/api/v1/care/cutover") || path.equals("/api/v1/care/cutover/activate"))

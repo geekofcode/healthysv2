@@ -32,7 +32,7 @@ class AiAuthorization {
 
   Context require(UUID visit, UUID actor, UUID org, UUID profileId) {
     if (actor == null || org == null || profileId == null)
-      throw new AccessDeniedException("ASSIGNED_DOCTOR_REQUIRED");
+      throw new AccessDeniedException("ASSIGNED_CLINICIAN_REQUIRED");
     contracts.requireSigned(actor, profileId);
     permissions.requireForProfile(org, actor, profileId, "clinicalrecords", "READ");
     var rows =
@@ -49,9 +49,9 @@ class AiAuthorization {
         db.queryForObject(
             """
             select count(*) from professional.professional p join identity.person person on person.id=p.person_id
-            where p.id=? and p.person_id=? and p.status='ACTIVE' and person.status='ACTIVE' and p.professional_type in ('DOCTOR','MEDECIN')
+            where p.id=? and p.person_id=? and p.status='ACTIVE' and person.status='ACTIVE' and p.professional_type in ('DOCTOR','MEDECIN','NURSE')
             and exists(select 1 from professional.professional_assignment a where a.professional_id=p.id and a.organization_id=? and a.status='ACTIVE' and a.start_date<=current_date and (a.end_date is null or a.end_date>=current_date))
-            and exists(select 1 from licensing.member m where m.person_id=p.person_id and m.organization_id=? and m.role='DOCTOR' and m.status='ACTIVE' and m.id=?)
+            and exists(select 1 from licensing.member m where m.person_id=p.person_id and m.organization_id=? and m.status='ACTIVE' and m.id=? and ((m.role='DOCTOR' and p.professional_type in ('DOCTOR','MEDECIN')) or (m.role='NURSE' and p.professional_type='NURSE')))
             """,
             Integer.class,
             professional,
@@ -59,7 +59,17 @@ class AiAuthorization {
             org,
             org,
             profileId);
-    if (n == null || n == 0) throw new AccessDeniedException("ASSIGNED_DOCTOR_REQUIRED");
+    if (n == null || n == 0) throw new AccessDeniedException("ASSIGNED_CLINICIAN_REQUIRED");
+    String role =
+        db.queryForObject(
+            "select role from licensing.member where id=? and person_id=? and organization_id=? and"
+                + " status='ACTIVE'",
+            String.class,
+            profileId,
+            actor,
+            org);
+    if (!Set.of("DOCTOR", "NURSE").contains(role == null ? "" : role))
+      throw new AccessDeniedException("ASSIGNED_CLINICIAN_REQUIRED");
     Integer entitlement =
         db.queryForObject(
             "select count(*) from licensing.subscription s join organization.organization o on"
@@ -70,7 +80,7 @@ class AiAuthorization {
             org);
     if (entitlement == null || entitlement == 0) throw new AccessDeniedException("AI_NOT_INCLUDED");
     access.requireAccessForActor(
-        new CurrentUserContext.UserContext(actor, org, Set.of("DOCTOR"), profileId),
+        new CurrentUserContext.UserContext(actor, org, Set.of(role), profileId),
         patient,
         "MEDICAL_RECORD",
         "READ");

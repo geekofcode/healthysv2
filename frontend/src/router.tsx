@@ -1,3 +1,12 @@
+import {MeEntryPage} from './pages/MeEntryPage';
+import {ConsultationsEntryPage} from './pages/ConsultationsEntryPage';
+import {DocumentsEntryPage} from './pages/DocumentsEntryPage';
+import {PatientAppointmentRequestsPage} from './pages/PatientAppointmentRequestsPage';
+import {StaffAppointmentRequestsPage} from './pages/StaffAppointmentRequestsPage';
+import {CareVisitSchedulePage} from './pages/CareVisitSchedulePage';
+import {CareSpecialityPoliciesPage} from './pages/CareSpecialityPoliciesPage';
+import {PlatformSubscriptionsPage} from './pages/PlatformSubscriptionsPage';
+import {PlatformAuditPage} from './pages/PlatformAuditPage';
 import {ProfileSelectionPage} from './pages/ProfileSelectionPage';
 import {PatientProfileCreatePage} from './pages/PatientProfileCreatePage';
 import {ProfileContractPage} from './pages/ProfileContractPage';
@@ -69,7 +78,7 @@ export const router = createBrowserRouter([
         element: <MainLayout />,
         children: [
           {path: '/', element: <DashboardPage />},
-          {path: '/me', element: <MePage />},
+          {path: '/me', element: <MeEntryPage />},
           {path: '/me/access', element: <MyPatientAccessPage />},
           {path: '/professional-onboarding', element: <ProfessionalOnboardingPage />},
           {path: '/professional-invitation', element: <ProfessionalInvitationPage />},
@@ -99,18 +108,24 @@ export const router = createBrowserRouter([
           {path: '/care/episodes/new', element: <CareEpisodeCreatePage />},
           {path: '/care/episodes/:id', element: <CareEpisodePage />},
           {path: '/care/visits/:id', element: <CareVisitPage />},
+          {path: '/agenda/request', element: <PatientAppointmentRequestsPage />},
+          {path: '/agenda/requests', element: <StaffAppointmentRequestsPage />},
+          {path: '/care/visits/:id/schedule', element: <CareVisitSchedulePage />},
+          {path: '/billing/speciality-policies', element: <CareSpecialityPoliciesPage />},
           {path: '/agenda', element: <AgendaEntryPage />},
           {path: '/agenda/legacy', element: <LegacyCareBoundary>{readOnly=><AgendaPage readOnly={readOnly}/>}</LegacyCareBoundary>},
-          {path: '/consultations', element: <LegacyCareBoundary>{readOnly=><ConsultationsPage readOnly={readOnly}/>}</LegacyCareBoundary>},
+          {path: '/consultations', element: <ConsultationsEntryPage />},
           {path: '/consultations/new', element: <LegacyCareBoundary writeOnly>{()=><ConsultationStartPage/>}</LegacyCareBoundary>},
           {path: '/consultations/:id', element: <LegacyCareBoundary>{readOnly=><ConsultationPage readOnly={readOnly}/>}</LegacyCareBoundary>},
-          {path: '/documents', element: <DocumentsPage />},
+          {path: '/documents', element: <DocumentsEntryPage />},
           {path: '/notifications', element: <NotificationsPage />},
           {path: '/billing', element: <BillingPage />},
           {path: '/billing/tariffs', element: <CareTariffsPage />},
           {path: '/billing/cash', element: <CashManagementPage />},
           {path: '/billing/invoices/:id', element: <InvoiceDetailPage />},
           {path: '/admin/contract-templates', element: <ContractTemplatesPage />},
+          {path: '/admin/subscriptions', element: <PlatformSubscriptionsPage />},
+          {path: '/admin/platform-audit', element: <PlatformAuditPage />},
           {path: '/admin/accounts', element: <PlatformAccountsPage />},
           {path: '/admin', element: <AdminPlatformPage />},
           {path: '/admin/audit-security', element: <AuditSecurityDashboardPage />},

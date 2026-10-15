@@ -41,6 +41,13 @@ class AiAuthorizationTests {
             eq(org),
             eq(profile)))
         .thenReturn(1);
+    when(db.queryForObject(
+            contains("select role from licensing.member"),
+            eq(String.class),
+            eq(profile),
+            eq(actor),
+            eq(org)))
+        .thenReturn("DOCTOR");
     when(db.queryForObject(contains("licensing.subscription"), eq(Integer.class), eq(org)))
         .thenReturn(1);
   }
@@ -56,6 +63,41 @@ class AiAuthorizationTests {
             eq(patient),
             eq("MEDICAL_RECORD"),
             eq("READ"));
+  }
+
+  @Test
+  void assignedNurseWorkerUsesOnlyItsPersistedSelectedRole() {
+    setup();
+    when(db.queryForObject(
+            contains("select role from licensing.member"),
+            eq(String.class),
+            eq(profile),
+            eq(actor),
+            eq(org)))
+        .thenReturn("NURSE");
+    auth.requireExecution(visit, actor, org, profile);
+    verify(access)
+        .requireAccessForActor(
+            eq(new CurrentUserContext.UserContext(actor, org, Set.of("NURSE"), profile)),
+            eq(patient),
+            eq("MEDICAL_RECORD"),
+            eq("READ"));
+    verify(permissions).requireForProfile(org, actor, profile, "ai", "CREATE");
+  }
+
+  @Test
+  void ownerProfileCannotInheritAnotherClinicalMembershipForAi() {
+    setup();
+    when(db.queryForObject(
+            contains("select role from licensing.member"),
+            eq(String.class),
+            eq(profile),
+            eq(actor),
+            eq(org)))
+        .thenReturn("HOSPITAL_ADMIN");
+    assertThrows(
+        AccessDeniedException.class, () -> auth.requireExecution(visit, actor, org, profile));
+    verifyNoInteractions(access);
   }
 
   @Test

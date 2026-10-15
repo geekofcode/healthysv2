@@ -175,7 +175,7 @@ def build_plan(snapshot, retention_years=30, follow_up_seconds=604800):
         invoice, paid = matched_invoice(source, appointment_id)
         episode = {'id':episode_id, 'patient_id':str(source['patient_id']),
          'organization_id':str(source['organization_id']), 'reason':reason,
-         'status':'CLOSED' if completed else ('READY' if paid else 'AWAITING_PAYMENT'),
+         'status':'CLOSED' if completed else ('ACTIVE' if paid else 'DRAFT'),
          'follow_up_seconds':follow_up_seconds,
          'started_at':started.isoformat() if started else None,
          'expires_at':(started+timedelta(seconds=follow_up_seconds)).isoformat() if started else None,

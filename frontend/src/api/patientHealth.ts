@@ -1,0 +1,23 @@
+import {apiRequest,ApiError} from './client';
+import {selectedProfile} from '../auth/profileContext';
+import type {MyProfile,ProfileInput} from './persons';
+export type HealthParameter={id:string;code:string;label:string;valueType:'NUMERIC'|'TEXT'|'BOOLEAN';unit?:string;loincCode?:string;custom:boolean;active:boolean};
+export type HealthObservation={id:string;parameterId:string;code:string;label:string;valueType:string;value:string;unit?:string;measuredAt:string;recordedAt:string;selfReported:boolean;organizationId?:string;organizationName?:string;visitId?:string;actorName?:string;supersedesId?:string};
+export type HealthDeclaration={id:string;kind:string;label:string;value?:string;detail?:string;occurredOn?:string;recordedAt?:string;selfReported?:boolean;supersedesId?:string};
+const base='/patients/me/health';
+export const getPatientPersonalProfile=()=>apiRequest<MyProfile>(`${base}/personal`);
+export const updatePatientPersonalProfile=(input:ProfileInput)=>apiRequest<MyProfile>(`${base}/personal`,{method:'PUT',body:JSON.stringify(input)});
+export const listSelfHealthParameters=()=>apiRequest<HealthParameter[]>(`${base}/parameters`);
+export const createSelfHealthParameter=(input:{label:string;valueType:string;unit?:string})=>apiRequest<HealthParameter>(`${base}/parameters`,{method:'POST',body:JSON.stringify(input)});
+export const listSelfHealthObservations=(parameterId='',page=0)=>apiRequest<{items:HealthObservation[];total:number;page:number;size:number}>(`${base}/observations?parameterId=${encodeURIComponent(parameterId)}&page=${page}&size=50`);
+export const recordSelfHealthObservation=(input:{parameterId:string;value:string;measuredAt:string;note?:string;supersedesId?:string})=>apiRequest<HealthObservation>(`${base}/observations`,{method:'POST',body:JSON.stringify(input)});
+export const listSelfHealthDeclarations=()=>apiRequest<HealthDeclaration[]>(`${base}/declarations`);
+export const recordSelfHealthDeclaration=(input:{kind:string;label:string;value?:string;detail?:string;occurredOn?:string;supersedesId?:string})=>apiRequest<HealthDeclaration>(`${base}/declarations`,{method:'POST',body:JSON.stringify(input)});
+export const listClinicalHealthParameters=(patientId:string)=>apiRequest<HealthParameter[]>(`/patients/${patientId}/health/parameters`);
+export const listClinicalHealthObservations=(patientId:string)=>apiRequest<{items:HealthObservation[]}>(`/patients/${patientId}/health/observations`);
+export async function getSelectedPatientPhoto(){const {keycloak,validAccessToken}=await import('../auth/keycloak');const selection=selectedProfile(keycloak.tokenParsed?.sub);const token=await validAccessToken();const headers=new Headers({Authorization:`Bearer ${token}`});if(selection)headers.set('X-Profile-ID',selection.id);const response=await fetch(`${import.meta.env.VITE_API_BASE_URL}${base}/photo`,{headers});if(response.status===404)return null;if(!response.ok)throw new ApiError(response.status,'PATIENT_PHOTO_UNAVAILABLE','Patient photo unavailable.');const image=await response.blob();if(JSON.stringify(selectedProfile(keycloak.tokenParsed?.sub))!==JSON.stringify(selection))throw new ApiError(409,'PROFILE_CHANGED','Profile changed.');return image;}
+export const uploadSelectedPatientPhoto=(file:File)=>{const form=new FormData();form.set('file',file);return apiRequest<void>(`${base}/photo`,{method:'PUT',body:form});};
+export const listReceptionHealthParameters=(visitId?:string)=>apiRequest<HealthParameter[]>(`/care/health-parameters${visitId?`?visitId=${encodeURIComponent(visitId)}`:''}`);
+export type DatedMeasurement={parameterId:string;value:string;measuredAt:string;note?:string;supersedesId?:string};
+export const listVisitHealthObservations=(visitId:string)=>apiRequest<HealthObservation[]>(`/care/visits/${visitId}/observations`);
+export const recordVisitHealthObservations=(visitId:string,measurements:DatedMeasurement[])=>apiRequest<HealthObservation[]>(`/care/visits/${visitId}/observations`,{method:'POST',body:JSON.stringify({measurements})});

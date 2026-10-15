@@ -261,8 +261,8 @@ class CareVisitPrescriptionService implements CareVisitPrescriptionReader {
 
   private void lockOrganizationForWrite() {
     var user = users.current();
-    if (!user.has("DOCTOR") || user.personId() == null || user.organizationId() == null)
-      throw new AccessDeniedException("Selected establishment doctor context required");
+    if (!user.hasAny("DOCTOR", "NURSE") || user.personId() == null || user.organizationId() == null)
+      throw new AccessDeniedException("Selected establishment clinician context required");
     jdbc.queryForObject(
         "select id from organization.organization where id=? for update",
         UUID.class,
@@ -272,12 +272,12 @@ class CareVisitPrescriptionService implements CareVisitPrescriptionReader {
 
   private UUID writer(Visit visit) {
     var user = users.current();
-    if (!user.has("DOCTOR")
+    if (!user.hasAny("DOCTOR", "NURSE")
         || user.personId() == null
         || !user.personId().equals(visit.doctorPerson())
         || !visit.organization().equals(user.organizationId()))
       throw new AccessDeniedException(
-          "Only the assigned establishment doctor may edit this prescription");
+          "Only the assigned establishment clinician may edit this prescription");
     licensing.requireMember(visit.organization());
     licensing.requireActive(visit.organization());
     if (!List.of("IN_PROGRESS", "COMPLETED").contains(visit.status()))
@@ -286,18 +286,19 @@ class CareVisitPrescriptionService implements CareVisitPrescriptionReader {
     Integer eligible =
         jdbc.queryForObject(
             """
-            select count(*) from professional.professional p where p.person_id=? and p.status='ACTIVE'
-              and p.professional_type in ('DOCTOR','MEDECIN')
+            select count(*) from professional.professional p join identity.person person on person.id=p.person_id and person.status='ACTIVE' where p.person_id=? and p.id=(select professional_id from care.care_visit where id=?) and p.status='ACTIVE'
+              and p.professional_type in ('DOCTOR','MEDECIN','NURSE')
               and exists(select 1 from professional.professional_assignment a where a.professional_id=p.id
                 and a.organization_id=? and a.status='ACTIVE' and a.start_date<=current_date and (a.end_date is null or a.end_date>=current_date))
-              and exists(select 1 from licensing.member m where m.person_id=p.person_id and m.organization_id=? and m.status='ACTIVE' and m.role='DOCTOR')
+              and exists(select 1 from licensing.member m where m.person_id=p.person_id and m.organization_id=? and m.status='ACTIVE' and ((m.role='DOCTOR' and p.professional_type in ('DOCTOR','MEDECIN')) or (m.role='NURSE' and p.professional_type='NURSE')))
             """,
             Integer.class,
             user.personId(),
+            visit.id(),
             visit.organization(),
             visit.organization());
     if (eligible == null || eligible == 0)
-      throw new AccessDeniedException("Active doctor assignment required");
+      throw new AccessDeniedException("Active clinician assignment required");
     access.requireAccess(visit.patientId(), "PRESCRIPTIONS", "WRITE");
     return user.personId();
   }

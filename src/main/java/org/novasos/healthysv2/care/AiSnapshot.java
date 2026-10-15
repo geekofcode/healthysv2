@@ -74,7 +74,7 @@ class AiSnapshot {
         "Derniers rapports validés",
         db.queryForList(
             """
-            select r.id,r.validated_at,r.reason,r.observations,r.diagnosis,r.treatment,r.follow_up from care.visit_report_revision r
+            select r.id,r.validated_at,r.reason,r.observations,r.diagnosis,r.treatment,r.follow_up,r.exam_requests::text as exam_requests from care.visit_report_revision r
             join care.care_visit v on v.id=r.visit_id join care.care_episode e on e.id=v.episode_id
             where e.patient_id=? and r.revision=(select max(x.revision) from care.visit_report_revision x where x.visit_id=r.visit_id)
             order by r.validated_at desc,r.id limit 20
@@ -107,6 +107,33 @@ class AiSnapshot {
                 + " r.revision=(select max(x.revision) from care.visit_prescription_revision x"
                 + " where x.visit_id=r.visit_id) order by r.validated_at desc,r.id limit 20",
             c.patientId()));
+    add(
+        sources,
+        "measured_observations",
+        "Observations datées avec provenance (self_reported = déclarées, non validées)",
+        db.queryForList(
+            """
+            select o.id,o.parameter_id,o.code,o.label,o.value_text,o.unit,o.note,o.measured_at,o.recorded_at,
+                o.self_reported,o.organization_id,org.name organization_name,o.visit_id,o.actor_person_id,o.supersedes_id,
+                case when o.self_reported then 'PATIENT_DECLARED_NOT_VALIDATED' else 'CLINICIAN_MEASURED' end provenance
+            from patienthealth.observation o left join organization.organization org on org.id=o.organization_id
+            where o.patient_id=? and not exists(select 1 from patienthealth.observation newer where newer.supersedes_id=o.id)
+            order by o.measured_at desc,o.recorded_at desc,o.id limit 100
+            """,
+            c.patientId()));
+    add(
+        sources,
+        "patient_declarations",
+        "Déclarations patient non validées — ne pas présenter comme des faits cliniques confirmés",
+        db.queryForList(
+            """
+            select d.id,d.kind,d.label,d.value_text,d.detail,d.occurred_on,d.recorded_at,d.actor_person_id,d.supersedes_id,
+                'PATIENT_DECLARED_NOT_VALIDATED' as provenance
+            from patienthealth.declaration d where d.patient_id=?
+                and not exists(select 1 from patienthealth.declaration newer where newer.supersedes_id=d.id)
+            order by d.recorded_at desc,d.id limit 50
+            """,
+            c.patientId()));
     List<String> digests = new ArrayList<>();
     for (String table :
         List.of(
@@ -120,6 +147,15 @@ class AiSnapshot {
           db.queryForObject(
               "select coalesce(md5(string_agg(md5(to_jsonb(t)::text),'' order by id)),'') from"
                   + " patient."
+                  + table
+                  + " t where patient_id=?",
+              String.class,
+              c.patientId()));
+    for (String table : List.of("observation", "declaration"))
+      digests.add(
+          db.queryForObject(
+              "select coalesce(md5(string_agg(md5(to_jsonb(t)::text),'' order by t.id)),'') from"
+                  + " patienthealth."
                   + table
                   + " t where patient_id=?",
               String.class,

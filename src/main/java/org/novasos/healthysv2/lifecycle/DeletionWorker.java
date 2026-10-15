@@ -430,21 +430,34 @@ class DeletionWorker {
     // Deliberately fixed whitelist: no caller controls table/column names. Shared clinical,
     // cash and audit graphs are never fed into a generic cascading DELETE.
     Map<String, String> tables =
-        Map.of(
-            "identity.person_contact",
-            "id",
-            "identity.emergency_contact",
-            "id",
-            "identity.person_preferences",
-            "person_id",
-            "notification.notification_preference",
-            "person_id",
-            "notification.push_outbox",
-            "id");
+        new java.util.LinkedHashMap<>(
+            Map.of(
+                "identity.person_contact",
+                "id",
+                "identity.emergency_contact",
+                "id",
+                "identity.person_preferences",
+                "person_id",
+                "notification.notification_preference",
+                "person_id",
+                "notification.push_outbox",
+                "id"));
+    for (String table :
+        List.of(
+            "patienthealth.observation",
+            "patienthealth.declaration",
+            "patienthealth.photo",
+            "patienthealth.parameter",
+            "identity.account_reset_outbox",
+            "care.closed_calendar_window",
+            "care.appointment_request")) tables.put(table, "id");
     for (var entry : tables.entrySet())
       tx.executeWithoutResult(
           status -> {
             String table = entry.getKey(), column = entry.getValue();
+            if (table.startsWith("patienthealth."))
+              jdbc.queryForObject(
+                  "select set_config('healthys.retention_purge','on',true)", String.class);
             var ids =
                 jdbc.query(
                     "select "

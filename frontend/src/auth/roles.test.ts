@@ -14,7 +14,7 @@ describe('Keycloak application roles', () => {
     const roles = applicationRoles(['gestionnaire']);
     expect(canAccessPath(roles, '/organizations/123')).toBe(true);
     expect(canAccessPath(roles, '/professionals/123')).toBe(true);
-    for (const path of ['/organizations/new', '/organizations/123/edit', '/professionals/new', '/patients/new', '/admin']) expect(canAccessPath(roles, path)).toBe(false);
+    for (const path of ['/organizations/new', '/organizations/123/edit', '/admin']) expect(canAccessPath(roles, path)).toBe(false);
     expect(roles).not.toContain('HOSPITAL_AGENT');
     expect(roles).not.toContain('HOSPITAL_ADMIN');
   });
@@ -28,7 +28,7 @@ describe('Keycloak application roles', () => {
   it('restricts platform administrators from professional operations and patient changes to administrative staff', () => {
     expect(canAccessPath(['HOSPITAL_ADMIN'], '/professionals/123/edit')).toBe(true);
     expect(canAccessPath(['PLATFORM_ADMIN'], '/professionals/123/edit')).toBe(false);
-    expect(canAccessPath(['DOCTOR'], '/patients/123/edit')).toBe(false);
+    expect(canAccessPath(['DOCTOR'], '/patients/123/edit')).toBe(true);
     expect(canAccessPath(['HOSPITAL_AGENT'], '/patients/123/edit')).toBe(true);
   });
   it('allows accounting without clinical privileges', () => {

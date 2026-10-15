@@ -1,5 +1,8 @@
 package org.novasos.healthysv2.care;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.Timestamp;
 import java.time.*;
 import java.util.*;
@@ -25,7 +28,22 @@ public class EncounterService implements VisitReportReader {
   private final AuditTrail audit;
   private final CarePolicy policy;
   private final Duration inProgressDuration;
+  private final ObjectMapper json = new ObjectMapper();
   private AiJobService aiJobs;
+  private FollowUpService followUps;
+  private org.novasos.healthysv2.patienthealth.api.PatientObservationAccess observations;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  void configureObservations(
+      org.novasos.healthysv2.patienthealth.api.PatientObservationAccess observations) {
+    this.observations = observations;
+  }
+
+  @org.springframework.beans.factory.annotation.Autowired
+  void configureFollowUps(FollowUpService followUps) {
+    this.followUps = followUps;
+  }
+
   private org.novasos.healthysv2.organizationaccess.api.OrganizationPermissionAccess permissions;
 
   @org.springframework.beans.factory.annotation.Autowired
@@ -65,7 +83,7 @@ public class EncounterService implements VisitReportReader {
   }
 
   public EncounterDtos.Started start(UUID id, long version) {
-    var visit = lockedDoctorVisit(id);
+    var visit = lockedClinicianVisit(id);
     permissions.require(visit.episode().getOrganizationId(), "visits", "UPDATE");
     checkVersion(visit.getVersion(), version);
     Instant now = Instant.now();
@@ -109,13 +127,31 @@ public class EncounterService implements VisitReportReader {
     return response(visit, state(id));
   }
 
+  @Transactional(readOnly = true)
+  public List<org.novasos.healthysv2.patienthealth.api.PatientHealthDtos.Observation> observations(
+      UUID id) {
+    requireClinicalReader();
+    readableVisit(id);
+    return observations.forVisit(id);
+  }
+
+  public List<org.novasos.healthysv2.patienthealth.api.PatientHealthDtos.Observation> remeasure(
+      UUID id, org.novasos.healthysv2.patienthealth.api.PatientHealthDtos.Measurements request) {
+    var visit = lockedClinicianVisit(id);
+    requireClinicalWrite(visit);
+    if (visit.getStatus() != CareVisit.Status.IN_PROGRESS)
+      throw rule("VISIT_NOT_IN_PROGRESS", "Measurements require a current medical encounter");
+    return observations.appendMeasured(id, request.measurements());
+  }
+
   public EncounterDtos.Report save(UUID id, EncounterDtos.Draft request) {
-    var visit = lockedDoctorVisit(id);
+    var visit = lockedClinicianVisit(id);
     requireClinicalWrite(visit);
     var draft = state(id);
     checkVersion(draft.version(), request.version());
     if (draft.status().equals("VALIDATED"))
       throw rule("REPORT_VALIDATED", "Open a traced correction before editing a validated report");
+    validateExams(request.examRequests());
     UUID provenance = draft.aiJobId();
     if (request.aiJobId() != null && !request.aiJobId().equals(provenance)) {
       provenance = aiJobs.requireReportProvenance(id, request.aiJobId());
@@ -151,6 +187,10 @@ public class EncounterService implements VisitReportReader {
           users.current().personId(),
           retention(now));
     }
+    jdbc.update(
+        "update care.visit_report set exam_requests=?::jsonb where visit_id=?",
+        encodeExams(request.examRequests()),
+        id);
     if (provenance != null)
       jdbc.update("update care.visit_report set ai_job_id=? where visit_id=?", provenance, id);
     auditReport(visit, "SAVE_DRAFT", draft.revision());
@@ -158,11 +198,20 @@ public class EncounterService implements VisitReportReader {
   }
 
   public EncounterDtos.Report finalizeReport(UUID id, long version) {
-    var visit = lockedDoctorVisit(id);
+    return finalizeReport(id, new EncounterDtos.Finalize(version, null, null));
+  }
+
+  public EncounterDtos.Report finalizeReport(UUID id, EncounterDtos.Finalize request) {
+    var visit = lockedClinicianVisit(id);
     requireClinicalWrite(visit);
     var draft = state(id);
-    checkVersion(draft.version(), version);
+    checkVersion(draft.version(), request.version());
     requireFinalizable(draft);
+    if (request.followUpAt() == null && request.followUpProfessionalId() != null)
+      throw rule("FOLLOW_UP_DATE_REQUIRED", "Provide a date when assigning a follow-up clinician");
+    if (request.followUpAt() != null && visit.getStatus() != CareVisit.Status.IN_PROGRESS)
+      throw rule(
+          "FOLLOW_UP_ALREADY_COMPLETED", "A report correction cannot create a duplicate follow-up");
     Instant now = Instant.now();
     UUID previous =
         jdbc.query(
@@ -173,8 +222,8 @@ public class EncounterService implements VisitReportReader {
     jdbc.update(
         """
         insert into care.visit_report_revision(id,visit_id,revision,reason,observations,diagnosis,treatment,follow_up,
-            validated_at,validated_by,correction_reason,previous_revision_id,retention_expires_at,ai_job_id,patient_visible)
-        values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            validated_at,validated_by,correction_reason,previous_revision_id,retention_expires_at,ai_job_id,patient_visible,exam_requests)
+        values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?::jsonb)
         """,
         UUID.randomUUID(),
         id,
@@ -190,7 +239,8 @@ public class EncounterService implements VisitReportReader {
         previous,
         retention(now),
         draft.aiJobId(),
-        draft.patientVisible());
+        draft.patientVisible(),
+        encodeExams(draft.examRequests()));
     jdbc.update(
         "update care.visit_report set"
             + " status='VALIDATED',version=version+1,updated_at=?,updated_by=? where visit_id=?",
@@ -201,12 +251,23 @@ public class EncounterService implements VisitReportReader {
       visit.complete(now);
       visits.flush();
     }
+    UUID followUpVisitId = null;
+    if (request.followUpAt() != null) {
+      followUpVisitId =
+          followUps.createFromVisit(
+              id,
+              request.followUpAt(),
+              request.followUpProfessionalId() == null
+                  ? visit.getProfessionalId()
+                  : request.followUpProfessionalId(),
+              draft.followUp());
+    }
     auditReport(visit, "VALIDATE_REPORT", draft.revision());
-    return response(visit, state(id));
+    return response(visit, state(id), followUpVisitId);
   }
 
   public EncounterDtos.Report correct(UUID id, EncounterDtos.Correction request) {
-    var visit = lockedDoctorVisit(id);
+    var visit = lockedClinicianVisit(id);
     requireClinicalWrite(visit);
     var draft = state(id);
     checkVersion(draft.version(), request.version());
@@ -251,7 +312,8 @@ public class EncounterService implements VisitReportReader {
       String diagnosis,
       String treatment,
       String followUp,
-      boolean historical) {}
+      boolean historical,
+      List<EncounterDtos.ExamRequest> examRequests) {}
 
   @Transactional(readOnly = true)
   public List<HistoryReport> history(UUID patientId) {
@@ -289,15 +351,16 @@ public class EncounterService implements VisitReportReader {
                 rs.getString("diagnosis"),
                 rs.getString("treatment"),
                 rs.getString("follow_up"),
-                rs.getBoolean("historical")),
+                rs.getBoolean("historical"),
+                decodeExams(rs.getString("exam_requests"))),
         patientId,
         self);
   }
 
-  private CareVisit lockedDoctorVisit(UUID id) {
+  private CareVisit lockedClinicianVisit(UUID id) {
     var user = users.current();
-    if (user.personId() == null || user.organizationId() == null || !user.has("DOCTOR"))
-      throw new AccessDeniedException("ASSIGNED_DOCTOR_REQUIRED");
+    if (user.personId() == null || user.organizationId() == null || !user.hasAny("DOCTOR", "NURSE"))
+      throw new AccessDeniedException("ASSIGNED_CLINICIAN_REQUIRED");
     jdbc.queryForObject(
         "select id from organization.organization where id=? for update",
         UUID.class,
@@ -317,17 +380,18 @@ public class EncounterService implements VisitReportReader {
         jdbc.queryForObject(
             """
             select count(*) from professional.professional p join identity.person person on person.id=p.person_id
-            where p.id=? and p.person_id=? and p.status='ACTIVE' and person.status='ACTIVE' and p.professional_type in ('DOCTOR','MEDECIN')
+            where p.id=? and p.person_id=? and p.status='ACTIVE' and person.status='ACTIVE' and p.professional_type in ('DOCTOR','MEDECIN','NURSE')
               and exists(select 1 from professional.professional_assignment a where a.professional_id=p.id and a.organization_id=?
                 and a.status='ACTIVE' and a.start_date<=current_date and (a.end_date is null or a.end_date>=current_date))
-              and exists(select 1 from licensing.member m where m.organization_id=? and m.person_id=p.person_id and m.role='DOCTOR' and m.status='ACTIVE')
+              and exists(select 1 from licensing.member m where m.organization_id=? and m.person_id=p.person_id and m.status='ACTIVE' and ((m.role='DOCTOR' and p.professional_type in ('DOCTOR','MEDECIN')) or (m.role='NURSE' and p.professional_type='NURSE')))
             """,
             Integer.class,
             visit.getProfessionalId(),
             user.personId(),
             user.organizationId(),
             user.organizationId());
-    if (active == null || active == 0) throw new AccessDeniedException("ASSIGNED_DOCTOR_REQUIRED");
+    if (active == null || active == 0)
+      throw new AccessDeniedException("ASSIGNED_CLINICIAN_REQUIRED");
     return visit;
   }
 
@@ -347,7 +411,7 @@ public class EncounterService implements VisitReportReader {
             join identity.person person on person.id=p.person_id and person.status='ACTIVE'
             join licensing.member m on m.person_id=p.person_id and m.organization_id=? and m.status='ACTIVE'
             where p.person_id=? and p.status='ACTIVE'
-              and ((m.role='DOCTOR' and p.professional_type in ('DOCTOR','MEDECIN'))
+              and ((m.role='DOCTOR' and p.professional_type in ('DOCTOR','MEDECIN','NURSE'))
                 or (m.role='NURSE' and p.professional_type='NURSE'))
               and exists(select 1 from professional.professional_assignment a where a.professional_id=p.id
                 and a.organization_id=? and a.status='ACTIVE' and a.start_date<=current_date
@@ -423,12 +487,18 @@ public class EncounterService implements VisitReportReader {
                     rs.getString("follow_up"),
                     rs.getString("correction_reason"),
                     rs.getObject("ai_job_id", UUID.class),
-                    rs.getBoolean("patient_visible"))
-                : new DraftState(false, 0, 1, "DRAFT", "", "", "", "", "", null, null, true),
+                    rs.getBoolean("patient_visible"),
+                    decodeExams(rs.getString("exam_requests")))
+                : new DraftState(
+                    false, 0, 1, "DRAFT", "", "", "", "", "", null, null, true, List.of()),
         id);
   }
 
   private EncounterDtos.Report response(CareVisit visit, DraftState draft) {
+    return response(visit, draft, null);
+  }
+
+  private EncounterDtos.Report response(CareVisit visit, DraftState draft, UUID followUpVisitId) {
     var episode = visit.episode();
     return new EncounterDtos.Report(
         visit.getId(),
@@ -448,7 +518,9 @@ public class EncounterService implements VisitReportReader {
         draft.followUp(),
         draft.correctionReason(),
         revisions(visit),
-        draft.aiJobId());
+        draft.aiJobId(),
+        draft.examRequests(),
+        followUpVisitId);
   }
 
   private List<ValidatedVisitReport> revisions(CareVisit visit) {
@@ -475,7 +547,10 @@ public class EncounterService implements VisitReportReader {
                 rs.getString("treatment"),
                 rs.getString("follow_up"),
                 rs.getObject("ai_job_id", UUID.class),
-                rs.getBoolean("patient_visible")),
+                rs.getBoolean("patient_visible"),
+                decodeExams(rs.getString("exam_requests")).stream()
+                    .map(e -> new VisitReportReader.ExamRequest(e.name(), e.instructions()))
+                    .toList()),
         visit.getId());
   }
 
@@ -494,6 +569,36 @@ public class EncounterService implements VisitReportReader {
   private Timestamp retention(Instant now) {
     return Timestamp.from(
         now.atZone(ZoneOffset.UTC).plusYears(policy.retentionYears()).toInstant());
+  }
+
+  static void validateExams(List<EncounterDtos.ExamRequest> exams) {
+    if (exams == null || exams.size() > 100)
+      throw rule("INVALID_EXAM_REQUESTS", "At most 100 examination requests are allowed");
+    for (var exam : exams) {
+      if (exam == null
+          || exam.name() == null
+          || exam.name().isBlank()
+          || exam.name().length() > 500
+          || (exam.instructions() != null && exam.instructions().length() > 4000))
+        throw rule("INVALID_EXAM_REQUESTS", "Provide an examination name and bounded instructions");
+    }
+  }
+
+  private String encodeExams(List<EncounterDtos.ExamRequest> exams) {
+    try {
+      return json.writeValueAsString(exams);
+    } catch (JsonProcessingException e) {
+      throw new IllegalStateException("Cannot encode examination requests", e);
+    }
+  }
+
+  private List<EncounterDtos.ExamRequest> decodeExams(String value) {
+    if (value == null) return List.of();
+    try {
+      return json.readValue(value, new TypeReference<List<EncounterDtos.ExamRequest>>() {});
+    } catch (JsonProcessingException e) {
+      throw new IllegalStateException("Invalid stored examination requests", e);
+    }
   }
 
   private static String text(String value) {
@@ -516,5 +621,6 @@ public class EncounterService implements VisitReportReader {
       String followUp,
       String correctionReason,
       UUID aiJobId,
-      boolean patientVisible) {}
+      boolean patientVisible,
+      List<EncounterDtos.ExamRequest> examRequests) {}
 }

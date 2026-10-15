@@ -1,3 +1,5 @@
+import {DatedMeasurements,measurementsAsInstants} from '../components/DatedMeasurements';
+import type {DatedMeasurement} from '../api/patientHealth';
 import {useHospitalPermission} from '../auth/HospitalPermissions';
 import { useRef, useState } from "react";
 import { EpisodeInvoice } from "../components/EpisodeInvoice";
@@ -27,9 +29,9 @@ import { useAuth } from "../auth/AuthContext";
 export function CareEpisodeCreatePage() {
   const [params] = useSearchParams();
   const patientId = params.get("patientId") ?? "";
-  const { i18n } = useTranslation();
+  const { t,i18n } = useTranslation();
   const fr = i18n.language.startsWith("fr");
-  const [reason, setReason] = useState("");
+  const [reason, setReason] = useState("");const [symptoms,setSymptoms]=useState('');
   const [specialityId, setSpecialityId] = useState("");
   const [professionalId, setProfessionalId] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
@@ -47,7 +49,7 @@ export function CareEpisodeCreatePage() {
     mutationFn: () =>
       createCareEpisode({
         patientId,
-        reason,
+        reason:symptoms?`${reason}\n${symptoms}`:reason,
         specialityId,
         professionalId,
         scheduledAt: new Date(scheduledAt).toISOString(),
@@ -86,6 +88,7 @@ export function CareEpisodeCreatePage() {
             onChange={(e) => setReason(e.target.value)}
           />
         </label>
+        <label>{t('careFlow.symptoms')}<textarea maxLength={1500} value={symptoms} onChange={event=>setSymptoms(event.target.value)}/></label>
         <label>
           {fr ? "Spécialité" : "Speciality"}
           <select
@@ -210,10 +213,10 @@ export function CareEpisodePage() {
           {new Date(e.expiresAt).toLocaleString(i18n.language)}
         </p>
       )}
-      <EpisodeInvoice id={id} organizationId={e.organizationId} fr={fr} />
+      <EpisodeInvoice id={id} organizationId={e.organizationId} fr={fr} primaryTariffId={e.tariffId} frozenPrice={e.tariffPrice} currency={e.tariffCurrency}/>
       {e.visits.map((visit) => (
         <article key={visit.id} className="structure-card">
-          {auth.hasAnyRole("DOCTOR") && (
+          {auth.hasAnyRole("DOCTOR","NURSE") && (
             <Link to={`/care/visits/${visit.id}`}>
               {fr ? "Ouvrir la consultation" : "Open consultation"}
             </Link>
@@ -223,12 +226,7 @@ export function CareEpisodePage() {
             {visit.scheduledAt &&
               ` · ${new Date(visit.scheduledAt).toLocaleString(i18n.language)}`}
           </p>
-          {scheduleUpdate&&auth.hasAnyRole(
-            "NURSE",
-            "HOSPITAL_ADMIN",
-            "HOSPITAL_AGENT",
-            "PLATFORM_ADMIN",
-          ) &&
+          {scheduleUpdate &&
             !visit.startedAt &&
             ["AWAITING_SCHEDULING", "SCHEDULED"].includes(visit.status) && (
               <VisitScheduleForm
@@ -242,7 +240,7 @@ export function CareEpisodePage() {
           {visit.followUp &&
             !visit.startedAt &&
             visit.status !== "CANCELLED" &&
-            intakeUpdate&&auth.hasAnyRole("NURSE") && (
+            intakeUpdate && (
               <VisitIntakeLoader visitId={visit.id} fr={fr} />
             )}
         </article>
@@ -250,41 +248,39 @@ export function CareEpisodePage() {
       {e.status === "ACTIVE" &&
         e.expiresAt &&
         new Date(e.expiresAt) > new Date() &&
-        followUpCreate&&auth.hasAnyRole(
-          "NURSE",
-          "HOSPITAL_ADMIN",
-          "HOSPITAL_AGENT",
-          "PLATFORM_ADMIN",
-        ) && <FollowUpForm id={id} specialityId={e.specialityId} fr={fr} />}
-      {intakeUpdate&&auth.hasAnyRole("NURSE") &&
+        followUpCreate && <FollowUpForm id={id} specialityId={e.specialityId} fr={fr} />}
+      {intakeUpdate &&
         e.visits.some(
           (visit) =>
             !visit.followUp && !visit.startedAt && visit.status !== "CANCELLED",
-        ) && <IntakeLoader id={id} fr={fr} />}
+        ) && <IntakeLoader id={id} visitId={e.visits.find(v=>!v.followUp&&!v.startedAt)?.id} fr={fr} />}
     </section>
   );
 }
-function IntakeLoader({ id, fr }: { id: string; fr: boolean }) {
+function IntakeLoader({ id,visitId, fr }: { id: string;visitId?:string; fr: boolean }) {
   const intake = useQuery({
     queryKey: ["care-intake", id],
     queryFn: () => getCareIntake(id),
   });
   if (intake.isPending) return <p>…</p>;
   if (intake.isError) return <ApiErrorMessage error={intake.error} />;
-  return <IntakeForm id={id} fr={fr} initial={intake.data} />;
+  return <IntakeForm id={id} catalogVisitId={visitId} fr={fr} initial={intake.data} />;
 }
 function IntakeForm({
   id,
   initial,
   fr,
   visit = false,
+  catalogVisitId,
 }: {
   id: string;
   initial?: Intake | null;
   fr: boolean;
   visit?: boolean;
+  catalogVisitId?:string;
 }) {
   const cache = useQueryClient();
+  const [measurements,setMeasurements]=useState<DatedMeasurement[]>([]);
   const [observations, setObservations] = useState(initial?.observations ?? "");
   const [values, setValues] = useState<
     Partial<Record<(typeof fields)[number], string>>
@@ -299,6 +295,7 @@ function IntakeForm({
     mutationFn: async () => {
       await (visit ? saveVisitIntake : saveCareIntake)(id, {
         observations,
+        measurements:measurementsAsInstants(measurements),
         vitals: Object.fromEntries(
           Object.entries(values)
             .filter(([, v]) => v !== "" && v !== undefined)
@@ -307,7 +304,7 @@ function IntakeForm({
       });
     },
     onSuccess: () => {
-      void cache.invalidateQueries({ queryKey: ["care-episodes", id] });
+      setMeasurements([]);void cache.invalidateQueries({ queryKey: ["care-episodes", id] });
       void cache.invalidateQueries({
         queryKey: [visit ? "visit-intake" : "care-intake", id],
       });
@@ -346,6 +343,7 @@ function IntakeForm({
           onChange={(e) => setObservations(e.target.value)}
         />
       </label>
+      <DatedMeasurements visitId={visit?id:catalogVisitId} value={measurements} onChange={setMeasurements}/>
       {save.isError && <ApiErrorMessage error={save.error} />}{" "}
       {save.isSuccess && (
         <p role="status">{fr ? "Accueil enregistré" : "Intake saved"}</p>

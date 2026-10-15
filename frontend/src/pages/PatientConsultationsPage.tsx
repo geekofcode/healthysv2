@@ -1,0 +1,6 @@
+import {useQuery} from '@tanstack/react-query';
+import {useTranslation} from 'react-i18next';
+import {useAuth} from '../auth/AuthContext';
+import {getCarePatientHistory} from '../api/careHistory';
+import {ApiErrorMessage} from '../components/ApiErrorMessage';
+export function PatientConsultationsPage(){const auth=useAuth();const {t,i18n}=useTranslation();const patientId=auth.activeProfile?.sourceId??auth.activeProfile?.id??'';const query=useQuery({queryKey:['patient-consultations',auth.activeProfile?.id,patientId],queryFn:()=>getCarePatientHistory(patientId),enabled:!!patientId});return <section><h1>{t('careFlow.myConsultations')}</h1><p>{auth.activeProfile?.label}</p>{query.isPending&&<p>{t('common.loading')}</p>}{query.error&&<ApiErrorMessage error={query.error}/>} {query.data?.length===0&&<p>{t('common.empty')}</p>}{query.data?.map(report=><article className="structure-card" key={`${report.visitId}-${report.revision}`}><h2>{report.organizationName}</h2><p>{report.doctorName} · {report.validatedAt&&new Date(report.validatedAt).toLocaleString(i18n.language)}</p>{(['reason','observations','diagnosis','treatment','followUp'] as const).map(field=><div key={field}><strong>{t(`careFlow.report.${field}`)}</strong><p>{report[field]??'—'}</p></div>)}</article>)}</section>;}

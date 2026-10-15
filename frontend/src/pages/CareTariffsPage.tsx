@@ -1,3 +1,4 @@
+import {Link} from 'react-router-dom';
 import {useHospitalPermission} from '../auth/HospitalPermissions';
 import {useState} from 'react';
 import {useQuery,useMutation,useQueryClient} from '@tanstack/react-query';
@@ -8,15 +9,15 @@ import {ApiErrorMessage} from '../components/ApiErrorMessage';
 import {useAuth} from '../auth/AuthContext';
 
 export function CareTariffsPage(){
- const {i18n}=useTranslation();const fr=i18n.language.startsWith('fr');const auth=useAuth();const cache=useQueryClient();
+ const {t,i18n}=useTranslation();const fr=i18n.language.startsWith('fr');const auth=useAuth();const cache=useQueryClient();
  const [organizationId,setOrganizationId]=useState('');const [editing,setEditing]=useState<CareTariff>();
  const blank:TariffInput={organizationId,code:'',description:'',currency:'CAD',unitPrice:0.01,taxRate:0,active:true};
  const [form,setForm]=useState<TariffInput>(blank);
  const tariffs=useQuery({queryKey:['care-tariffs',organizationId],queryFn:()=>listCareTariffs(organizationId),enabled:!!organizationId});
  const save=useMutation({mutationFn:()=>editing?updateCareTariff(editing.id,{...form,organizationId,version:editing.version}):createCareTariff({...form,organizationId}),onSuccess:()=>{setEditing(undefined);setForm(blank);void cache.invalidateQueries({queryKey:['care-tariffs',organizationId]});}});
  const tariffCreate=useHospitalPermission('tariffs','CREATE');const tariffUpdate=useHospitalPermission('tariffs','UPDATE');
- const canManage=auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','ACCOUNTANT');
- return <section>
+ const canManage=tariffCreate||tariffUpdate;
+ return <section><Link to="/billing/speciality-policies">{t('careFlow.specialityPolicies')}</Link>
   <h1>{fr?'Tarifs de soins':'Care tariffs'}</h1>
   <BillingOrganizationSelect label={fr?'Établissement':'Organization'} value={organizationId} onChange={id=>{setOrganizationId(id);setEditing(undefined);setForm({...blank,organizationId:id});}}/>
   {tariffs.isError&&<ApiErrorMessage error={tariffs.error}/>}

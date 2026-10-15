@@ -415,7 +415,7 @@ public class LicensingService implements LicensingAccess {
         pendingClinical ? "INVITED" : "ACTIVE");
     var roleIds = request.customRoleIds() == null ? Set.<UUID>of() : request.customRoleIds();
     if (!roleIds.isEmpty()) requireAdministrator(org);
-    initializeMemberPolicy(org, memberId);
+    initializeMemberPolicy(org, memberId, request.customRoleIds() == null);
     for (UUID roleId : roleIds) {
       if (!Boolean.TRUE.equals(
           db.queryForObject(
@@ -439,12 +439,24 @@ public class LicensingService implements LicensingAccess {
   }
 
   private void initializeMemberPolicy(UUID org, UUID memberId) {
-    // A deliberately empty policy prevents implicit legacy CRUD grants for new profiles.
-    db.update(
-        "insert into organizationaccess.member_policy(member_id,organization_id) values(?,?) on"
-            + " conflict(member_id) do nothing",
-        memberId,
-        org);
+    initializeMemberPolicy(org, memberId, true);
+  }
+
+  private void initializeMemberPolicy(UUID org, UUID memberId, boolean defaultClinical) {
+    int inserted =
+        db.update(
+            "insert into organizationaccess.member_policy(member_id,organization_id) values(?,?) on"
+                + " conflict(member_id) do nothing",
+            memberId,
+            org);
+    if (inserted == 1 && defaultClinical)
+      db.update(
+          "insert into organizationaccess.member_role(member_id,organization_id,role_id) select"
+              + " m.id,m.organization_id,r.id from licensing.member m join organizationaccess.role"
+              + " r on r.organization_id=m.organization_id and r.system_key=m.role and r.reserved"
+              + " where m.id=? and m.organization_id=? on conflict do nothing",
+          memberId,
+          org);
   }
 
   private void ensureDistinctProfile(

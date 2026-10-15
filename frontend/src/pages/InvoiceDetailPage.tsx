@@ -23,7 +23,7 @@ export function InvoiceDetailPage(){
  const refund=useMutation({mutationFn:()=>refundCareCash(id,{amount:Number(refundAmount),currency:invoice.data!.currency,reason},refundKey),onSuccess:result=>{setReceipt(result);setRefundAmount('');setReason('');setRefundKey(crypto.randomUUID());refresh();}});
  if(invoice.isPending)return <p>{t('common.loading')}</p>;
  if(invoice.isError)return <ApiErrorMessage error={invoice.error}/>;
- const data=invoice.data;const canWrite=invoiceUpdate&&auth.hasAnyRole('PLATFORM_ADMIN','HOSPITAL_ADMIN','HOSPITAL_AGENT','NURSE','ACCOUNTANT');const canCash=auth.hasAnyRole('CASHIER');
+ const data=invoice.data;const canWrite=invoiceUpdate;const canCash=auth.hasAnyRole('CASHIER');
  const payable=['ISSUED','PARTIALLY_PAID'].includes(data.status);const money=(value:number)=>new Intl.NumberFormat(i18n.language,{style:'currency',currency:data.currency}).format(value);
  const submit=(event:FormEvent)=>{event.preventDefault();if(Number(amount)>0)pay.mutate();};
  const error=issue.error||cancel.error||pay.error||refund.error;

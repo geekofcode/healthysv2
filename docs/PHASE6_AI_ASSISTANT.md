@@ -92,3 +92,7 @@ Ne pas activer de journalisation des corps, audio, prompts ou réponses dans le 
 Avant activation, effectuer un essai de bout en bout avec données synthétiques : abonnement IA actif → résumé → dictée → correction → proposition → sauvegarde → validation humaine ; refaire le parcours avec révocation d'accès, expiration de licence et interruption du worker, puis vérifier la purge effective MinIO. Voir également [`ai-service/README.md`](../ai-service/README.md).
 
 Validation locale finale : 294 tests Java sans intégration Docker, 135 tests frontend, 15 tests Python, compilation Java et build React réussis. Les tests PostgreSQL/Testcontainers et le parcours réel MinIO/OpenAI restent à exécuter dans un environnement configuré.
+
+Le profil infirmier affecté à la visite suit les mêmes contrôles d’accès IA que le profil médecin : membre clinique exact, affectation active, permissions, contrat et offre incluant l’IA. Le worker reprend le rôle du membre correspondant au profil enregistré dans le job ; il ne cumule jamais les droits d’autres profils du compte.
+
+Les mesures datées et les déclarations ajoutées au nouveau profil patient sont des sources distinctes. La provenance auto-déclarée reste explicite ; elle ne devient pas un diagnostic ou une mesure professionnelle validée. Une nouvelle mesure/déclaration ou un nouveau rapport rend une synthèse antérieure obsolète selon son empreinte de sources.

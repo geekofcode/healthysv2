@@ -32,3 +32,9 @@ Les incidents techniques produisent le code générique `KEYCLOAK_PROVISIONING_F
 ## Vue plateforme
 
 `GET /api/v1/platform/accounts?page=0&size=25` est réservé à l'administrateur plateforme. Il expose une liste d'identités de comptes : `personId`, `firstName`, `lastName`, `email`, `status`, `accountStatus`. Il n'expose pas les données patient, dates de naissance, contacts d'urgence ou affectations aux équipes.
+
+## Réinitialisation des accès depuis l’administration plateforme
+
+`POST /api/v1/platform/accounts/{personId}/reset-access` exige le profil administrateur plateforme actif et signé ainsi qu’une clé `Idempotency-Key`. L’opération crée une demande persistante ; elle ne supprime aucun profil ni donnée médicale. `GET .../reset-access/requests/{requestId}` fournit son état (`QUEUED`, `RUNNING`, `SENT`, `FAILED`).
+
+Activer le worker avec `ACCOUNT_RESET_ENABLED=true` et régler `ACCOUNT_RESET_POLL_MS` (défaut 10000). Il réutilise le client technique `KEYCLOAK_ADMIN_CLIENT_ID/SECRET`, `KEYCLOAK_ADMIN_SERVER_URL`, `KEYCLOAK_ADMIN_REALM` et le client/retour web `STAFF_ACCOUNT_WEB_CLIENT_ID`, `STAFF_ACCOUNT_REDIRECT_URI`. Les URL de ce worker sont HTTPS. Keycloak envoie son email d’action `UPDATE_PASSWORD` avec le SMTP de son realm ; le SMTP Brevo des contrats applicatifs ne configure pas automatiquement celui de Keycloak. Aucun email réel n’est envoyé par les tests.

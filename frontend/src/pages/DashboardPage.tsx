@@ -1,16 +1,15 @@
+import {useContext} from 'react';
+import {Link} from 'react-router-dom';
+import {useQuery} from '@tanstack/react-query';
 import {useTranslation} from 'react-i18next';
 import {useAuth} from '../auth/AuthContext';
 import {AdminDashboardPage} from './AdminDashboardPage';
-
-export function DashboardPage() {
-  const {t} = useTranslation();
-  const auth = useAuth();
-  if (auth.hasAnyRole('PLATFORM_ADMIN')) return <AdminDashboardPage />;
-  return (
-    <section>
-      <p className="eyebrow">{t('dashboard.eyebrow')}</p>
-      <h1>{t('dashboard.title')}</h1>
-      <p>{t('dashboard.description')}</p>
-    </section>
-  );
-}
+import {HospitalPermissionContext} from '../auth/HospitalPermissions';
+import {profileNavigation} from '../auth/profileNavigation';
+import {listMyCareVisits} from './PatientCareAgendaPage';
+import {getCareCalendar} from '../api/careCalendar';
+import {getEntitlements} from '../api/licensing';
+import {ApiErrorMessage} from '../components/ApiErrorMessage';
+export function DashboardPage(){const auth=useAuth();return auth.hasAnyRole('PLATFORM_ADMIN')?<AdminDashboardPage/>:auth.hasAnyRole('PATIENT')?<PatientDashboard/>:<WorkspaceDashboard/>;}
+function PatientDashboard(){const auth=useAuth();const {t,i18n}=useTranslation();const visits=useQuery({queryKey:['care','visits','me',auth.activeProfile?.id],queryFn:listMyCareVisits});return <section><h1>{t('careFlow.nav.home')} · {auth.activeProfile?.label}</h1><div className="admin-shortcuts">{profileNavigation('PATIENT').slice(1).map(item=><Link key={item.path} to={item.path}>{t(`careFlow.nav.${item.label}`)}</Link>)}<Link to="/agenda/request">{t('careFlow.requestAppointment')}</Link></div><h2>{t('careFlow.upcomingVisits')}</h2>{visits.data?.filter(v=>['SCHEDULED','AWAITING_SCHEDULING','PENDING_PAYMENT','CALLED','IN_PROGRESS'].includes(v.status)).slice(0,8).map(v=><article className="structure-card" key={v.id}><strong>{v.organizationName}</strong><p>{v.scheduledAt?new Date(v.scheduledAt).toLocaleString(i18n.language):'—'} · {v.status} · {v.doctorName}</p></article>)}{visits.error&&<ApiErrorMessage error={visits.error}/>}</section>;}
+function WorkspaceDashboard(){const auth=useAuth();const access=useContext(HospitalPermissionContext);const {t,i18n}=useTranslation();const clinician=auth.hasAnyRole('DOCTOR','NURSE');const hospital=auth.hasAnyRole('HOSPITAL_ADMIN');const org=auth.activeProfile?.organizationId??'';const calendar=useQuery({queryKey:['care-calendar','dashboard',auth.activeProfile?.id],queryFn:()=>getCareCalendar(new Date().toLocaleDateString('en-CA')),enabled:clinician});const licence=useQuery({queryKey:['hospital-dashboard-licence',org],queryFn:()=>getEntitlements(org),enabled:hospital&&!!org});const items=profileNavigation(auth.activeProfile?.type??auth.roles[0]??'',access,org).slice(1);return <section><h1>{t('careFlow.nav.home')} · {auth.activeProfile?.label}</h1><h2>{t('careFlow.quickActions')}</h2><div className="admin-shortcuts">{items.map(item=><Link key={item.path} to={item.path}>{t(`careFlow.nav.${item.label}`)}</Link>)}</div>{licence.data&&<p>{licence.data.status} · {licence.data.planName} · {licence.data.usage.doctor}/{licence.data.doctorQuota}</p>}{clinician&&<><h2>{t('careFlow.nav.calendarQueue')}</h2>{calendar.data?.visits.map(v=><article key={v.visitId} className="structure-card"><p>{new Date(v.scheduledAt).toLocaleTimeString(i18n.language,{timeZone:calendar.data!.timezone})} · {v.patientFirstName} {v.patientLastName} · {v.status}</p><Link to={`/care/visits/${v.visitId}`}>{t('careFlow.nav.consultations')}</Link></article>)}</>}{calendar.error&&<ApiErrorMessage error={calendar.error}/>} {licence.error&&<ApiErrorMessage error={licence.error}/>}</section>;}

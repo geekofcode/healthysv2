@@ -39,7 +39,8 @@ public class OrganizationPermissionService implements OrganizationPermissionAcce
           Map.entry("professionalavailability", "Disponibilités professionnelles"),
           Map.entry("patientaccess", "Autorisations patient"),
           Map.entry("ai", "Assistant IA"),
-          Map.entry("audit", "Journal de l’établissement"));
+          Map.entry("audit", "Journal de l’établissement"),
+          Map.entry("examrequests", "Demandes d’examens"));
   private final org.novasos.healthysv2.accessprofile.api.AccessProfileResolver profiles;
   private final JdbcTemplate db;
 
@@ -272,7 +273,10 @@ public class OrganizationPermissionService implements OrganizationPermissionAcce
                   "documents",
                   "invoices",
                   "patientaccess",
-                  "professionalavailability");
+                  "professionalavailability",
+                  "reports",
+                  "prescriptions",
+                  "ai");
           case "CASHIER" ->
               Set.of("invoices", "payments", "refunds", "cashclosures", "cashreports");
           case "ACCOUNTANT" ->
@@ -323,13 +327,21 @@ public class OrganizationPermissionService implements OrganizationPermissionAcce
         version,
         grants.entrySet().stream()
             .map(e -> new PermissionGrant(e.getKey(), Set.copyOf(e.getValue())))
-            .toList());
+            .toList(),
+        Boolean.TRUE.equals(
+            db.queryForObject(
+                "select reserved from organizationaccess.role where id=? and organization_id=?",
+                Boolean.class,
+                id,
+                org)));
   }
 
   @Transactional
   public RoleResponse create(UUID org, RoleRequest request) {
     lockAdministrator(org);
     validate(request);
+    if (Set.of("DOCTOR", "NURSE").contains(request.name().trim().toUpperCase(Locale.ROOT)))
+      throw new IllegalArgumentException("RESERVED_ROLE_NAME");
     UUID id = UUID.randomUUID();
     db.update(
         "insert into organizationaccess.role(id,organization_id,name,description) values(?,?,?,?)",
@@ -346,6 +358,15 @@ public class OrganizationPermissionService implements OrganizationPermissionAcce
   public RoleResponse update(UUID org, UUID id, RoleRequest request) {
     lockAdministrator(org);
     validate(request);
+    var protectedNames =
+        db.queryForList(
+            "select name from organizationaccess.role where id=? and organization_id=? and"
+                + " reserved",
+            String.class,
+            id,
+            org);
+    if (!protectedNames.isEmpty() && !protectedNames.getFirst().equals(request.name().trim()))
+      throw new IllegalArgumentException("RESERVED_ROLE_IMMUTABLE");
     if (request.version() == null) throw new IllegalArgumentException("ROLE_VERSION_REQUIRED");
     int count =
         db.update(
@@ -385,6 +406,13 @@ public class OrganizationPermissionService implements OrganizationPermissionAcce
   @Transactional
   public void delete(UUID org, UUID id) {
     lockAdministrator(org);
+    if (Boolean.TRUE.equals(
+        db.queryForObject(
+            "select exists(select 1 from organizationaccess.role where id=? and organization_id=?"
+                + " and reserved)",
+            Boolean.class,
+            id,
+            org))) throw new IllegalArgumentException("RESERVED_ROLE_IMMUTABLE");
     if (db.update("delete from organizationaccess.role where id=? and organization_id=?", id, org)
         != 1) throw new NoSuchElementException("ROLE_NOT_FOUND");
     audit(org, "ROLE_DELETED", id);

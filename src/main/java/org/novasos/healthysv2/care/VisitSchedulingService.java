@@ -68,6 +68,13 @@ class VisitSchedulingService {
             .orElseThrow(() -> new ResourceNotFoundException("CareVisit", id));
     if (visit.getVersion() != request.version())
       throw new ConflictException("VISIT_VERSION_CONFLICT", "Reload the visit before modifying it");
+    Integer pending =
+        jdbc.queryForObject(
+            "select count(*) from care.reassignment_request where visit_id=? and status='PENDING'",
+            Integer.class,
+            id);
+    if (pending != null && pending > 0 && !user.hasAny("HOSPITAL_ADMIN", "ORG_ADMIN"))
+      throw new AccessDeniedException("HOSPITAL_ADMIN_REASSIGNMENT_REQUIRED");
     requireUnstartedPaid(visit);
     Instant now = Instant.now();
     if (request.scheduledAt().isBefore(now))
@@ -95,6 +102,11 @@ class VisitSchedulingService {
       throw new BusinessRuleException("VISIT_CANNOT_PROGRAM", e.getMessage());
     }
     visits.flush();
+    jdbc.update(
+        "update care.reassignment_request set status='RESOLVED',resolved_at=now(),resolved_by=?"
+            + " where visit_id=? and status='PENDING'",
+        user.personId(),
+        id);
     jdbc.update(
         """
         insert into care.visit_schedule_history(visit_id,organization_id,previous_professional_id,professional_id,
@@ -166,7 +178,7 @@ class VisitSchedulingService {
           "VISIT_NOT_PROGRAMMABLE", "Only paid, unstarted visits can be programmed");
     }
     var episode = visit.episode();
-    if ((!visit.isFollowUp() && episode.getStatus() != CareEpisode.Status.READY)
+    if ((!visit.isFollowUp() && episode.getStatus() != CareEpisode.Status.ACTIVE)
         || (visit.isFollowUp() && !episode.isActiveAt(Instant.now()))) {
       throw new BusinessRuleException(
           "EPISODE_NOT_ELIGIBLE", "Episode has an outstanding balance or expired follow-up");

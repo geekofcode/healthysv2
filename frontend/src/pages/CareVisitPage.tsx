@@ -1,3 +1,6 @@
+import {ClinicalMeasurements} from '../components/ClinicalMeasurements';
+import type {ExamRequest} from '../api/visitEncounter';
+import {getReceptionOptions} from '../api/careEpisodes';
 import {useHospitalPermission} from '../auth/HospitalPermissions';
 import {CarePatientHistory} from "../components/CarePatientHistory";
 import { useState } from "react";
@@ -59,7 +62,7 @@ export function CareVisitPage() {
       id={id}
       fr={fr}
       value={report.data}
-      canWrite={reportUpdate&&auth.hasAnyRole("DOCTOR")}
+      canWrite={reportUpdate&&auth.hasAnyRole("DOCTOR","NURSE")}
     />
   );
 }
@@ -75,6 +78,7 @@ function VisitWorkspace({
   canWrite: boolean;
 }) {
   const documentCreate=useHospitalPermission('documents','CREATE');
+  const {t}=useTranslation();
   const cache = useQueryClient();
   const [draft, setDraft] = useState<ReportFields>({
     reason: value.reason ?? "",
@@ -83,6 +87,7 @@ function VisitWorkspace({
     treatment: value.treatment ?? "",
     followUp: value.followUp ?? "",
   });
+  const [examRequests,setExamRequests]=useState<ExamRequest[]>(value.examRequests??[]);const [followUpAt,setFollowUpAt]=useState('');const [followUpProfessionalId,setFollowUpProfessionalId]=useState(value.professionalId);const clinicians=useQuery({queryKey:['care-reception-options'],queryFn:getReceptionOptions,enabled:canWrite});
   const [aiJobId, setAiJobId] = useState<string | undefined>(value.aiJobId);
   const [correctionReason, setCorrectionReason] = useState("");
   const patient = useQuery({
@@ -114,12 +119,12 @@ function VisitWorkspace({
   const save = useMutation({
     mutationFn: () =>
       aiJobId
-        ? saveVisitReport(id, value.version, draft, aiJobId)
-        : saveVisitReport(id, value.version, draft),
+        ? saveVisitReport(id, value.version, {...draft,examRequests}, aiJobId)
+        : saveVisitReport(id, value.version, {...draft,examRequests}),
     onSuccess: refresh,
   });
   const finalize = useMutation({
-    mutationFn: () => finalizeVisitReport(id, value.version),
+    mutationFn: () => followUpAt?finalizeVisitReport(id,value.version,{followUpAt:new Date(followUpAt).toISOString(),followUpProfessionalId}):finalizeVisitReport(id, value.version),
     onSuccess: refresh,
   });
   const correct = useMutation({
@@ -127,7 +132,7 @@ function VisitWorkspace({
     onSuccess: refresh,
   });
   const dirty =
-    aiJobId !== value.aiJobId ||
+    JSON.stringify(examRequests)!==JSON.stringify(value.examRequests??[])||aiJobId !== value.aiJobId ||
     (Object.keys(fields) as (keyof ReportFields)[]).some(
       (field) => draft[field] !== (value[field] ?? ""),
     );
@@ -229,6 +234,7 @@ function VisitWorkspace({
             : "Report based on an AI proposal, subject to medical validation."}
         </p>
       )}
+      <ClinicalMeasurements visitId={id} patientId={value.patientId} editable={canWrite&&value.visitStatus==='IN_PROGRESS'}/>
       <form
         className="entity-form"
         onSubmit={(event) => {
@@ -256,6 +262,7 @@ function VisitWorkspace({
               />
             </label>
           ))}
+          <fieldset><legend>{t('careFlow.examRequests')}</legend>{examRequests.map((exam,index)=><div className="form-grid" key={index}><label>{t('careFlow.examName')}<input required value={exam.name} onChange={event=>setExamRequests(examRequests.map((item,i)=>i===index?{...item,name:event.target.value}:item))}/></label><label>{t('careFlow.examInstructions')}<input value={exam.instructions} onChange={event=>setExamRequests(examRequests.map((item,i)=>i===index?{...item,instructions:event.target.value}:item))}/></label><button type="button" className="danger" onClick={()=>setExamRequests(examRequests.filter((_,i)=>i!==index))}>{t('common.delete')}</button></div>)}{editable&&<button type="button" onClick={()=>setExamRequests([...examRequests,{name:'',instructions:''}])}>{t('common.add')}</button>}</fieldset>
           {editable && (
             <button disabled={!draft.reason.trim()}>
               {fr ? "Enregistrer le brouillon" : "Save draft"}
@@ -263,6 +270,8 @@ function VisitWorkspace({
           )}
         </fieldset>
       </form>
+      {editable&&value.visitStatus==='IN_PROGRESS'&&<div className="form-grid"><label>{t('careFlow.followUpAt')}<input type="datetime-local" value={followUpAt} onChange={event=>setFollowUpAt(event.target.value)}/></label>{followUpAt&&<label>{t('careFlow.clinician')}<select value={followUpProfessionalId} onChange={event=>setFollowUpProfessionalId(event.target.value)}>{clinicians.data?.doctors.map(c=><option value={c.professionalId} key={c.professionalId}>{c.firstName} {c.lastName}</option>)}</select></label>}</div>}
+      {value.followUpVisitId&&<p role="status">{t('careFlow.followUpCreated')} · {value.followUpVisitId}</p>}
       {editable && (
         <button
           disabled={busy || dirty || !draft.diagnosis.trim()}

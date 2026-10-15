@@ -1,3 +1,4 @@
+vi.mock('../components/ClinicalMeasurements',()=>({ClinicalMeasurements:()=>null}));
 vi.mock("../api/careHistory",()=>({getCarePatientHistory:vi.fn().mockResolvedValue([])}));
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
@@ -36,7 +37,7 @@ vi.mock("../auth/AuthContext", () => ({
   useAuth: () => ({ hasAnyRole: () => true }),
 }));
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ i18n: { language: "fr" } }),
+  useTranslation: () => ({ t:(key:string)=>key,i18n: { language: "fr" } }),
 }));
 vi.mock("../api/client", () => ({ ApiError: class extends Error {} }));
 vi.mock("../api/visitEncounter", () => ({
@@ -50,6 +51,7 @@ vi.mock("../api/patients", () => ({
   getPatient: vi.fn().mockRejectedValue(new Error("Accès clinique refusé")),
 }));
 vi.mock("../api/careEpisodes", () => ({
+  getReceptionOptions:vi.fn().mockResolvedValue({doctors:[],specialities:[]}),
   getCareEpisode: vi.fn().mockResolvedValue({}),
   getVisitIntake: vi.fn().mockResolvedValue({
     observations: "Constantes accueil",

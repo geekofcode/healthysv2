@@ -45,6 +45,9 @@ class VisitSchedulingServiceTests {
     when(users.current())
         .thenReturn(new CurrentUserContext.UserContext(UUID.randomUUID(), org, Set.of("NURSE")));
     when(jdbc.queryForObject(anyString(), eq(Integer.class), any(Object[].class))).thenReturn(1);
+    when(jdbc.queryForObject(
+            contains("care.reassignment_request"), eq(Integer.class), any(Object[].class)))
+        .thenReturn(0);
     when(visits.findLockedById(visit.getId())).thenReturn(Optional.of(visit));
     return visit;
   }
@@ -82,6 +85,23 @@ class VisitSchedulingServiceTests {
                     new VisitSchedulingDtos.Program(UUID.randomUUID(), Instant.now(), 0L, null)))
         .isInstanceOf(AccessDeniedException.class);
     verifyNoInteractions(visits, slots, queues, jdbc);
+  }
+
+  @Test
+  void pendingReassignmentCannotBeResolvedByReceptionNurse() {
+    var visit = paidVisit();
+    when(jdbc.queryForObject(
+            contains("care.reassignment_request"), eq(Integer.class), any(Object[].class)))
+        .thenReturn(1);
+    assertThatThrownBy(
+            () ->
+                service.program(
+                    visit.getId(),
+                    new VisitSchedulingDtos.Program(
+                        visit.getProfessionalId(), visit.getScheduledAt(), 0L, null)))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessage("HOSPITAL_ADMIN_REASSIGNMENT_REQUIRED");
+    verifyNoInteractions(slots, queues);
   }
 
   @Test

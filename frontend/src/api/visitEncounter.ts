@@ -6,7 +6,9 @@ export type ReportFields = {
   treatment: string;
   followUp: string;
 };
+export type ExamRequest={name:string;instructions:string};
 export type ReportRevision = ReportFields & {
+  examRequests?:ExamRequest[];
   revision: number;
   validatedAt?: string;
   correctionReason?: string;
@@ -26,6 +28,7 @@ export type VisitReport = ReportFields & {
   correctionReason?: string;
   aiJobId?: string;
   revisions: ReportRevision[];
+  examRequests?:ExamRequest[];followUpVisitId?:string;
 };
 export const startCareVisit = (id: string, version: number) =>
   apiRequest(`/care/visits/${id}/start`, {
@@ -37,7 +40,7 @@ export const getVisitReport = (id: string) =>
 export const saveVisitReport = (
   id: string,
   version: number,
-  input: ReportFields,
+  input: ReportFields & {examRequests?:ExamRequest[]},
   aiJobId?: string,
 ) =>
   apiRequest<VisitReport>(`/care/visits/${id}/report`, {
@@ -48,10 +51,10 @@ export const saveVisitReport = (
       ...(aiJobId ? { aiJobId } : {}),
     }),
   });
-export const finalizeVisitReport = (id: string, version: number) =>
+export const finalizeVisitReport = (id: string, version: number,followUp?:{followUpAt:string;followUpProfessionalId?:string}) =>
   apiRequest<VisitReport>(`/care/visits/${id}/report/finalize`, {
     method: "POST",
-    body: JSON.stringify({ version }),
+    body: JSON.stringify({ version,...followUp }),
   });
 export const correctVisitReport = (
   id: string,

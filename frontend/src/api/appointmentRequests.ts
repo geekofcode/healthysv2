@@ -1,0 +1,12 @@
+import {apiRequest} from './client';
+export type AppointmentRequest={id:string;organizationId:string;patientId:string;specialityId:string;reason:string;preferredAt:string;source:string;status:'PENDING'|'APPROVED'|'REJECTED';createdAt:string;decidedBy?:string;decidedAt?:string;rejectionReason?:string;episodeId?:string;visitId?:string};
+export type HospitalChoice={id:string;name:string;city?:string;countryId?:string;countryName?:string};
+const base='/care/appointment-requests';
+export const findAppointmentHospitals=(city:string,countryId:string)=>apiRequest<HospitalChoice[]>(`${base}/hospitals?city=${encodeURIComponent(city)}&countryId=${encodeURIComponent(countryId)}`);
+export const listHospitalRequestSpecialities=(org:string)=>apiRequest<{id:string;name:string}[]>(`${base}/hospitals/${org}/specialities`);
+export const listMyAppointmentRequests=()=>apiRequest<AppointmentRequest[]>(`${base}/mine`);
+export const createMyAppointmentRequest=(input:{organizationId:string;specialityId:string;reason:string;preferredAt:string})=>apiRequest<AppointmentRequest>(base,{method:'POST',body:JSON.stringify(input)});
+export const listStaffAppointmentRequests=(status:string)=>apiRequest<AppointmentRequest[]>(`${base}?status=${encodeURIComponent(status)}`);
+export const createStaffAppointmentRequest=(input:{patientId:string;specialityId:string;reason:string;preferredAt:string;source:'PHONE'|'RECEPTION'})=>apiRequest<AppointmentRequest>(`${base}/staff`,{method:'POST',body:JSON.stringify(input)});
+export const approveAppointmentRequest=(id:string,input:{professionalId:string;scheduledAt:string})=>apiRequest<AppointmentRequest>(`${base}/${id}/approve`,{method:'POST',body:JSON.stringify(input)});
+export const rejectAppointmentRequest=(id:string,reason:string)=>apiRequest<AppointmentRequest>(`${base}/${id}/reject`,{method:'POST',body:JSON.stringify({reason})});

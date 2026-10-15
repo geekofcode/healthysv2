@@ -78,6 +78,30 @@ class AiJobServiceTests {
   }
 
   @Test
+  void nurseSelectedProfileCanRequestAssistanceWithItsOwnProfileContext() {
+    setup();
+    when(users.current())
+        .thenReturn(new CurrentUserContext.UserContext(actor, org, Set.of("NURSE"), profile));
+    when(db.queryForList(contains("idempotency_key=?"), eq(visit), eq(actor), eq("same")))
+        .thenReturn(List.of(existing("SUMMARY", "current")));
+    assertEquals(
+        job,
+        service.create(visit, "same", new AiDtos.Request(AiDtos.Kind.SUMMARY, null), null).id());
+    verify(authorization, atLeastOnce()).require(visit, actor, org, profile);
+  }
+
+  @Test
+  void hospitalOwnerCannotRequestClinicalAiWithoutSelectedClinicianRole() {
+    when(users.current())
+        .thenReturn(
+            new CurrentUserContext.UserContext(actor, org, Set.of("HOSPITAL_ADMIN"), profile));
+    assertThrows(
+        org.springframework.security.access.AccessDeniedException.class,
+        () -> service.create(visit, "same", new AiDtos.Request(AiDtos.Kind.SUMMARY, null), null));
+    verifyNoInteractions(authorization, snapshots, audio);
+  }
+
+  @Test
   void repeatedRequestReturnsSameJobWithoutNewInputOrUpload() {
     setup();
     when(db.queryForList(contains("idempotency_key=?"), eq(visit), eq(actor), eq("same")))

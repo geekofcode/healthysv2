@@ -1,0 +1,8 @@
+import {useEffect,useState} from 'react';
+import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query';
+import {useTranslation} from 'react-i18next';
+import {useAuth} from '../auth/AuthContext';
+import {getSelectedPatientPhoto,uploadSelectedPatientPhoto} from '../api/patientHealth';
+import {ApiErrorMessage} from './ApiErrorMessage';
+export function useSelectedPatientPhoto(enabled:boolean){const auth=useAuth();const [url,setUrl]=useState<string>();const query=useQuery({queryKey:['patient-health','photo',auth.activeProfile?.id],queryFn:getSelectedPatientPhoto,enabled,retry:false});useEffect(()=>{if(!query.data){setUrl(undefined);return;}const next=URL.createObjectURL(query.data);setUrl(next);return()=>URL.revokeObjectURL(next);},[query.data,auth.activeProfile?.id]);return {url,...query};}
+export function PatientPhoto(){const {t}=useTranslation();const cache=useQueryClient();const photo=useSelectedPatientPhoto(true);const [file,setFile]=useState<File>();const save=useMutation({mutationFn:()=>uploadSelectedPatientPhoto(file!),onSuccess:()=>{setFile(undefined);void cache.invalidateQueries({queryKey:['patient-health','photo']});}});return <form className="entity-form" onSubmit={e=>{e.preventDefault();if(file)save.mutate();}}><h2>{t('careFlow.patientPhoto')}</h2>{photo.url&&<img className="patient-photo" src={photo.url} alt={t('careFlow.patientPhoto')}/>}<label>{t('careFlow.choosePhoto')}<input type="file" accept="image/png,image/jpeg" onChange={e=>setFile(e.target.files?.[0])}/></label><button disabled={!file||save.isPending}>{t('common.save')}</button>{save.error&&<ApiErrorMessage error={save.error}/>}</form>;}

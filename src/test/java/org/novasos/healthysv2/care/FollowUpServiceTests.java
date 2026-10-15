@@ -46,6 +46,11 @@ class FollowUpServiceTests {
     when(users.current())
         .thenReturn(new CurrentUserContext.UserContext(UUID.randomUUID(), org, Set.of("NURSE")));
     when(jdbc.queryForObject(anyString(), eq(Integer.class), any(Object[].class))).thenReturn(1);
+    when(jdbc.query(
+            contains("status='COMPLETED'"),
+            (org.springframework.jdbc.core.ResultSetExtractor<UUID>) any(),
+            any(Object[].class)))
+        .thenReturn(UUID.randomUUID());
     when(slots.requireSlot(any(), any(), any(), any(), any())).thenReturn(30);
     return episode;
   }

@@ -161,9 +161,38 @@ class CareBillingService {
             key)
         > 0)
       throw conflict("IDEMPOTENCY_CONFLICT", "Idempotency key is already used for another episode");
-    if (!"AWAITING_PAYMENT".equals(episode.get("status")) || episode.get("started_at") != null)
+    if (!"DRAFT".equals(episode.get("status")) || episode.get("started_at") != null)
       throw conflict("EPISODE_NOT_BILLABLE", "Only a new unpaid episode can be invoiced");
-    var lines = loadLines(request, org);
+    var lines = loadLines(request, org, (UUID) episode.get("tariff_id"));
+    UUID frozenTariff = (UUID) episode.get("tariff_id");
+    if (frozenTariff != null) {
+      var primary =
+          lines.stream()
+              .filter(l -> l.tariff().id().equals(frozenTariff))
+              .findFirst()
+              .orElseThrow(
+                  () ->
+                      conflict(
+                          "CONSULTATION_TARIFF_REQUIRED",
+                          "Include the episode consultation tariff"));
+      if (primary.quantity().compareTo(BigDecimal.ONE) != 0)
+        throw conflict("CONSULTATION_QUANTITY_INVALID", "Consultation tariff quantity must be one");
+      var old = primary.tariff();
+      var frozen =
+          new TariffResponse(
+              old.id(),
+              old.organizationId(),
+              old.code(),
+              old.description(),
+              (String) episode.get("tariff_currency"),
+              (BigDecimal) episode.get("tariff_price"),
+              (BigDecimal) episode.get("tariff_tax_rate"),
+              true,
+              old.version());
+      lines = new ArrayList<>(lines);
+      lines.remove(primary);
+      lines.addFirst(new PricedLine(frozen, BigDecimal.ONE));
+    }
     var invoice =
         Invoice.create(
             (UUID) episode.get("patient_id"),
@@ -298,7 +327,8 @@ class CareBillingService {
     return new CashContext(invoice, episode, episodeRow.get("started_at") != null);
   }
 
-  private List<PricedLine> loadLines(CreateCareInvoiceRequest request, UUID org) {
+  private List<PricedLine> loadLines(
+      CreateCareInvoiceRequest request, UUID org, UUID frozenTariff) {
     if (request.items().isEmpty()) throw conflict("INVOICE_EMPTY", "Select at least one tariff");
     var lines = new ArrayList<PricedLine>();
     var selected = new HashSet<UUID>();
@@ -307,7 +337,8 @@ class CareBillingService {
       if (!selected.add(item.tariffId()))
         throw conflict("DUPLICATE_TARIFF", "Combine quantities for a tariff into a single line");
       var tariff = getTariff(item.tariffId());
-      if (!tariff.organizationId().equals(org) || !tariff.active())
+      if (!tariff.organizationId().equals(org)
+          || (!tariff.active() && !tariff.id().equals(frozenTariff)))
         throw conflict("TARIFF_UNAVAILABLE", "Tariff is not active in this establishment");
       if (currency != null && !currency.equals(tariff.currency()))
         throw conflict("INVOICE_CURRENCY_MISMATCH", "All tariffs must use the same currency");
@@ -391,8 +422,9 @@ class CareBillingService {
   private Map<String, Object> lockEpisode(UUID id, UUID org) {
     var rows =
         jdbc.queryForList(
-            "select patient_id,status,started_at from care.care_episode where id=? and"
-                + " organization_id=? for update",
+            "select"
+                + " patient_id,status,started_at,tariff_id,tariff_price,tariff_currency,tariff_tax_rate"
+                + " from care.care_episode where id=? and organization_id=? for update",
             id,
             org);
     if (rows.isEmpty()) throw new ResourceNotFoundException("Care episode", id);

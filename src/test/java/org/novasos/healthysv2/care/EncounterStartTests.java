@@ -50,7 +50,10 @@ class EncounterStartTests {
     Instant yesterday = Instant.now().minus(Duration.ofDays(1));
     var episode = CareEpisode.create(UUID.randomUUID(), org, "Fever", policy, yesterday);
     var visit = CareVisit.prepare(episode, doctor, yesterday.plusSeconds(1), policy, yesterday);
+    assertEquals(CareEpisode.Status.DRAFT, episode.getStatus());
     episode.confirmPayment();
+    assertEquals(CareEpisode.Status.ACTIVE, episode.getStatus());
+    assertNull(episode.getStartedAt());
     visit.releaseAfterPayment();
     when(users.current())
         .thenReturn(new CurrentUserContext.UserContext(person, org, Set.of("DOCTOR")));
@@ -79,6 +82,90 @@ class EncounterStartTests {
         org.novasos.healthysv2.shared.api.error.BusinessRuleException.class,
         () -> service.start(visit.getId(), 0));
     assertEquals(initialExpiry, visit.episode().getExpiresAt());
+  }
+
+  @Test
+  void assignedLicensedNurseCanStartButOwnerRoleCannotReplaceClinicalProfile() {
+    var visit = visit();
+    when(users.current())
+        .thenReturn(new CurrentUserContext.UserContext(person, org, Set.of("NURSE")));
+    assertEquals("IN_PROGRESS", service.start(visit.getId(), 0).status());
+    verify(permissions).require(org, "visits", "UPDATE");
+  }
+
+  @Test
+  void ownerWithoutClinicalProfileCannotStartEvenWithAssignedVisit() {
+    var visit = visit();
+    when(users.current())
+        .thenReturn(new CurrentUserContext.UserContext(person, org, Set.of("HOSPITAL_ADMIN")));
+    assertThrows(AccessDeniedException.class, () -> service.start(visit.getId(), 0));
+    assertNull(visit.episode().getStartedAt());
+    verifyNoInteractions(access);
+  }
+
+  @Test
+  void reportValidationSnapshotsExaminationInstructionsInImmutableRevision() throws Exception {
+    var visit = visit();
+    service.start(visit.getId(), 0);
+    reportState(visit, "DRAFT", "Viral infection");
+    // Customize the report extractor to include the examination requests in stored JSON.
+    ResultSet rs = mock(ResultSet.class);
+    when(rs.next()).thenReturn(true);
+    when(rs.getLong("version")).thenReturn(4L);
+    when(rs.getInt("current_revision")).thenReturn(1);
+    when(rs.getString("status")).thenReturn("DRAFT");
+    when(rs.getString("reason")).thenReturn("Fever");
+    when(rs.getString("diagnosis")).thenReturn("Viral infection");
+    when(rs.getString("exam_requests"))
+        .thenReturn("[{\"name\":\"Blood count\",\"instructions\":\"Tomorrow\"}]");
+    doAnswer(call -> ((ResultSetExtractor<?>) call.getArgument(1)).extractData(rs))
+        .when(jdbc)
+        .query(
+            eq("select * from care.visit_report where visit_id=?"),
+            any(ResultSetExtractor.class),
+            eq(visit.getId()));
+    service.finalizeReport(visit.getId(), 4);
+    verify(jdbc)
+        .update(
+            contains("insert into care.visit_report_revision"),
+            any(UUID.class),
+            eq(visit.getId()),
+            eq(1),
+            eq("Fever"),
+            isNull(),
+            eq("Viral infection"),
+            isNull(),
+            isNull(),
+            any(java.sql.Timestamp.class),
+            eq(person),
+            isNull(),
+            isNull(),
+            any(java.sql.Timestamp.class),
+            isNull(),
+            eq(false),
+            eq("[{\"name\":\"Blood count\",\"instructions\":\"Tomorrow\"}]"));
+    assertEquals(CareVisit.Status.COMPLETED, visit.getStatus());
+  }
+
+  @Test
+  void newMeasurementsRequireAnOngoingAssignedEncounterAndNeverOverwriteHistory() {
+    var visit = visit();
+    service.start(visit.getId(), 0);
+    var observations =
+        mock(org.novasos.healthysv2.patienthealth.api.PatientObservationAccess.class);
+    service.configureObservations(observations);
+    var input =
+        new org.novasos.healthysv2.patienthealth.api.PatientHealthDtos.ObservationInput(
+            UUID.randomUUID(), "120", Instant.now(), "Recheck", null);
+    var request =
+        new org.novasos.healthysv2.patienthealth.api.PatientHealthDtos.Measurements(List.of(input));
+    service.remeasure(visit.getId(), request);
+    verify(observations).appendMeasured(visit.getId(), request.measurements());
+    visit.complete(Instant.now());
+    assertThrows(
+        org.novasos.healthysv2.shared.api.error.BusinessRuleException.class,
+        () -> service.remeasure(visit.getId(), request));
+    verifyNoMoreInteractions(observations);
   }
 
   @Test

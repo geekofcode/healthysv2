@@ -12,21 +12,33 @@ import org.springframework.transaction.support.TransactionTemplate;
 class EpisodeRetentionPurger {
   private static final Map<String, String> KEYS =
       Map.ofEntries(
-          Map.entry("care.care_episode", "id"), Map.entry("care.care_visit", "id"),
+          Map.entry("care.reassignment_request", "id"),
+          Map.entry("care.appointment_request", "id"),
+          Map.entry("patienthealth.observation", "id"),
+          Map.entry("care.care_episode", "id"),
+          Map.entry("care.care_visit", "id"),
           Map.entry("care.reception_intake", "episode_id"),
-              Map.entry("care.visit_intake", "visit_id"),
-          Map.entry("care.visit_report", "visit_id"), Map.entry("care.visit_report_revision", "id"),
+          Map.entry("care.visit_intake", "visit_id"),
+          Map.entry("care.visit_report", "visit_id"),
+          Map.entry("care.visit_report_revision", "id"),
           Map.entry("care.visit_prescription", "visit_id"),
-              Map.entry("care.visit_prescription_revision", "id"),
-          Map.entry("care.visit_schedule_history", "id"), Map.entry("care.queue_entry", "visit_id"),
-          Map.entry("care.follow_up_request", "visit_id"), Map.entry("care.ai_job", "id"),
-          Map.entry("care.visit_document", "document_id"), Map.entry("document.document", "id"),
-          Map.entry("document.document_access", "id"), Map.entry("document.document_link", "id"),
-          Map.entry("billing.care_invoice", "episode_id"), Map.entry("billing.invoice", "id"),
-          Map.entry("billing.invoice_item", "id"), Map.entry("billing.payment", "id"),
-          Map.entry("billing.payment_transaction", "id"), Map.entry("billing.cash_operation", "id"),
+          Map.entry("care.visit_prescription_revision", "id"),
+          Map.entry("care.visit_schedule_history", "id"),
+          Map.entry("care.queue_entry", "visit_id"),
+          Map.entry("care.follow_up_request", "visit_id"),
+          Map.entry("care.ai_job", "id"),
+          Map.entry("care.visit_document", "document_id"),
+          Map.entry("document.document", "id"),
+          Map.entry("document.document_access", "id"),
+          Map.entry("document.document_link", "id"),
+          Map.entry("billing.care_invoice", "episode_id"),
+          Map.entry("billing.invoice", "id"),
+          Map.entry("billing.invoice_item", "id"),
+          Map.entry("billing.payment", "id"),
+          Map.entry("billing.payment_transaction", "id"),
+          Map.entry("billing.cash_operation", "id"),
           Map.entry("billing.cash_closure_receipt", "cash_operation_id"),
-              Map.entry("billing.cash_closure", "id"));
+          Map.entry("billing.cash_closure", "id"));
   private final JdbcTemplate jdbc;
   private final TransactionTemplate tx;
   private final boolean enabled;

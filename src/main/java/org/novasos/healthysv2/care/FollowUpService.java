@@ -60,6 +60,62 @@ class FollowUpService {
     this.audit = audit;
   }
 
+  UUID createFromVisit(UUID parentVisitId, Instant at, UUID professional, String reason) {
+    var u = users.current();
+    if (u.personId() == null || u.organizationId() == null || !u.hasAny("DOCTOR", "NURSE"))
+      throw new AccessDeniedException("ASSIGNED_CLINICIAN_REQUIRED");
+    permission(u.organizationId(), "reports", "UPDATE");
+    licensing.requireMember(u.organizationId());
+    licensing.requireActive(u.organizationId());
+    jdbc.queryForObject(
+        "select id from organization.organization where id=? for update",
+        UUID.class,
+        u.organizationId());
+    var parent =
+        visits
+            .findLockedById(parentVisitId)
+            .filter(v -> v.episode().getOrganizationId().equals(u.organizationId()))
+            .orElseThrow(() -> new ResourceNotFoundException("CareVisit", parentVisitId));
+    Integer assigned =
+        jdbc.queryForObject(
+            "select count(*) from professional.professional where id=? and person_id=? and"
+                + " status='ACTIVE'",
+            Integer.class,
+            parent.getProfessionalId(),
+            u.personId());
+    if (assigned == null || assigned == 0 || parent.getStatus() != CareVisit.Status.COMPLETED)
+      throw new AccessDeniedException("ASSIGNED_COMPLETED_VISIT_REQUIRED");
+    var episode = episodes.findLockedById(parent.episode().getId()).orElseThrow();
+    var now = Instant.now();
+    if (!episode.isActiveAt(now) || !episode.isActiveAt(at) || at.isBefore(now))
+      throw new BusinessRuleException(
+          "FOLLOW_UP_EXPIRED", "Follow-up must be within the active episode coverage");
+    var v = CareVisit.schedule(episode, professional, at, true, policy, now);
+    UUID initial =
+        jdbc.queryForObject(
+            "select id from care.care_visit where episode_id=? and not follow_up and"
+                + " status='COMPLETED'",
+            UUID.class,
+            episode.getId());
+    v.specifyParent(initial);
+    v.specifyReason(reason);
+    int duration =
+        slots.requireSlot(
+            professional, u.organizationId(), episode.getSpecialityId(), at, v.getId());
+    v.program(professional, at, duration, now);
+    visits.saveAndFlush(v);
+    audit.change(
+        u.personId(),
+        u.organizationId(),
+        "CARE",
+        "CareVisit",
+        v.getId(),
+        "FREE_FOLLOW_UP",
+        null,
+        java.util.Map.of("parentVisitId", initial, "episodeId", episode.getId()));
+    return v.getId();
+  }
+
   VisitSchedulingDtos.Visit create(UUID episodeId, String key, FollowUpController.Request request) {
     var user = users.current();
     if (user.personId() == null || user.organizationId() == null)
@@ -105,6 +161,16 @@ class FollowUpService {
     var visit =
         CareVisit.schedule(
             episode, request.professionalId(), request.scheduledAt(), true, policy, now);
+    UUID parent =
+        jdbc.query(
+            "select id from care.care_visit where episode_id=? and not follow_up and"
+                + " status='COMPLETED' order by created_at,id limit 1",
+            rs -> rs.next() ? rs.getObject(1, UUID.class) : null,
+            episodeId);
+    if (parent == null)
+      throw new BusinessRuleException(
+          "INITIAL_VISIT_REQUIRED", "An initial completed visit is required");
+    visit.specifyParent(parent);
     int duration =
         slots.requireSlot(
             request.professionalId(),

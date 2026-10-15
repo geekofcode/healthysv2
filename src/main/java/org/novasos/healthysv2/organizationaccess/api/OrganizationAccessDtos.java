@@ -25,7 +25,18 @@ public final class OrganizationAccessDtos {
       String name,
       String description,
       long version,
-      List<PermissionGrant> permissions) {}
+      List<PermissionGrant> permissions,
+      boolean reserved) {
+    public RoleResponse(
+        UUID id,
+        UUID organizationId,
+        String name,
+        String description,
+        long version,
+        List<PermissionGrant> permissions) {
+      this(id, organizationId, name, description, version, permissions, false);
+    }
+  }
 
   public record RoleAssignment(@NotNull @Size(max = 50) Set<@NotNull UUID> roleIds) {}
 

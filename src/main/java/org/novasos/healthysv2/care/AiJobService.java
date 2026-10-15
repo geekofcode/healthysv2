@@ -194,8 +194,8 @@ public class AiJobService {
 
   private AiAuthorization.Context current(UUID visit, String action) {
     var u = users.current();
-    if (u.has("PLATFORM_ADMIN") || !u.has("DOCTOR"))
-      throw new AccessDeniedException("ASSIGNED_DOCTOR_REQUIRED");
+    if (u.has("PLATFORM_ADMIN") || !u.hasAny("DOCTOR", "NURSE"))
+      throw new AccessDeniedException("ASSIGNED_CLINICIAN_REQUIRED");
     permissions.require(u.organizationId(), "ai", action);
     permissions.require(u.organizationId(), "clinicalrecords", "READ");
     return authorization.require(visit, u.personId(), u.organizationId(), u.profileId());

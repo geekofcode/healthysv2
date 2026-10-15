@@ -53,7 +53,7 @@ class AiMigrationIntegrationTests {
     db.update(
         "insert into"
             + " care.care_episode(id,patient_id,organization_id,reason,status,follow_up_seconds,created_at,retention_expires_at)"
-            + " values(?,?,?,'Test','READY',604800,now(),now()+interval '30 years')",
+            + " values(?,?,?,'Test','ACTIVE',604800,now(),now()+interval '30 years')",
         episode,
         patient,
         org);

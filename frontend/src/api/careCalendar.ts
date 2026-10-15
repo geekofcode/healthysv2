@@ -1,7 +1,11 @@
 import {apiRequest} from './client';
 export type CalendarVisit={visitId:string;episodeId:string;patientId:string;patientFirstName:string;patientLastName:string;scheduledAt:string;status:string;presence:'WAITING'|'PRESENT'|'CALLED';position:number;visitVersion:number};
-export type CareCalendar={professionalId:string;date:string;timezone:string;version:number;visits:CalendarVisit[]};
+export type CareCalendar={professionalId:string;date:string;timezone:string;version:number;closed?:boolean;closedWindows?:{windowStart:string;windowEnd:string;reason:string}[];visits:CalendarVisit[]};
 export const getCareCalendar=(date:string,professionalId?:string)=>apiRequest<CareCalendar>(`/care/calendar?date=${encodeURIComponent(date)}${professionalId?`&professionalId=${encodeURIComponent(professionalId)}`:''}`);
 export const setCarePresence=(input:{visitId:string;present:boolean;expectedVersion:number})=>apiRequest<CareCalendar>('/care/queue/presence',{method:'POST',body:JSON.stringify(input)});
 export const callCareNext=(input:{professionalId:string;date:string;expectedVersion:number})=>apiRequest<CareCalendar>('/care/queue/next',{method:'POST',body:JSON.stringify(input)});
 export const reorderCareQueue=(input:{professionalId:string;date:string;visitIds:string[];expectedVersion:number})=>apiRequest<CareCalendar>('/care/queue/order',{method:'PUT',body:JSON.stringify(input)});
+export type QueueReassignment={id:string;visitId:string;sourceProfessionalId:string;sourceDate:string;reason:string};
+export const closeCareQueue=(input:{professionalId:string;date:string;expectedVersion:number;reason:string;windowStart?:string;windowEnd?:string})=>apiRequest('/care/queue/close',{method:'POST',body:JSON.stringify(input)});
+export const deferCareVisit=(input:{visitId:string;expectedVersion:number;reason:string})=>apiRequest('/care/queue/defer',{method:'POST',body:JSON.stringify(input)});
+export const listQueueReassignments=()=>apiRequest<QueueReassignment[]>('/care/queue/reassignments');

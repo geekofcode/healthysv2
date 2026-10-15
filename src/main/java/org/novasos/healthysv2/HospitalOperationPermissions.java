@@ -60,6 +60,10 @@ class HospitalOperationPermissions implements WebMvcConfigurer {
 
     private static boolean patientSelfOperation(String path, String method) {
       // Downstream ownership checks are mandatory for these deliberately enumerated self actions.
+      if (path.equals("/api/v1/care/appointment-requests") && method.equals("POST")) return true;
+      if (method.equals("GET")
+          && (path.equals("/api/v1/care/appointment-requests/mine")
+              || path.startsWith("/api/v1/care/appointment-requests/hospitals"))) return true;
       if (path.matches(
           "/api/v1/patients/[0-9a-fA-F-]{36}/(access-requests|access-grants|access-revocations|consents)(/.*)?"))
         return true;
@@ -78,7 +82,7 @@ class HospitalOperationPermissions implements WebMvcConfigurer {
     static String action(String method, String path) {
       if (method.equals("POST")
           && (path.matches(
-                  ".*/(start|complete|finalize|corrections|reschedule|schedule|presence|next|cancel|accept|revoke|activate|deactivate|resolve)$")
+                  ".*/(start|complete|finalize|corrections|reschedule|schedule|presence|next|cancel|accept|revoke|activate|deactivate|resolve|close|defer|approve|reject)$")
               || path.endsWith("/report/corrections"))) return "UPDATE";
       return action(method);
     }
@@ -97,7 +101,8 @@ class HospitalOperationPermissions implements WebMvcConfigurer {
       if (p.startsWith("/api/v1/patients")) {
         if (p.contains("/access-") || p.contains("/consents") || p.contains("/care-relationships"))
           return "patientaccess";
-        if (p.contains("/medical-record")
+        if (p.contains("/health/")
+            || p.contains("/medical-record")
             || p.contains("/care-history")
             || p.matches("/api/v1/patients/[0-9a-fA-F-]{36}")
             || p.matches(
@@ -125,6 +130,10 @@ class HospitalOperationPermissions implements WebMvcConfigurer {
         return "episodes";
       }
       if (p.startsWith("/api/v1/care/")) {
+        if (p.contains("/health-parameters")) return "intakes";
+        if (p.contains("/appointment-requests")) return "scheduling";
+        if (p.contains("/speciality-policies")) return "tariffs";
+        if (p.contains("/observations")) return "intakes";
         if (p.contains("/cutover")) return null;
         if (p.contains("/ai/")) return "ai";
         if (p.contains("/documents")) return "documents";

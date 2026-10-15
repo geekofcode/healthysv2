@@ -33,6 +33,13 @@ public class ReceptionService {
     permissions.require(org, resource, action);
   }
 
+  private VisitSlotService slots;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  public void configureSlots(VisitSlotService slots) {
+    this.slots = slots;
+  }
+
   private final CareEpisodeRepository episodes;
   private final CareVisitRepository visits;
   private final CarePolicy policy;
@@ -77,12 +84,12 @@ public class ReceptionService {
             join identity.person person on person.id=p.person_id and person.status='ACTIVE'
             join professional.professional_speciality ps on ps.professional_id=p.id
             join catalog.speciality_catalog specialty on specialty.id=ps.speciality_catalog_id and specialty.active
-            where p.status='ACTIVE' and p.professional_type in ('DOCTOR','MEDECIN')
+            where p.status='ACTIVE' and p.professional_type in ('DOCTOR','MEDECIN','NURSE')
               and exists(select 1 from professional.professional_assignment a where a.professional_id=p.id
                 and a.organization_id=? and a.status='ACTIVE' and a.start_date<=current_date
                 and (a.end_date is null or a.end_date>=current_date))
               and exists(select 1 from licensing.member m where m.person_id=p.person_id
-                and m.organization_id=? and m.role='DOCTOR' and m.status='ACTIVE')
+                and m.organization_id=? and ((m.role='DOCTOR' and p.professional_type in ('DOCTOR','MEDECIN')) or (m.role='NURSE' and p.professional_type='NURSE')) and m.status='ACTIVE')
             group by p.id,person.first_name,person.last_name
             order by person.last_name,person.first_name,p.id
             """,
@@ -107,7 +114,19 @@ public class ReceptionService {
 
   @Transactional
   public ReceptionDtos.Episode open(ReceptionDtos.OpenEpisode request) {
-    var user = receptionUser("episodes", "CREATE");
+    return openInternal(request, receptionUser("episodes", "CREATE"), "episodes", "CREATE");
+  }
+
+  @Transactional
+  ReceptionDtos.Episode openForAppointmentRequest(ReceptionDtos.OpenEpisode request) {
+    return openInternal(request, receptionUser("scheduling", "UPDATE"), "scheduling", "UPDATE");
+  }
+
+  private ReceptionDtos.Episode openInternal(
+      ReceptionDtos.OpenEpisode request,
+      CurrentUserContext.UserContext user,
+      String resource,
+      String action) {
     requireExists(
         "select count(*) from patient.patient where id=? and status='ACTIVE'",
         "Patient",
@@ -117,6 +136,12 @@ public class ReceptionService {
         "Speciality",
         request.specialityId());
     requireDoctor(request.professionalId(), request.specialityId(), user.organizationId());
+    jdbc.queryForObject(
+        "select id from organization.organization where id=? for update",
+        UUID.class,
+        user.organizationId());
+    receptionUser(resource, action);
+    requireDoctor(request.professionalId(), request.specialityId(), user.organizationId());
     var now = Instant.now();
     if (request.scheduledAt().isBefore(now))
       throw rule("INVALID_VISIT_DATE", "Visit date is in the past");
@@ -124,9 +149,40 @@ public class ReceptionService {
         CareEpisode.create(
             request.patientId(), user.organizationId(), request.reason(), policy, now);
     episode.specifySpeciality(request.specialityId());
+    var configured =
+        jdbc.queryForList(
+            "select p.follow_up_seconds,t.id,t.unit_price,t.currency,t.tax_rate from"
+                + " care.speciality_policy p join billing.care_tariff t on t.id=p.tariff_id and"
+                + " t.organization_id=p.organization_id and t.active where p.organization_id=? and"
+                + " p.speciality_id=?",
+            user.organizationId(),
+            request.specialityId());
+    if (configured.isEmpty())
+      throw rule(
+          "SPECIALITY_POLICY_REQUIRED",
+          "Configure the specialty tariff and consultation validity before opening an episode");
+    var pricing = configured.getFirst();
+    episode.snapshotDuration(((Number) pricing.get("follow_up_seconds")).longValue());
     episodes.saveAndFlush(episode);
-    visits.saveAndFlush(
-        CareVisit.prepare(episode, request.professionalId(), request.scheduledAt(), policy, now));
+    jdbc.update(
+        "update care.care_episode set"
+            + " tariff_id=?,tariff_price=?,tariff_currency=?,tariff_tax_rate=? where id=?",
+        pricing.get("id"),
+        pricing.get("unit_price"),
+        pricing.get("currency"),
+        pricing.get("tax_rate"),
+        episode.getId());
+    var visit =
+        CareVisit.prepare(episode, request.professionalId(), request.scheduledAt(), policy, now);
+    int duration =
+        slots.requireSlot(
+            request.professionalId(),
+            user.organizationId(),
+            request.specialityId(),
+            request.scheduledAt(),
+            visit.getId());
+    visit.snapshotSlot(duration);
+    visits.saveAndFlush(visit);
     audit.change(
         user.personId(),
         user.organizationId(),
@@ -270,6 +326,7 @@ public class ReceptionService {
   private void ensureReceptionOpen(CareEpisode episode) {
     if (episode.getStatus() == CareEpisode.Status.CLOSED
         || (episode.getStatus() == CareEpisode.Status.ACTIVE
+            && episode.getStartedAt() != null
             && !episode.isActiveAt(Instant.now()))) {
       throw rule("EPISODE_CLOSED", "Reception is closed or follow-up coverage expired");
     }
@@ -287,11 +344,11 @@ public class ReceptionService {
         jdbc.queryForObject(
             """
             select count(*) from professional.professional p
-            where p.id=? and p.status='ACTIVE' and p.professional_type in ('DOCTOR','MEDECIN')
+            where p.id=? and p.status='ACTIVE' and p.professional_type in ('DOCTOR','MEDECIN','NURSE')
             and exists(select 1 from identity.person person where person.id=p.person_id and person.status='ACTIVE')
             and exists(select 1 from professional.professional_assignment a where a.professional_id=p.id
               and a.organization_id=? and a.status='ACTIVE' and a.start_date<=current_date and (a.end_date is null or a.end_date>=current_date))
-            and exists(select 1 from licensing.member m where m.person_id=p.person_id and m.organization_id=? and m.role='DOCTOR' and m.status='ACTIVE')
+            and exists(select 1 from licensing.member m where m.person_id=p.person_id and m.organization_id=? and ((m.role='DOCTOR' and p.professional_type in ('DOCTOR','MEDECIN')) or (m.role='NURSE' and p.professional_type='NURSE')) and m.status='ACTIVE')
             and exists(select 1 from professional.professional_speciality s where s.professional_id=p.id and s.speciality_catalog_id=?)
             """,
             Integer.class,
@@ -327,6 +384,11 @@ public class ReceptionService {
             .toList();
     ReceptionDtos.Intake intake = null;
     if (includeIntake) intake = loadIntake(e.getId());
+    var price =
+        jdbc.queryForMap(
+            "select tariff_id,tariff_price,tariff_currency,tariff_tax_rate from care.care_episode"
+                + " where id=?",
+            e.getId());
     return new ReceptionDtos.Episode(
         e.getId(),
         e.getPatientId(),
@@ -339,7 +401,11 @@ public class ReceptionService {
         e.getExpiresAt(),
         e.getFollowUpSeconds(),
         summaries,
-        intake);
+        intake,
+        (UUID) price.get("tariff_id"),
+        (java.math.BigDecimal) price.get("tariff_price"),
+        (String) price.get("tariff_currency"),
+        (java.math.BigDecimal) price.get("tariff_tax_rate"));
   }
 
   private ReceptionDtos.Intake loadIntake(UUID id) {

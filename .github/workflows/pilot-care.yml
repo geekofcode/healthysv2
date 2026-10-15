@@ -47,7 +47,7 @@ jobs:
           -Dspring.datasource.url=jdbc:postgresql://127.0.0.1:15432/healthys
           -Dspring.datasource.username=healthys
           -Dspring.datasource.password=healthys-test-only
-          -Dtest=ContractFormatMigrationIntegrationTests,OrganizationRolesIntegrationTests,CashCareJourneyIntegrationTests,CutoverIntegrationTests,RetentionIntegrationTests,DatabaseMigrationIntegrationTests,AiMigrationIntegrationTests,CareMigrationIntegrationTests,PatientIdentityMigrationIntegrationTests
+          -Dtest=BillingApiIntegrationTests,ContractFormatMigrationIntegrationTests,OrganizationRolesIntegrationTests,CashCareJourneyIntegrationTests,CutoverIntegrationTests,RetentionIntegrationTests,DatabaseMigrationIntegrationTests,AiMigrationIntegrationTests,CareMigrationIntegrationTests,PatientIdentityMigrationIntegrationTests
           test
       - name: Install migration tooling
         run: pip install -r migration-tools/requirements.txt

@@ -80,6 +80,7 @@ public class PhysicianQueueService {
     LocalDate day = target.instant().atZone(zone(user.organizationId())).toLocalDate();
     var queue = queue(user.organizationId(), target.professional(), day);
     checkVersion(queue.version(), request.expectedVersion());
+    requireOpen(queue);
     jdbc.update(
         "update care.queue_entry set presence=? where visit_id=? and queue_id=?",
         request.present() ? "PRESENT" : "WAITING",
@@ -102,6 +103,7 @@ public class PhysicianQueueService {
     authorizeDoctor(user, request.professionalId(), true);
     var queue = queue(user.organizationId(), request.professionalId(), request.date());
     checkVersion(queue.version(), request.expectedVersion());
+    requireOpen(queue);
     UUID visit =
         jdbc.query(
             """
@@ -126,6 +128,7 @@ public class PhysicianQueueService {
     authorizeDoctor(user, request.professionalId(), true);
     var queue = queue(user.organizationId(), request.professionalId(), request.date());
     checkVersion(queue.version(), request.expectedVersion());
+    requireOpen(queue);
     var ids = result(queue).visits().stream().map(PhysicianQueueDtos.Visit::visitId).toList();
     validateOrder(ids, request.visitIds());
     for (int index = 0; index < request.visitIds().size(); index++)
@@ -188,10 +191,10 @@ public class PhysicianQueueService {
     UUID id =
         jdbc.query(
             "select id from professional.professional where person_id=? and status='ACTIVE' and"
-                + " professional_type in ('DOCTOR','MEDECIN')",
+                + " professional_type in ('DOCTOR','MEDECIN','NURSE')",
             rs -> rs.next() ? rs.getObject(1, UUID.class) : null,
             user.personId());
-    if (id == null || !user.has("DOCTOR")) throw denied("DOCTOR_REQUIRED");
+    if (id == null || !user.hasAny("DOCTOR", "NURSE")) throw denied("DOCTOR_REQUIRED");
     return id;
   }
 
@@ -205,8 +208,8 @@ public class PhysicianQueueService {
             """
             select count(*) from professional.professional p
             join identity.person person on person.id=p.person_id and person.status='ACTIVE'
-            where p.id=? and p.status='ACTIVE' and p.professional_type in ('DOCTOR','MEDECIN')
-            and exists(select 1 from licensing.member m where m.person_id=p.person_id and m.organization_id=? and m.role='DOCTOR' and m.status='ACTIVE')
+            where p.id=? and p.status='ACTIVE' and p.professional_type in ('DOCTOR','MEDECIN','NURSE')
+            and exists(select 1 from licensing.member m where m.person_id=p.person_id and m.organization_id=? and ((m.role='DOCTOR' and p.professional_type in ('DOCTOR','MEDECIN')) or (m.role='NURSE' and p.professional_type='NURSE')) and m.status='ACTIVE')
             and exists(select 1 from professional.professional_assignment a where a.professional_id=p.id and a.organization_id=?
                 and a.status='ACTIVE' and a.start_date<=current_date and (a.end_date is null or a.end_date>=current_date))
             """,
@@ -327,8 +330,202 @@ public class PhysicianQueueService {
                     rs.getLong(9),
                     rs.getLong(10)),
             queue.id());
+    var window = dateWindow(queue.day(), zone(queue.org()));
+    var closedWindows =
+        jdbc.query(
+            "select starts_at,ends_at,reason from care.closed_calendar_window where"
+                + " organization_id=? and professional_id=? and starts_at<? and ends_at>? order by"
+                + " starts_at,id",
+            (r, n) ->
+                new PhysicianQueueDtos.ClosedWindow(
+                    r.getTimestamp(1).toInstant(), r.getTimestamp(2).toInstant(), r.getString(3)),
+            queue.org(),
+            queue.professional(),
+            Timestamp.from(window.get(1)),
+            Timestamp.from(window.get(0)));
     return new PhysicianQueueDtos.Calendar(
-        queue.professional(), queue.day(), zone(queue.org()).getId(), queue.version(), visits);
+        queue.professional(),
+        queue.day(),
+        zone(queue.org()).getId(),
+        queue.version(),
+        visits,
+        Boolean.TRUE.equals(
+            jdbc.queryForObject(
+                "select closed from care.physician_queue where id=?", Boolean.class, queue.id())),
+        closedWindows);
+  }
+
+  private void requireOpen(Queue q) {
+    if (Boolean.TRUE.equals(
+        jdbc.queryForObject(
+            "select closed from care.physician_queue where id=?", Boolean.class, q.id())))
+      throw conflict("Calendar is closed");
+  }
+
+  @Transactional
+  public PhysicianQueueDtos.Calendar close(PhysicianQueueDtos.Close request) {
+    var user = user("queue", "UPDATE");
+    licensing.requireActive(user.organizationId());
+    lockOrganization(user.organizationId());
+    user = lockedUser(user, "queue", "UPDATE");
+    authorizeDoctor(user, request.professionalId(), true);
+    var q = queue(user.organizationId(), request.professionalId(), request.date());
+    checkVersion(q.version(), request.expectedVersion());
+    requireOpen(q);
+    boolean window = request.windowStart() != null || request.windowEnd() != null;
+    var dayWindow = dateWindow(request.date(), zone(user.organizationId()));
+    Instant from = window ? request.windowStart() : dayWindow.get(0),
+        to = window ? request.windowEnd() : dayWindow.get(1);
+    if (from == null
+        || to == null
+        || !to.isAfter(from)
+        || from.isBefore(dayWindow.get(0))
+        || to.isAfter(dayWindow.get(1)))
+      throw new BusinessRuleException(
+          "INVALID_CLOSE_WINDOW", "Closed window must be within the selected calendar day");
+    Integer ongoing =
+        jdbc.queryForObject(
+            "select count(*) from care.queue_entry qe join care.care_visit v on v.id=qe.visit_id"
+                + " where qe.queue_id=? and v.status='IN_PROGRESS' and v.scheduled_at<? and"
+                + " v.scheduled_at+v.slot_minutes*interval '1 minute'>?",
+            Integer.class,
+            q.id(),
+            Timestamp.from(to),
+            Timestamp.from(from));
+    if (ongoing != null && ongoing > 0)
+      throw conflict("Complete in-progress visits before closing the calendar");
+    var ids =
+        deferReservations(
+            q.org(), q.professional(), q.day(), from, to, user.personId(), request.reason());
+    jdbc.update(
+        "insert into"
+            + " care.closed_calendar_window(organization_id,professional_id,starts_at,ends_at,reason,closed_by)"
+            + " values(?,?,?,?,?,?)",
+        q.org(),
+        q.professional(),
+        Timestamp.from(from),
+        Timestamp.from(to),
+        request.reason(),
+        user.personId());
+    if (!window)
+      jdbc.update(
+          "update care.physician_queue set closed=true,closed_at=now(),closed_by=? where id=?",
+          user.personId(),
+          q.id());
+    changed(q, user, "CLOSE", Map.of("reason", request.reason(), "deferredVisitIds", ids));
+    return result(refresh(q));
+  }
+
+  @Transactional
+  public PhysicianQueueDtos.Calendar defer(PhysicianQueueDtos.Defer request) {
+    var user = user("queue", "UPDATE");
+    licensing.requireActive(user.organizationId());
+    lockOrganization(user.organizationId());
+    user = lockedUser(user, "queue", "UPDATE");
+    var target =
+        jdbc.query(
+            "select v.professional_id,v.scheduled_at from care.care_visit v join care.care_episode"
+                + " e on e.id=v.episode_id where v.id=? and e.organization_id=? and"
+                + " v.status='SCHEDULED'",
+            rs ->
+                rs.next()
+                    ? new Target(
+                        rs.getObject(1, UUID.class), rs.getTimestamp(2).toInstant(), "SCHEDULED")
+                    : null,
+            request.visitId(),
+            user.organizationId());
+    if (target == null) throw new ResourceNotFoundException("CareVisit", request.visitId());
+    authorizeDoctor(user, target.professional(), true);
+    var q =
+        queue(
+            user.organizationId(),
+            target.professional(),
+            target.instant().atZone(zone(user.organizationId())).toLocalDate());
+    checkVersion(q.version(), request.expectedVersion());
+    requireOpen(q);
+    defer(q, user, request.visitId(), request.reason());
+    changed(q, user, "DEFER", Map.of("visitId", request.visitId(), "reason", request.reason()));
+    return result(refresh(q));
+  }
+
+  /** Internal closure operation; caller holds the establishment lock and transaction. */
+  List<UUID> deferReservations(
+      UUID organization,
+      UUID professional,
+      LocalDate day,
+      Instant from,
+      Instant to,
+      UUID actor,
+      String reason) {
+    var ids =
+        jdbc.queryForList(
+            """
+            select v.id from care.care_visit v join care.care_episode e on e.id=v.episode_id
+            where e.organization_id=? and v.professional_id=? and v.started_at is null
+              and v.status in ('PENDING_PAYMENT','AWAITING_SCHEDULING','SCHEDULED')
+              and v.scheduled_at<? and v.scheduled_at+v.slot_minutes*interval '1 minute'>?
+              and not exists(select 1 from care.reassignment_request r where r.visit_id=v.id and r.status='PENDING')
+            order by v.created_at,v.id for update of v
+            """,
+            UUID.class,
+            organization,
+            professional,
+            Timestamp.from(to),
+            Timestamp.from(from));
+    for (UUID id : ids) {
+      jdbc.update(
+          "insert into"
+              + " care.reassignment_request(visit_id,organization_id,source_professional_id,source_date,reason,created_by)"
+              + " values(?,?,?,?,?,?)",
+          id,
+          organization,
+          professional,
+          day,
+          reason,
+          actor);
+      // Unpaid reservations stay unpaid; only previously scheduled paid visits lose their slot.
+      jdbc.update(
+          "update care.care_visit set status='AWAITING_SCHEDULING',version=version+1 where id=? and"
+              + " status='SCHEDULED'",
+          id);
+      jdbc.update("delete from care.queue_entry where visit_id=?", id);
+    }
+    return ids;
+  }
+
+  private void defer(Queue q, CurrentUserContext.UserContext user, UUID id, String reason) {
+    jdbc.update(
+        "insert into"
+            + " care.reassignment_request(visit_id,organization_id,source_professional_id,source_date,reason,created_by)"
+            + " values(?,?,?,?,?,?)",
+        id,
+        q.org(),
+        q.professional(),
+        q.day(),
+        reason,
+        user.personId());
+    jdbc.update(
+        "update care.care_visit set status='AWAITING_SCHEDULING',version=version+1 where id=? and"
+            + " status='SCHEDULED'",
+        id);
+    jdbc.update("delete from care.queue_entry where visit_id=?", id);
+  }
+
+  @Transactional(readOnly = true)
+  public List<PhysicianQueueDtos.Reassignment> reassignments() {
+    var u = user("scheduling", "READ");
+    if (!u.hasAny("HOSPITAL_ADMIN", "ORG_ADMIN")) throw denied("HOSPITAL_ADMIN_REQUIRED");
+    return jdbc.query(
+        "select * from care.reassignment_request where organization_id=? and status='PENDING' order"
+            + " by created_at,id",
+        (r, n) ->
+            new PhysicianQueueDtos.Reassignment(
+                r.getObject("id", UUID.class),
+                r.getObject("visit_id", UUID.class),
+                r.getObject("source_professional_id", UUID.class),
+                r.getObject("source_date", LocalDate.class),
+                r.getString("reason")),
+        u.organizationId());
   }
 
   private void changed(

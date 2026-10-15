@@ -7,12 +7,12 @@ export function pathPermission(path:string):PermissionRequirement|undefined{
  if(s[0]==='organizations'&&s[2]==='employees')resource='employees';
  if(s[0]==='organizations'&&s[2]==='roles')resource='roles';
  if(s[0]==='patients')resource=s[2]==='access'?'patientaccess':s.length===1||s[1]==='new'||s[2]==='identity'||s[2]==='edit'?'patients':'clinicalrecords';
- if(s[0]==='care')resource=s[1]==='visits'?'reports':'episodes';
+ if(s[0]==='care')resource=s[1]==='visits'?(s[3]==='schedule'?'scheduling':'reports'):'episodes';
  if(s[0]==='professionals')resource='employees';
  if(s[0]==='agenda')resource='scheduling';
  if(s[0]==='consultations')resource='reports';
  if(s[0]==='documents')resource='documents';
- if(s[0]==='billing')resource=s[1]==='tariffs'?'tariffs':s[1]==='cash'?'cashreports':'invoices';
+ if(s[0]==='billing')resource=['tariffs','speciality-policies'].includes(s[1]??'')?'tariffs':s[1]==='cash'?'cashreports':'invoices';
  if(!resource)return;
  return {resource,action:s.includes('new')?'CREATE':s.includes('edit')?'UPDATE':'READ'};
 }

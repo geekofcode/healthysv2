@@ -5,5 +5,5 @@ import {AgendaPage} from './AgendaPage';
 import {CareCalendarPage} from './CareCalendarPage';
 export function AgendaEntryPage(){
  const auth=useAuth();
- return auth.hasAnyRole('DOCTOR','NURSE','HOSPITAL_ADMIN','HOSPITAL_AGENT','PLATFORM_ADMIN')?<CareCalendarPage/>:<LegacyCareBoundary>{(_readOnly,mode)=>mode!=='LEGACY'?<PatientCareAgendaPage/>:<AgendaPage/>}</LegacyCareBoundary>;
+ return auth.hasAnyRole('PATIENT')?<PatientCareAgendaPage/>:<CareCalendarPage/>;
 }

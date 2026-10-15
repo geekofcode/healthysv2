@@ -15,7 +15,7 @@ const clinical = ['HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'];
 const staff = clinical;
 const routeRoles: Record<string, readonly string[]> = {
   organizations: ['PLATFORM_ADMIN', ...staff, 'HOSPITAL_VIEWER'], professionals: [...staff, 'HOSPITAL_VIEWER'],
-  patients: [...clinical, 'HOSPITAL_AGENT'], care: [...clinical,'HOSPITAL_AGENT'], agenda: [...clinical, 'HOSPITAL_AGENT', 'PATIENT'], consultations: clinical,
+  patients: [...clinical, 'HOSPITAL_AGENT'], care: [...clinical,'HOSPITAL_AGENT'], agenda: [...clinical, 'HOSPITAL_AGENT', 'PATIENT'], consultations: [...clinical,'PATIENT'],
   documents: [...clinical, 'PATIENT'],
   billing: [ 'HOSPITAL_ADMIN', 'NURSE', 'HOSPITAL_AGENT', 'CASHIER', 'ACCOUNTANT', 'PATIENT'], admin: ['PLATFORM_ADMIN'],
 };
@@ -28,6 +28,7 @@ export function canAccessPath(roles: readonly string[], path: string): boolean {
   if (roles.includes('PLATFORM_ADMIN') && ['professionals','patients','care','agenda','consultations','documents','billing','employees'].includes(section)) return false;
   if (section === 'admin' && ['professional-requests','audit-security'].includes(segments[1]??'')) return false;
   if (section === 'employees') return roles.some(role=>['HOSPITAL_ADMIN','HOSPITAL_AGENT','HOSPITAL_VIEWER','DOCTOR','NURSE','CASHIER','ACCOUNTANT'].includes(role));
+  if(['professionals','patients','care','agenda','consultations','documents','billing'].includes(section)&&roles.some(role=>['HOSPITAL_ADMIN','HOSPITAL_AGENT','HOSPITAL_VIEWER','DOCTOR','NURSE','CASHIER','ACCOUNTANT'].includes(role)))return true;
   if (section === 'professionals' && (segments[1] === 'new' || segments[2] === 'edit')) return roles.includes('HOSPITAL_ADMIN');
   if (section === 'organizations' && segments[2] === 'license') return roles.some(role => ['PLATFORM_ADMIN','HOSPITAL_ADMIN','DOCTOR','NURSE','HOSPITAL_AGENT','CASHIER','ACCOUNTANT'].includes(role));
   if (section === 'organizations' && segments[1] === 'new') return roles.includes('PLATFORM_ADMIN');

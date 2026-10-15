@@ -68,11 +68,12 @@ class CareCashBillingTests {
         .thenReturn(1);
     var row = new HashMap<String, Object>();
     row.put("patient_id", invoice.getPatientId());
-    row.put("status", "READY");
+    row.put("status", "ACTIVE");
     row.put("started_at", null);
     when(jdbc.queryForList(
-            "select patient_id,status,started_at from care.care_episode where id=? and"
-                + " organization_id=? for update",
+            "select"
+                + " patient_id,status,started_at,tariff_id,tariff_price,tariff_currency,tariff_tax_rate"
+                + " from care.care_episode where id=? and organization_id=? for update",
             episode,
             org))
         .thenReturn(List.of(row));
@@ -125,8 +126,9 @@ class CareCashBillingTests {
   void refundAfterFirstEncounterIsRejectedWithoutBalanceChange() {
     invoice.recordPayment(new BigDecimal("110"), "CAD");
     when(jdbc.queryForList(
-            "select patient_id,status,started_at from care.care_episode where id=? and"
-                + " organization_id=? for update",
+            "select"
+                + " patient_id,status,started_at,tariff_id,tariff_price,tariff_currency,tariff_tax_rate"
+                + " from care.care_episode where id=? and organization_id=? for update",
             episode,
             org))
         .thenReturn(

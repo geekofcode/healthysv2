@@ -157,7 +157,7 @@ class PhysicianQueueServiceTests {
     when(jdbc.query(
             eq(
                 "select id from professional.professional where person_id=? and status='ACTIVE' and"
-                    + " professional_type in ('DOCTOR','MEDECIN')"),
+                    + " professional_type in ('DOCTOR','MEDECIN','NURSE')"),
             ArgumentMatchers.<ResultSetExtractor<UUID>>any(),
             eq(person)))
         .thenReturn(ownDoctor);
@@ -168,6 +168,39 @@ class PhysicianQueueServiceTests {
         assertThrows(
             AccessDeniedException.class,
             () -> service.calendar(UUID.randomUUID(), LocalDate.now()));
+    assertEquals("OWN_DOCTOR_QUEUE_REQUIRED", failure.getMessage());
+    verify(users, times(2)).current();
+    verify(jdbc, never()).queryForList(anyString(), eq(String.class), any(Object[].class));
+    verify(jdbc, never()).update(anyString(), any(Object[].class));
+  }
+
+  @Test
+  void selectedNurseCanOnlyCallTheQueueOfTheirOwnProfessionalIdentity() {
+    var jdbc = mock(JdbcTemplate.class);
+    var users = mock(CurrentUserContext.class);
+    var licensing = mock(LicensingAccess.class);
+    var org = UUID.randomUUID();
+    var person = UUID.randomUUID();
+    var ownDoctor = UUID.randomUUID();
+    when(users.current())
+        .thenReturn(
+            new CurrentUserContext.UserContext(
+                person, org, Set.of("NURSE"), UUID.randomUUID(), null));
+    when(jdbc.query(
+            eq(
+                "select id from professional.professional where person_id=? and status='ACTIVE' and"
+                    + " professional_type in ('DOCTOR','MEDECIN','NURSE')"),
+            ArgumentMatchers.<ResultSetExtractor<UUID>>any(),
+            eq(person)))
+        .thenReturn(ownDoctor);
+    var service = new PhysicianQueueService(jdbc, users, licensing, mock(AuditTrail.class));
+    service.configurePermissions(
+        mock(org.novasos.healthysv2.organizationaccess.api.OrganizationPermissionAccess.class));
+    var failure =
+        assertThrows(
+            AccessDeniedException.class,
+            () ->
+                service.next(new PhysicianQueueDtos.Next(UUID.randomUUID(), LocalDate.now(), 0L)));
     assertEquals("OWN_DOCTOR_QUEUE_REQUIRED", failure.getMessage());
     verify(users, times(2)).current();
     verify(jdbc, never()).queryForList(anyString(), eq(String.class), any(Object[].class));

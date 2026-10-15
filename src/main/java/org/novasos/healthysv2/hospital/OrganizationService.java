@@ -98,6 +98,7 @@ class OrganizationService {
             + " values(?,?,'HOSPITAL_ADMIN','ACTIVE')",
         item.getId(),
         administrator);
+    platformAudit(item.getId(), "CREATE_ORGANIZATION");
     return response(item);
   }
 
@@ -162,7 +163,19 @@ class OrganizationService {
         request.email(),
         request.website(),
         request.status());
+    if (platform) platformAudit(id, "UPDATE_ORGANIZATION");
     return response(item);
+  }
+
+  private void platformAudit(UUID id, String action) {
+    jdbc.update(
+        "insert into"
+            + " audit.audit_log(actor_person_id,organization_id,module,entity_type,entity_id,action)"
+            + " values(?,?,'ORGANIZATION','Organization',?,?)",
+        users.current().personId(),
+        id,
+        id,
+        action);
   }
 
   private void requireSupportedType(UUID typeId) {
@@ -192,6 +205,7 @@ class OrganizationService {
           "Platform administration required");
     var item = organization(id);
     item.changeStatus(status);
+    platformAudit(id, "CHANGE_ORGANIZATION_STATUS");
     return response(item);
   }
 

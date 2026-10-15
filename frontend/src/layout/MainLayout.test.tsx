@@ -1,3 +1,4 @@
+vi.mock('../components/PatientPhoto',()=>({useSelectedPatientPhoto:()=>({url:undefined})}));
 vi.mock('../auth/ProfileContractBoundary',()=>({ProfileContractBoundary:({children}:any)=>children}));
 vi.mock('../api/client',()=>({ApiError:class extends Error{}}));
 vi.mock('../api/hospitalAccess',()=>({getHospitalAccess:vi.fn()}));

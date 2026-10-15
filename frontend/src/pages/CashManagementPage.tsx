@@ -20,22 +20,9 @@ export function CashManagementPage() {
   const [cashier, setCashier] = useState("");
   const [period, setPeriod] = useState<CashPeriod>();
   const read=useHospitalPermission('cashreports','READ');const closePermission=useHospitalPermission('cashclosures','CREATE');
-  const allowed = read || auth.hasAnyRole(
-    "CASHIER",
-    "ACCOUNTANT",
-    "HOSPITAL_ADMIN",
-    "PLATFORM_ADMIN",
-  );
-  const canClose = closePermission && auth.hasAnyRole(
-    "CASHIER",
-    "HOSPITAL_ADMIN",
-    "PLATFORM_ADMIN",
-  );
-  const canSelect = auth.hasAnyRole(
-    "ACCOUNTANT",
-    "HOSPITAL_ADMIN",
-    "PLATFORM_ADMIN",
-  );
+  const allowed=read;
+  const canClose=closePermission;
+  const canSelect=read;
   const report = useQuery({
     queryKey: ["cash-report", period],
     queryFn: () => getCashReport(period!),

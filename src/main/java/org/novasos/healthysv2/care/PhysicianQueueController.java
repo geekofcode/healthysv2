@@ -8,15 +8,46 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/care")
 public class PhysicianQueueController {
-    private final PhysicianQueueService service;
-    PhysicianQueueController(PhysicianQueueService service) { this.service=service; }
-    @GetMapping("/calendar")
-    public PhysicianQueueDtos.Calendar calendar(@RequestParam LocalDate date,
-            @RequestParam(required=false) UUID professionalId) { return service.calendar(professionalId,date); }
-    @PostMapping("/queue/presence")
-    public PhysicianQueueDtos.Calendar presence(@Valid @RequestBody PhysicianQueueDtos.Presence request) { return service.presence(request); }
-    @PostMapping("/queue/next")
-    public PhysicianQueueDtos.Calendar next(@Valid @RequestBody PhysicianQueueDtos.Next request) { return service.next(request); }
-    @PutMapping("/queue/order")
-    public PhysicianQueueDtos.Calendar order(@Valid @RequestBody PhysicianQueueDtos.Order request) { return service.order(request); }
+  private final PhysicianQueueService service;
+
+  PhysicianQueueController(PhysicianQueueService service) {
+    this.service = service;
+  }
+
+  @GetMapping("/calendar")
+  public PhysicianQueueDtos.Calendar calendar(
+      @RequestParam LocalDate date, @RequestParam(required = false) UUID professionalId) {
+    return service.calendar(professionalId, date);
+  }
+
+  @PostMapping("/queue/presence")
+  public PhysicianQueueDtos.Calendar presence(
+      @Valid @RequestBody PhysicianQueueDtos.Presence request) {
+    return service.presence(request);
+  }
+
+  @PostMapping("/queue/next")
+  public PhysicianQueueDtos.Calendar next(@Valid @RequestBody PhysicianQueueDtos.Next request) {
+    return service.next(request);
+  }
+
+  @PostMapping("/queue/close")
+  public PhysicianQueueDtos.Calendar close(@Valid @RequestBody PhysicianQueueDtos.Close r) {
+    return service.close(r);
+  }
+
+  @PostMapping("/queue/defer")
+  public PhysicianQueueDtos.Calendar defer(@Valid @RequestBody PhysicianQueueDtos.Defer r) {
+    return service.defer(r);
+  }
+
+  @GetMapping("/queue/reassignments")
+  public java.util.List<PhysicianQueueDtos.Reassignment> reassignments() {
+    return service.reassignments();
+  }
+
+  @PutMapping("/queue/order")
+  public PhysicianQueueDtos.Calendar order(@Valid @RequestBody PhysicianQueueDtos.Order request) {
+    return service.order(request);
+  }
 }

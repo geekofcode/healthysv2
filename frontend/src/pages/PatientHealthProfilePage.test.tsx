@@ -1,0 +1,15 @@
+// @vitest-environment jsdom
+import {afterEach,expect,it,vi} from 'vitest';
+import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
+const mock=vi.hoisted(()=>({observe:vi.fn().mockResolvedValue({}),declare:vi.fn().mockResolvedValue({}),savePersonal:vi.fn()}));
+vi.mock('../auth/AuthContext',()=>({useAuth:()=>({activeProfile:{id:'family',label:'Alice (enfant)',sourceId:'child-patient'}})}));
+vi.mock('../api/client',()=>({ApiError:class extends Error{}}));
+vi.mock('../pages/MePage',()=>({ProfileEditor:({profile,patient}:any)=><p>{patient?'PATIENT':'ACCOUNT'} {profile.person.firstName}</p>}));
+vi.mock('../api/patientHealth',()=>({getPatientPersonalProfile:vi.fn().mockResolvedValue({person:{id:'child-person',firstName:'Alice'}}),updatePatientPersonalProfile:mock.savePersonal,listSelfHealthParameters:vi.fn().mockResolvedValue([{id:'parameter',label:'Température',valueType:'NUMERIC',active:true}]),listSelfHealthObservations:vi.fn().mockResolvedValue({items:[{id:'historical',label:'Température',value:'37',measuredAt:'2026-10-15T08:00:00Z',selfReported:false,actorName:'Dr médecin'}]}),listSelfHealthDeclarations:vi.fn().mockResolvedValue([]),recordSelfHealthObservation:mock.observe,recordSelfHealthDeclaration:mock.declare,createSelfHealthParameter:vi.fn()}));
+vi.mock('react-i18next',async()=>{const {default:messages}=await import('../translations/careFlow.json');return {useTranslation:()=>({t:(key:string)=>key.startsWith('careFlow.')?key.slice(9).split('.').reduce<any>((value,part)=>value?.[part],messages.fr)??key:key,i18n:{language:'fr'}})};});
+import {PatientHealthProfilePage} from './PatientHealthProfilePage';
+afterEach(()=>{cleanup();vi.clearAllMocks()});
+function mount(){render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><PatientHealthProfilePage/></QueryClientProvider>);}
+it('edits the selected child’s person rather than displaying the guardian account',async()=>{mount();await screen.findByText('PATIENT Alice');expect(screen.getByText('Alice (enfant)')).toBeTruthy();expect(screen.queryByText('Parent')).toBeNull();});
+it('appends dated self-reported values without exposing a correction action for professional observations',async()=>{mount();fireEvent.click(screen.getByRole('button',{name:'Mes paramètres'}));await screen.findByRole('option',{name:'Température'});fireEvent.change(screen.getByLabelText('Paramètre'),{target:{value:'parameter'}});fireEvent.change(screen.getByLabelText('Valeur'),{target:{value:'38.2'}});fireEvent.change(screen.getByLabelText('Date et heure de mesure'),{target:{value:'2026-10-15T10:00'}});fireEvent.click(screen.getByRole('button',{name:'common.save'}));await waitFor(()=>expect(mock.observe).toHaveBeenCalledWith({parameterId:'parameter',value:'38.2',measuredAt:new Date('2026-10-15T10:00').toISOString(),note:undefined,supersedesId:undefined}));expect(screen.queryByRole('button',{name:'Corriger'})).toBeNull();});

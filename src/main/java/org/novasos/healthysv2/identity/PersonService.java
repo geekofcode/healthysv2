@@ -15,7 +15,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 class PersonService
     implements org.novasos.healthysv2.identity.api.PersonLookup,
-        org.novasos.healthysv2.identity.api.ReceptionIdentityEditor {
+        org.novasos.healthysv2.identity.api.ReceptionIdentityEditor,
+        org.novasos.healthysv2.identity.api.SelectedPatientIdentityAccess {
 
   private final PersonRepository repository;
   private final PersonMapper mapper;
@@ -79,7 +80,16 @@ class PersonService
 
   @Transactional(readOnly = true)
   org.novasos.healthysv2.identity.api.PersonProfileResponse profile(UUID subject) {
-    Person person = meEntity(subject);
+    return profilePerson(meEntity(subject).getId());
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public org.novasos.healthysv2.identity.api.PersonProfileResponse profilePerson(UUID personId) {
+    Person person =
+        repository
+            .findById(personId)
+            .orElseThrow(() -> new ResourceNotFoundException("Person", personId));
     var homes =
         jdbc.query(
             """
@@ -115,7 +125,16 @@ class PersonService
 
   org.novasos.healthysv2.identity.api.PersonProfileResponse updateMe(
       UUID subject, org.novasos.healthysv2.identity.api.UpdatePersonProfileRequest request) {
-    Person person = meEntity(subject);
+    return updatePerson(meEntity(subject).getId(), request);
+  }
+
+  @Override
+  public org.novasos.healthysv2.identity.api.PersonProfileResponse updatePerson(
+      UUID personId, org.novasos.healthysv2.identity.api.UpdatePersonProfileRequest request) {
+    Person person =
+        repository
+            .findById(personId)
+            .orElseThrow(() -> new ResourceNotFoundException("Person", personId));
     requireReference("shared.language", request.preferredLanguageId());
     if (request.homeAddress() != null)
       requireReference("shared.country", request.homeAddress().countryId());
@@ -163,7 +182,7 @@ class PersonService
           id, "HOME", person.getAddresses().stream().noneMatch(PersonAddress::isPrimary));
     }
     repository.flush();
-    return profile(subject);
+    return profilePerson(person.getId());
   }
 
   private Person meEntity(UUID subject) {

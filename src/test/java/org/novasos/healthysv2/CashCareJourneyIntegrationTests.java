@@ -55,7 +55,7 @@ class CashCareJourneyIntegrationTests {
   @Autowired JdbcTemplate db;
   @MockitoBean ContractAccess contracts;
   private static final Map<String, Actor> ACTORS = new ConcurrentHashMap<>();
-  private UUID org, otherOrg, patient, specialty, doctor, secondDoctor;
+  private UUID org, otherOrg, patient, specialty, doctor, secondDoctor, consultationTariff;
   private String nurse, cashier, physician, secondPhysician, foreignNurse, admin;
   private Instant slot;
 
@@ -69,6 +69,21 @@ class CashCareJourneyIntegrationTests {
         specialty,
         "J-" + specialty,
         "Journey speciality");
+    consultationTariff = UUID.randomUUID();
+    db.update(
+        "insert into"
+            + " billing.care_tariff(id,organization_id,code,description,currency,unit_price,tax_rate)"
+            + " values(?,?,?,'Consultation','XAF',100,0)",
+        consultationTariff,
+        org,
+        "CONS-" + consultationTariff);
+    db.update(
+        "insert into"
+            + " care.speciality_policy(organization_id,speciality_id,tariff_id,follow_up_seconds)"
+            + " values(?,?,?,604800)",
+        org,
+        specialty,
+        consultationTariff);
     nurse = actor(org, "NURSE");
     cashier = actor(org, "CASHIER");
     admin = actor(org, "HOSPITAL_ADMIN");
@@ -94,6 +109,9 @@ class CashCareJourneyIntegrationTests {
     JsonNode episode = open();
     UUID episodeId = id(episode), visit = id(episode.path("visits").get(0));
     assertThat(episode.path("startedAt").isNull()).isTrue();
+    assertThat(episode.path("status").asText()).isEqualTo("DRAFT");
+    assertThat(episode.path("tariffId").asText()).isEqualTo(consultationTariff.toString());
+    assertThat(episode.path("followUpSeconds").asLong()).isEqualTo(604800);
     call(
         nurse,
         put(visitPath(visit) + "/intake"),
@@ -222,6 +240,10 @@ class CashCareJourneyIntegrationTests {
                 .header("Idempotency-Key", "free-return"),
             followRequest,
             201);
+    assertThat(
+            db.queryForObject(
+                "select parent_visit_id from care.care_visit where id=?", UUID.class, id(follow)))
+        .isEqualTo(visit);
     assertThat(
             id(
                 call(
@@ -399,32 +421,12 @@ class CashCareJourneyIntegrationTests {
   }
 
   private UUID invoice(UUID episode) throws Exception {
-    JsonNode tariff =
-        call(
-            admin,
-            post("/api/v1/billing/care/tariffs"),
-            Map.of(
-                "organizationId",
-                org,
-                "code",
-                "CONS-" + UUID.randomUUID(),
-                "description",
-                "Consultation",
-                "currency",
-                "XAF",
-                "unitPrice",
-                100,
-                "taxRate",
-                0,
-                "active",
-                true),
-            200);
     JsonNode invoice =
         call(
             nurse,
             post("/api/v1/billing/care/episodes/" + episode + "/invoice")
                 .header("Idempotency-Key", "invoice-" + episode),
-            Map.of("items", List.of(Map.of("tariffId", id(tariff), "quantity", 1))),
+            Map.of("items", List.of(Map.of("tariffId", consultationTariff, "quantity", 1))),
             200);
     assertThat(invoice.path("totalAmount").asInt()).isEqualTo(100);
     return id(invoice);

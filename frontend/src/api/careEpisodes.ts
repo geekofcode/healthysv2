@@ -1,6 +1,7 @@
 import { apiRequest } from "./client";
 export type Intake = {
   observations?: string;
+  measurements?:import("./patientHealth").DatedMeasurement[];
   vitals: Partial<
     Record<
       | "temperatureC"
@@ -26,6 +27,7 @@ export type CareEpisode = {
   startedAt?: string;
   expiresAt?: string;
   followUpSeconds: number;
+  tariffId?:string;tariffPrice?:number;tariffCurrency?:string;tariffTaxRate?:number;
   visits: {
     id: string;
     professionalId?: string;
